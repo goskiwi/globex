@@ -1,0 +1,41 @@
+cases:
+  - id: screenshot-commute
+    description: 通勤带电脑推荐，检查自然表达和适配依据
+    scenario: single
+    queries:
+      - 想买个通勤背包，平时带15到16寸笔记本和日常用品，偶尔遇雨。到手预算300元人民币，寄中国。比较候选后推荐几款，不下单。
+    manual_review:
+      - 每款理由能直接帮助选择，不是商品字段或检索报告复述
+      - 首选说明本次需要，备选说明何种优先项更适合它
+      - 容量和包体尺寸不能独自证明电脑仓或具体电脑适配
+      - 价格与重量排名符合本次候选实际数据
+    rubric:
+      p0: [无执行错误, 有实际交付]
+      p1: []
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 无执行错误, kind: no_execution_error}
+        - {criterion: 有实际交付, kind: answer_present}
+      p1: []
+      p2: []
+  - id: priorities-change
+    description: 更改通勤优先项，不套统一推荐句式
+    scenario: single
+    queries:
+      - 我骑车上班，经常遇雨。想买背包，一件寄中国，到手预算300元人民币，先推荐适合我的选择，不下单。
+      - 我改主意了，现在主要坐地铁，只带少量东西，想便宜一点。预算和配送不变，重新推荐，不下单。
+    manual_review:
+      - 雨天强调已有防水依据，低价轻装时重新判断首选
+      - 理由简洁自然，不复述金额、库存和评分，不凑提醒
+      - 比较仅限当前完整候选，未提供的功能不写成没有
+    rubric:
+      p0: [无执行错误, 每轮有实际交付]
+      p1: []
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 无执行错误, kind: no_execution_error}
+        - {criterion: 每轮有实际交付, kind: answer_present}
+      p1: []
+      p2: []

@@ -1,0 +1,2034 @@
+[
+  {
+    "type": "RUN_STARTED",
+    "threadId": "316de3fa-6b0d-422e-b975-828746064ec5",
+    "runId": "d622d7d1-74ce-4eb2-8349-323bead5f12a"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "queued",
+      "progress": []
+    }
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "queued",
+      "progress": []
+    }
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": []
+    }
+  },
+  {
+    "type": "TOOL_CALL_START",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+    "toolCallName": "get_product_details"
+  },
+  {
+    "type": "TOOL_CALL_ARGS",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+    "delta": "{}"
+  },
+  {
+    "type": "TOOL_CALL_END",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "running"
+        }
+      ]
+    }
+  },
+  {
+    "type": "TOOL_CALL_START",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+    "toolCallName": "get_product_details"
+  },
+  {
+    "type": "TOOL_CALL_ARGS",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+    "delta": "{}"
+  },
+  {
+    "type": "TOOL_CALL_END",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "running"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "running"
+        }
+      ]
+    }
+  },
+  {
+    "type": "TOOL_CALL_RESULT",
+    "messageId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:result:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+    "content": "合成工具回执",
+    "role": "tool"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "running"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  {
+    "type": "TOOL_CALL_RESULT",
+    "messageId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:result:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+    "content": "合成工具回执",
+    "role": "tool"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  {
+    "type": "TOOL_CALL_START",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+    "toolCallName": "show_product_details"
+  },
+  {
+    "type": "TOOL_CALL_ARGS",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+    "delta": "{}"
+  },
+  {
+    "type": "TOOL_CALL_END",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+          "label": "展示商品详情",
+          "status": "running"
+        }
+      ]
+    }
+  },
+  {
+    "type": "TOOL_CALL_RESULT",
+    "messageId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:result:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+    "toolCallId": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+    "content": "合成工具回执",
+    "role": "tool"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "running",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+          "label": "展示商品详情",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  {
+    "type": "MESSAGES_SNAPSHOT",
+    "messages": [
+      {
+        "id": "bec611ba-730d-48f0-a9d5-586d7cc56d08",
+        "role": "user",
+        "content": "合成历史消息"
+      },
+      {
+        "id": "b5fcfae6-afcf-46c6-8186-bdfde6f39662:final:answer",
+        "role": "assistant",
+        "content": "合成助手说明"
+      },
+      {
+        "id": "4de1d395-bf6e-49b7-af2b-88cbc0b3a789",
+        "role": "user",
+        "content": "合成历史消息"
+      },
+      {
+        "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:final:answer",
+        "role": "assistant",
+        "content": "合成助手说明"
+      }
+    ]
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "recommendation": {
+        "guidance": "合成原推荐说明",
+        "preferred_sku_id": "P1012-S1",
+        "dimensions": [
+          "便携收纳",
+          "飞行颈部支撑",
+          "预算"
+        ],
+        "max_items": 12,
+        "mode": "alternatives",
+        "hits": [
+          {
+            "product_id": "P1012",
+            "title": "NestRest 充气颈枕 按压式",
+            "brand": "NestRest",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 69.0,
+            "currency": "CNY",
+            "source_price_major": 69.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "体积：收纳后仅掌心大小"
+            ],
+            "skus": [
+              {
+                "sku_id": "P1012-S1",
+                "spec": "海盐蓝",
+                "price_major": 69.0,
+                "currency": "CNY",
+                "stock": 120
+              }
+            ],
+            "score": 0,
+            "source_platform": "walmart",
+            "canonical_product_id": "CAN-LEGACY-011",
+            "material_tags": [
+              "天然材料"
+            ],
+            "description": "充气颈枕 按压充气 收纳体积小 飞机 高铁 侧睡支撑 轻便 180g",
+            "rating_summary": {
+              "average": 4.2,
+              "review_count": 151
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "CN",
+              "US"
+            ],
+            "dimensions_cm": {
+              "height": 12,
+              "length": 30,
+              "width": 28
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-01",
+            "default_sku_id": "P1012-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "NestRest 充气颈枕 按压式：暂无商品图片",
+            "weight_kg": 0.18,
+            "recommendation_reason": "专为飞机设计的按压充气颈枕，收纳后掌心大小、仅 180g，随身包侧袋就能放，侧睡有支撑，最贴合长途飞行要的轻便不占地。",
+            "tradeoffs": [
+              "充气式的包裹感与柔软度不如记忆棉实体枕，且目录未说明面料具体成分"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          },
+          {
+            "product_id": "P2120",
+            "title": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）",
+            "brand": "PureCanvas",
+            "category": "旅行装备",
+            "origin_country": "CN",
+            "price_major": 39.0,
+            "currency": "CNY",
+            "source_price_major": 39.0,
+            "source_currency": "CNY",
+            "highlights": [
+              "材质：帆布棉麻",
+              "测试属性：候选分组 24"
+            ],
+            "skus": [
+              {
+                "sku_id": "P2120-S1",
+                "spec": "标准版",
+                "price_major": 39.0,
+                "currency": "CNY",
+                "stock": 128
+              },
+              {
+                "sku_id": "P2120-S2",
+                "spec": "升级版",
+                "price_major": 99.68,
+                "currency": "CNY",
+                "stock": 139
+              }
+            ],
+            "score": 0,
+            "source_platform": "amazon",
+            "canonical_product_id": "CAN-024",
+            "material_tags": [
+              "天然纤维"
+            ],
+            "description": "旅行三件套 纯棉 帆布 天然材质 不含合成聚合物 长途飞行 评测候选",
+            "rating_summary": {
+              "average": 3.8,
+              "review_count": 1580
+            },
+            "rating_is_live": false,
+            "ships_to": [
+              "JP"
+            ],
+            "dimensions_cm": {
+              "height": 42,
+              "length": 32,
+              "width": 20
+            },
+            "package_dimensions_cm": {},
+            "updated_at": "2026-08-09",
+            "default_sku_id": "P2120-S1",
+            "image_url": null,
+            "image_kind": "placeholder",
+            "image_alt": "PureCanvas 纯棉旅行三件套（收纳袋+颈枕+眼罩）：暂无商品图片",
+            "weight_kg": 0.48,
+            "recommendation_reason": "纯棉帆布三件套，颈枕之外还配收纳袋和眼罩，天然棉麻材质贴肤，预算更宽松时是整套出行的省钱选择。",
+            "tradeoffs": [
+              "目前仅支持寄日本，中国等目的地需另行确认",
+              "是套装颈枕而非独立便携款，体积和支撑不如充气款"
+            ],
+            "quantity": 1,
+            "constraint_issues": []
+          }
+        ],
+        "quote": null,
+        "unverified_requirements": [],
+        "result_ref": "ctx_b8a5be356c09403a947ec0e38a827b5f"
+      },
+      "comparison": null,
+      "deliveredRunId": "b5fcfae6-afcf-46c6-8186-bdfde6f39662",
+      "productViews": [
+        {
+          "guidance": "合成详情说明",
+          "hits": [
+            {
+              "product_id": "P3020",
+              "title": "Roamix 航空颈枕 GX-02-2 单侧支撑",
+              "brand": "Roamix",
+              "category": "旅行装备",
+              "origin_country": "US",
+              "price_major": 198.0,
+              "currency": "CNY",
+              "source_price_major": 198.0,
+              "source_currency": "CNY",
+              "highlights": [
+                "规格：单侧支撑",
+                "材质：天然纤维"
+              ],
+              "skus": [
+                {
+                  "sku_id": "P3020-S1",
+                  "spec": "石墨黑",
+                  "price_major": 198.0,
+                  "currency": "CNY",
+                  "stock": 0,
+                  "display_price_major": 198.0,
+                  "display_currency": "CNY",
+                  "constraint_issues": [
+                    "out_of_stock",
+                    "over_price_cap"
+                  ]
+                },
+                {
+                  "sku_id": "P3020-S2",
+                  "spec": "雾灰",
+                  "price_major": 207.0,
+                  "currency": "CNY",
+                  "stock": 0,
+                  "display_price_major": 207.0,
+                  "display_currency": "CNY",
+                  "constraint_issues": [
+                    "out_of_stock",
+                    "over_price_cap"
+                  ]
+                }
+              ],
+              "score": 1.0,
+              "source_platform": "amazon",
+              "canonical_product_id": "CAN-GX-02-2",
+              "material_tags": [
+                "天然纤维"
+              ],
+              "description": "坐着休息时稳定头部，外套为可拆洗纯棉。本型号规格：单侧支撑。商品功能以本型号为准，其他档位配置不包含在内。",
+              "rating_summary": {
+                "average": 4.2,
+                "review_count": 80
+              },
+              "rating_is_live": false,
+              "ships_to": [
+                "CN",
+                "US",
+                "EU",
+                "JP",
+                "SG"
+              ],
+              "dimensions_cm": {
+                "height": 11,
+                "length": 30,
+                "width": 26
+              },
+              "package_dimensions_cm": {},
+              "updated_at": "2026-09-18",
+              "default_sku_id": "P3020-S1",
+              "image_url": null,
+              "image_kind": "placeholder",
+              "image_alt": "Roamix 航空颈枕 GX-02-2 单侧支撑：暂无商品图片",
+              "weight_kg": 0.15,
+              "data_provenance": "synthetic"
+            },
+            {
+              "product_id": "P3021",
+              "title": "Roamix 航空颈枕 GX-02-2 单侧支撑",
+              "brand": "Roamix",
+              "category": "旅行装备",
+              "origin_country": "US",
+              "price_major": 213.99,
+              "currency": "CNY",
+              "source_price_major": 30.14,
+              "source_currency": "USD",
+              "highlights": [
+                "规格：单侧支撑",
+                "材质：天然纤维"
+              ],
+              "skus": [
+                {
+                  "sku_id": "P3021-S1",
+                  "spec": "石墨黑",
+                  "price_major": 28.87,
+                  "currency": "USD",
+                  "stock": 0,
+                  "display_price_major": 204.98,
+                  "display_currency": "CNY",
+                  "constraint_issues": [
+                    "requested_sku_out_of_stock",
+                    "over_price_cap"
+                  ]
+                },
+                {
+                  "sku_id": "P3021-S2",
+                  "spec": "雾灰",
+                  "price_major": 30.14,
+                  "currency": "USD",
+                  "stock": 95,
+                  "display_price_major": 213.99,
+                  "display_currency": "CNY",
+                  "constraint_issues": [
+                    "over_price_cap"
+                  ]
+                }
+              ],
+              "score": 1.0,
+              "source_platform": "ebay",
+              "canonical_product_id": "CAN-GX-02-2",
+              "material_tags": [
+                "天然纤维"
+              ],
+              "description": "坐着休息时稳定头部，外套为可拆洗纯棉。本型号规格：单侧支撑。商品功能以本型号为准，其他档位配置不包含在内。",
+              "rating_summary": {
+                "average": 4.3,
+                "review_count": 83
+              },
+              "rating_is_live": false,
+              "ships_to": [
+                "CN",
+                "US",
+                "EU",
+                "JP",
+                "SG"
+              ],
+              "dimensions_cm": {
+                "height": 11,
+                "length": 30,
+                "width": 26
+              },
+              "package_dimensions_cm": {},
+              "updated_at": "2026-09-18",
+              "default_sku_id": "P3021-S2",
+              "image_url": null,
+              "image_kind": "placeholder",
+              "image_alt": "Roamix 航空颈枕 GX-02-2 单侧支撑：暂无商品图片",
+              "weight_kg": 0.15,
+              "data_provenance": "synthetic"
+            }
+          ],
+          "purpose": "product_view",
+          "result_ref": "ctx_aa2b1f4c547a4247ac34292226afc7e6",
+          "runId": "d622d7d1-74ce-4eb2-8349-323bead5f12a"
+        }
+      ],
+      "shoppingForm": null,
+      "confirmations": [],
+      "toolApprovals": [],
+      "skillUsages": [],
+      "status": "completed",
+      "progress": [
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:b4a3c9aa-2fde-8b13-e35b-fdd5c30150c7:1:call_00_OtbNtnx7sYrIEZQG2vvB4114",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:e11c28fa-25f3-eec3-5129-d0d072221aa4:1:call_01_OYF0PkINkmWPkiF7JweH1966",
+          "label": "查看商品详情",
+          "status": "completed"
+        },
+        {
+          "id": "d622d7d1-74ce-4eb2-8349-323bead5f12a:tool:a1652586-335e-1e0d-1804-1e962aa68c80:1:call_00_ykQangAC11BqINAmbOTd9135",
+          "label": "展示商品详情",
+          "status": "completed"
+        }
+      ],
+      "executionStatus": "completed",
+      "stopReason": null,
+      "productDeliveryComplete": true
+    }
+  },
+  {
+    "type": "RUN_FINISHED",
+    "threadId": "316de3fa-6b0d-422e-b975-828746064ec5",
+    "runId": "d622d7d1-74ce-4eb2-8349-323bead5f12a",
+    "outcome": {
+      "type": "success"
+    }
+  }
+]

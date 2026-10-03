@@ -1,0 +1,580 @@
+{
+  "cases": [
+    {
+      "id": "single-lookup",
+      "description": "简单查询不派发、不加载 Skill",
+      "queries": [
+        "只查 P1003-S1 的当前单价和库存，不需要选购建议。"
+      ],
+      "scenario": "single",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "简单查询不派发、不交易",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "执行所需业务工具",
+          "简单查询不加载 Skill"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "简单查询不派发、不交易",
+            "kind": "forbidden_tools",
+            "tools": [
+              "task_dispatch",
+              "create_order_tool"
+            ]
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "执行所需业务工具",
+            "kind": "required_tools",
+            "tools": [
+              "product_search_tool"
+            ]
+          },
+          {
+            "criterion": "简单查询不加载 Skill",
+            "kind": "no_skill_load"
+          }
+        ],
+        "p2": []
+      }
+    },
+    {
+      "id": "single-multiturn",
+      "description": "修改规格数量预算；整理上下文后回查证据",
+      "queries": [
+        "两件 P1001-S1 寄中国，到手预算500元人民币。请只推荐这个规格，不下单。",
+        "改成 P1001-S2 一件，到手预算改为250元人民币，仍寄中国。请只推荐这个规格。",
+        "另外查一下 P1003-S1 的当前单价与库存，不改变之前选购条件，不需要推荐。",
+        "再查一下 P1008-S1 的当前单价与库存，不改变之前选购条件，不需要推荐。",
+        "先通过历史回查工具核对第一轮推荐的SKU和数量。现在改选P1003-S1两件，寄中国，到手预算300元人民币，只推荐这个规格，不下单。"
+      ],
+      "scenario": "single",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "展示 SKU 数量和金额正确",
+          "真实上下文整理完成",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "执行所需业务工具",
+          "交付后不再调用模型总结"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "展示 SKU 数量和金额正确",
+            "kind": "presentation_matches",
+            "event": "recommendation.result",
+            "items": [
+              {
+                "sku_id": "P1003-S1",
+                "quantity": 2,
+                "total_amount_minor": 29800,
+                "currency": "CNY"
+              }
+            ],
+            "turn": 5
+          },
+          {
+            "criterion": "真实上下文整理完成",
+            "kind": "context_compacted"
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "执行所需业务工具",
+            "kind": "required_tools",
+            "tools": [
+              "conversation_fact_lookup"
+            ]
+          },
+          {
+            "criterion": "交付后不再调用模型总结",
+            "kind": "presentation_terminal",
+            "event": "recommendation.result",
+            "turn": 5
+          }
+        ],
+        "p2": []
+      },
+      "compact_after_turn": 4
+    },
+    {
+      "id": "multi-research",
+      "description": "按需加载流程并交付两项独立研究",
+      "queries": [
+        "准备通勤装备，请按通勤装备比较流程开展：让商品研究专家分别研究背包和耳机两个品类，给出各自的候选SKU、依据和取舍。分别预算300元和600元人民币，寄中国，不下单；本轮先要两份研究结果，不需要最终购物组合。"
+      ],
+      "scenario": "multi",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "两项研究交回候选与证据",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "比较流程按需加载"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "两项研究交回候选与证据",
+            "kind": "delegation_delivered",
+            "categories": ["旅行装备", "数码配件"],
+            "minimum": 2
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "比较流程按需加载",
+            "kind": "skill_loaded"
+          }
+        ],
+        "p2": []
+      },
+      "skill": true
+    },
+    {
+      "id": "multi-compare",
+      "description": "同商品两个SKU完整比较",
+      "queries": [
+        "比较P1001-S1和P1001-S2，各买两件寄中国，到手预算450元人民币。只比较这两个规格，不下单。"
+      ],
+      "scenario": "multi",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "展示 SKU 数量和金额正确",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "交付后不再调用模型总结"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "展示 SKU 数量和金额正确",
+            "kind": "presentation_matches",
+            "event": "comparison.result",
+            "items": [
+              {
+                "sku_id": "P1001-S1",
+                "quantity": 2,
+                "total_amount_minor": 41800,
+                "currency": "CNY"
+              },
+              {
+                "sku_id": "P1001-S2",
+                "quantity": 2,
+                "total_amount_minor": 43800,
+                "currency": "CNY"
+              }
+            ]
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "交付后不再调用模型总结",
+            "kind": "presentation_terminal",
+            "event": "comparison.result"
+          }
+        ],
+        "p2": []
+      }
+    },
+    {
+      "id": "multi-bundle",
+      "description": "两件不同商品按组合预算交付",
+      "queries": [
+        "P1003-S1和P1008-S1各一件，一起买寄中国，总到手预算300元人民币。核对后只推荐这两件的组合，不要下单。"
+      ],
+      "scenario": "multi",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "展示 SKU 数量和金额正确",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "交付后不再调用模型总结"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "展示 SKU 数量和金额正确",
+            "kind": "presentation_matches",
+            "event": "recommendation.result",
+            "items": [
+              {
+                "sku_id": "P1003-S1",
+                "quantity": 1,
+                "total_amount_minor": 15400,
+                "currency": "CNY"
+              },
+              {
+                "sku_id": "P1008-S1",
+                "quantity": 1,
+                "total_amount_minor": 11400,
+                "currency": "CNY"
+              }
+            ],
+            "bundle_total_minor": 26800
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "交付后不再调用模型总结",
+            "kind": "presentation_terminal",
+            "event": "recommendation.result"
+          }
+        ],
+        "p2": []
+      }
+    },
+    {
+      "id": "trade-pending",
+      "description": "有确认单但没有用户批准时不下单",
+      "queries": [
+        "我要购买 P1003-S1 一件，寄中国。请核验商品并保存选购项，准备确认单。收件人演示买家，浙江省杭州市测试路1号，邮编310000，电话留空。我会在页面点击确认，不要替我确认。"
+      ],
+      "scenario": "trade",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "未点击确认不创建订单",
+          "待确认单的规格数量和费用正确",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "执行所需业务工具"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "未点击确认不创建订单",
+            "kind": "no_orders_before_http_confirmation"
+          },
+          {
+            "criterion": "待确认单的规格数量和费用正确",
+            "kind": "confirmation_prepared",
+            "expected_payload": {
+              "items": [
+                {
+                  "sku_id": "P1003-S1",
+                  "quantity": 1,
+                  "unit_price_minor": 12900
+                }
+              ],
+              "currency": "CNY",
+              "total_amount_minor": 15400,
+              "subtotal_minor": 12900,
+              "freight_minor": 2500,
+              "tariff_minor": 0,
+              "shipping_address": {
+                "country": "CN"
+              }
+            }
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "执行所需业务工具",
+            "kind": "required_tools",
+            "tools": [
+              "create_order_tool"
+            ]
+          }
+        ],
+        "p2": []
+      }
+    },
+    {
+      "id": "trade-lifecycle",
+      "description": "确认、查询、取消及重复确认不重复扣库存",
+      "queries": [
+        "我要购买 P1003-S1 一件，寄中国。请核验商品并保存选购项，准备确认单。收件人演示买家，浙江省杭州市测试路1号，邮编310000，电话留空。我会在页面点击确认，不要替我确认。",
+        "查询刚才订单 {{confirmed_order_id}} 的明细与状态。",
+        "我要取消订单 {{confirmed_order_id}}，原因是改变计划。请准备取消确认单，等我点击。"
+      ],
+      "scenario": "trade",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "点击前没有订单",
+          "创建后持久订单正确",
+          "取消后持久订单正确",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "执行所需业务工具"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "点击前没有订单",
+            "kind": "no_orders_before_http_confirmation"
+          },
+          {
+            "criterion": "创建后持久订单正确",
+            "kind": "http_confirmation_result",
+            "action": "create",
+            "expected_status": "CONFIRMED"
+          },
+          {
+            "criterion": "取消后持久订单正确",
+            "kind": "http_confirmation_result",
+            "action": "cancel",
+            "expected_status": "CANCELLED"
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "执行所需业务工具",
+            "kind": "required_tools",
+            "tools": [
+              "query_order_tool"
+            ]
+          }
+        ],
+        "p2": []
+      },
+      "replay_confirmation": true,
+      "actions": [
+        {
+          "type": "resolve_confirmation",
+          "after_turn": 1,
+          "action": "create",
+          "approved": true,
+          "expected_payload": {
+            "items": [
+              {
+                "product_id": "P1003",
+                "sku_id": "P1003-S1",
+                "quantity": 1,
+                "unit_price_minor": 12900,
+                "currency": "CNY"
+              }
+            ],
+            "shipping_address": {
+              "recipient_name": "演示买家",
+              "country": "CN",
+              "state": "浙江省",
+              "city": "杭州市",
+              "address_line": "测试路1号",
+              "postal_code": "310000",
+              "phone": ""
+            },
+            "currency": "CNY",
+            "subtotal_minor": 12900,
+            "freight_minor": 2500,
+            "tariff_minor": 0,
+            "total_amount_minor": 15400,
+            "amount_scope": "landed",
+            "order_kind": "purchase_intent"
+          }
+        },
+        {
+          "type": "resolve_confirmation",
+          "after_turn": 3,
+          "action": "cancel",
+          "approved": true,
+          "expected_payload": {
+            "items": [
+              {
+                "product_id": "P1003",
+                "sku_id": "P1003-S1",
+                "quantity": 1,
+                "unit_price_minor": 12900,
+                "currency": "CNY"
+              }
+            ],
+            "shipping_address": {
+              "recipient_name": "演示买家",
+              "country": "CN",
+              "state": "浙江省",
+              "city": "杭州市",
+              "address_line": "测试路1号",
+              "postal_code": "310000",
+              "phone": ""
+            },
+            "currency": "CNY",
+            "subtotal_minor": 12900,
+            "freight_minor": 2500,
+            "tariff_minor": 0,
+            "total_amount_minor": 15400,
+            "amount_scope": "landed",
+            "order_kind": "purchase_intent",
+            "order_id": "{{confirmed_order_id}}",
+            "reason": "改变计划"
+          }
+        }
+      ]
+    },
+    {
+      "id": "recovery-destination",
+      "description": "业务拒绝后按用户更正恢复",
+      "queries": [
+        "查询P1003-S1寄BR的到手价；不支持就如实说明，不要擅自改国家。",
+        "那改成寄中国CN，P1003-S1一件，预算200元人民币，只推荐这款，不下单。"
+      ],
+      "scenario": "recovery",
+      "manual_review": [
+        "理由是否有依据，是否遗漏条件，失败解释是否清楚"
+      ],
+      "rubric": {
+        "p0": [
+          "运行未被误报为成功",
+          "展示 SKU 数量和金额正确",
+          "每轮有实际交付"
+        ],
+        "p1": [
+          "先收到错误，再按更正条件成功",
+          "交付后不再调用模型总结"
+        ],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "criterion": "运行未被误报为成功",
+            "kind": "no_execution_error"
+          },
+          {
+            "criterion": "展示 SKU 数量和金额正确",
+            "kind": "presentation_matches",
+            "event": "recommendation.result",
+            "items": [
+              {
+                "sku_id": "P1003-S1",
+                "quantity": 1,
+                "total_amount_minor": 15400,
+                "currency": "CNY"
+              }
+            ],
+            "turn": 2
+          },
+          {
+            "criterion": "每轮有实际交付",
+            "kind": "answer_present"
+          }
+        ],
+        "p1": [
+          {
+            "criterion": "先收到错误，再按更正条件成功",
+            "kind": "business_recovered",
+            "failure_tools": [
+              "product_search_tool",
+              "quote_products"
+            ],
+            "success_event": "recommendation.result"
+          },
+          {
+            "criterion": "交付后不再调用模型总结",
+            "kind": "presentation_terminal",
+            "event": "recommendation.result",
+            "turn": 2
+          }
+        ],
+        "p2": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+.context-workspace {
+  margin: 12px 0 20px;
+  padding: 10px 16px;
+  border: 1px solid #e6e1d8;
+  border-radius: 12px;
+  color: #565850;
+  font-size: 13px;
+}
+.context-workspace > summary { cursor: pointer; font-weight: 600; line-height: 32px; }
+.context-workspace-body { padding-top: 8px; }
+.context-workspace button {
+  margin-top: 12px;
+  background: #f1eee7;
+  border: 1px solid #d9d5ca;
+  border-radius: 9px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: inherit;
+}
+.context-workspace button:disabled { opacity: .5; cursor: default; }
+.context-workspace small { color: #777b70; line-height: 1.6; }
+.context-workspace [role=alert] { color: #a14a3b; }
+.context-summary { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }

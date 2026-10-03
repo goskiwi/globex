@@ -1,0 +1,8 @@
+# 恢复服务所需依赖，版本来自原glodex环境快照；模型权重不重新下载。
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.11.0+cu130
+numpy==1.26.4
+sentence-transformers==5.6.0
+transformers==5.14.1
+fastapi==0.140.0
+uvicorn==0.51.0

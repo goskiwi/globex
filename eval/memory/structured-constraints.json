@@ -1,0 +1,87 @@
+[
+  {
+    "id": "material-global",
+    "kind": "dislike",
+    "input": "我一直不要任何合成聚合物材质的商品。",
+    "count": 1,
+    "fact_kind": "dislike",
+    "expected_constraints": [
+      {
+        "material_tags": [
+          "合成聚合物"
+        ],
+        "category": null
+      }
+    ]
+  },
+  {
+    "id": "material-paraphrase",
+    "kind": "dislike",
+    "input": "选东西时，请一直排除合成聚合物材质。",
+    "count": 1,
+    "fact_kind": "dislike",
+    "expected_constraints": [
+      {
+        "material_tags": [
+          "合成聚合物"
+        ],
+        "category": null
+      }
+    ]
+  },
+  {
+    "id": "material-scoped",
+    "kind": "dislike",
+    "input": "只在厨房餐饮这个分类排除合成聚合物材质，其他分类不限制。",
+    "count": 1,
+    "fact_kind": "dislike",
+    "expected_constraints": [
+      {
+        "material_tags": [
+          "合成聚合物"
+        ],
+        "category": "厨房餐饮"
+      }
+    ]
+  },
+  {
+    "id": "nylon-not-polymer",
+    "kind": "dislike",
+    "input": "我一直不买尼龙材质的东西。",
+    "count": 1,
+    "fact_kind": "dislike",
+    "expected_constraints": [
+      null
+    ]
+  },
+  {
+    "id": "scoped-container",
+    "kind": "dislike",
+    "input": "我不喜欢塑料食品盒。",
+    "count": 1,
+    "fact_kind": "dislike",
+    "contains": [
+      "食品盒"
+    ],
+    "expected_constraints": [
+      null
+    ]
+  },
+  {
+    "id": "positive",
+    "kind": "like",
+    "input": "我一直喜欢蓝色。",
+    "count": 1,
+    "fact_kind": "like",
+    "expected_constraints": [
+      null
+    ]
+  },
+  {
+    "id": "temporary-exception",
+    "kind": "dislike",
+    "input": "这次合成聚合物可以，别修改我的长期偏好。",
+    "count": 0,
+    "expected_constraints": []
+  }
+]

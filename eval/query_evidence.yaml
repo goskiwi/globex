@@ -1,0 +1,156 @@
+{
+  "cases": [
+    {
+      "id": "current-1",
+      "description": "当前查询表达变体 1",
+      "queries": [
+        "再查 P1003-S1 的当前价格和库存。"
+      ],
+      "manual_review": [
+        "价格和库存是否有本轮工具依据"
+      ],
+      "rubric": {
+        "p0": [
+          "执行成功",
+          "本轮实际查商品"
+        ],
+        "p1": [],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "kind": "no_execution_error",
+            "criterion": "执行成功"
+          },
+          {
+            "kind": "required_tools",
+            "criterion": "本轮实际查商品",
+            "tools": [
+              "product_search_tool"
+            ]
+          }
+        ],
+        "p1": [],
+        "p2": []
+      }
+    },
+    {
+      "id": "current-2",
+      "description": "当前查询表达变体 2",
+      "queries": [
+        "请核实 P1003-S1 现在的售价及库存，谢谢。"
+      ],
+      "manual_review": [
+        "价格和库存是否有本轮工具依据"
+      ],
+      "rubric": {
+        "p0": [
+          "执行成功",
+          "本轮实际查商品"
+        ],
+        "p1": [],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "kind": "no_execution_error",
+            "criterion": "执行成功"
+          },
+          {
+            "kind": "required_tools",
+            "criterion": "本轮实际查商品",
+            "tools": [
+              "product_search_tool"
+            ]
+          }
+        ],
+        "p1": [],
+        "p2": []
+      }
+    },
+    {
+      "id": "current-3",
+      "description": "当前查询表达变体 3",
+      "queries": [
+        "不要看历史，只查询 P1003-S1 现在的库存和单价。"
+      ],
+      "manual_review": [
+        "价格和库存是否有本轮工具依据"
+      ],
+      "rubric": {
+        "p0": [
+          "执行成功",
+          "本轮实际查商品"
+        ],
+        "p1": [],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "kind": "no_execution_error",
+            "criterion": "执行成功"
+          },
+          {
+            "kind": "required_tools",
+            "criterion": "本轮实际查商品",
+            "tools": [
+              "product_search_tool"
+            ]
+          }
+        ],
+        "p1": [],
+        "p2": []
+      }
+    },
+    {
+      "id": "historical-explicit",
+      "description": "明确回查旧批次，不用当前查询冒充历史",
+      "queries": [
+        "只查 P1003-S1 当前价格和库存，不需要推荐。",
+        "请通过历史回查工具列出第一批结果里 P1003-S1 当时的价格、币种和库存，不要省略规格，谢谢；不要重新查询当前商品。"
+      ],
+      "manual_review": [
+        "回答是否清楚标为历史观察"
+      ],
+      "rubric": {
+        "p0": [
+          "执行成功",
+          "显式回查历史",
+          "不以当前查询替代历史"
+        ],
+        "p1": [],
+        "p2": []
+      },
+      "deterministic": {
+        "p0": [
+          {
+            "kind": "no_execution_error",
+            "criterion": "执行成功"
+          },
+          {
+            "kind": "required_tools",
+            "criterion": "显式回查历史",
+            "tools": [
+              "conversation_fact_lookup"
+            ],
+            "turn": 2
+          },
+          {
+            "kind": "forbidden_tools",
+            "criterion": "不以当前查询替代历史",
+            "tools": [
+              "product_search_tool",
+              "quote_products"
+            ],
+            "turn": 2
+          }
+        ],
+        "p1": [],
+        "p2": []
+      }
+    }
+  ]
+}

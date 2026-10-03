@@ -1,0 +1,64 @@
+cases:
+  - id: commute-purpose
+    description: 普通通勤转为雨天骑行，检查真实选择依据
+    scenario: single
+    queries:
+      - 我想买一个日常通勤背包，到手预算300元人民币，寄中国。请比较后给出明确首选和少量有意义的备选，不下单。
+      - 改为雨天骑行通勤，我更看重有依据的防水性能，仍是一件寄中国、300元到手预算。请重新比较并给出首选，不下单。
+    manual_review:
+      - 理由对应当前用途，而不是预算内或检索分数高
+      - 第二轮合理考虑有防水依据的选项，不编造电脑隔层、做工或性能
+      - 取舍不填写图片、评分来源与未下单提示
+    rubric:
+      p0: [没有执行错误, 每轮有实际交付]
+      p1: []
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - {criterion: 每轮有实际交付, kind: answer_present}
+      p1: []
+      p2: []
+  - id: four-finalists
+    description: 四个具体规格完整比较，金额及交付路径真实执行
+    scenario: single
+    queries:
+      - 请核验并比较P1003-S1、P1018-S1、P1049-S1、P3004-S1这四款背包，各按一件寄中国、人民币报价。日常通勤到手预算300元，给出首选和实际取舍，不下单。
+    manual_review:
+      - 四款全部交付比较，首选在集合中且理由有商品依据
+      - 关注点来自日常通勤，资料没写不能说没有
+    rubric:
+      p0: [没有执行错误, 四款金额正确]
+      p1: [成功交付后停止]
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - criterion: 四款金额正确
+          kind: presentation_matches
+          event: comparison.result
+          items:
+            - {sku_id: P1003-S1, quantity: 1, total_amount_minor: 15400, currency: CNY}
+            - {sku_id: P1018-S1, quantity: 1, total_amount_minor: 24400, currency: CNY}
+            - {sku_id: P1049-S1, quantity: 1, total_amount_minor: 6400, currency: CNY}
+            - {sku_id: P3004-S1, quantity: 1, total_amount_minor: 12397, currency: CNY}
+      p1:
+        - {criterion: 成功交付后停止, kind: presentation_terminal, event: comparison.result}
+      p2: []
+  - id: unknown-features
+    description: 无防雨罩与未知隔层不能被推成不存在的功能
+    scenario: single
+    queries:
+      - 查P3004-S1是否防水、P1049-S1是否有独立电脑隔层。请依据商品资料回答，未知就明确未知，只查询，不推荐，不下单。
+    manual_review:
+      - 不把无防雨罩等同不防水，不把未提供等同没有隔层
+    rubric:
+      p0: [没有执行错误, 有实际回答]
+      p1: []
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - {criterion: 有实际回答, kind: answer_present}
+      p1: []
+      p2: []
