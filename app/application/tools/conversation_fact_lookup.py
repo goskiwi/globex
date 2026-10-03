@@ -4,7 +4,7 @@ import time
 from copy import deepcopy
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.infrastructure.context import ShoppingContext
-from app.infrastructure.context_products import product_page, token_estimate, normalize_lookup_fields
+from app.infrastructure.context_products import product_page, token_estimate, normalize_lookup_fields, PRODUCT_EVIDENCE_KINDS
 from app.infrastructure.context_usage import record_context_diagnostic, record_evaluation_evidence
 
 
@@ -75,7 +75,7 @@ def build_conversation_fact_lookup(store, *, mode='strict'):
             for record in records:
                 if record['kind'] == 'rejected_summary':
                     raise ValueError('该记录是未通过校验的摘要候选，不能作为事实使用')
-                if record['kind'] in {'products', 'product_details', 'display_batch', 'recommendation', 'comparison'}:
+                if record['kind'] in PRODUCT_EVIDENCE_KINDS:
                     record['data'] = product_page({**record['data'], 'result_ref': record['result_ref']},
                         offset=offset, limit=limit, product_id=product_id, sku_id=sku_id,
                         position=position, fields=fields, field_offset=field_offset, token_limit=2700)
@@ -84,7 +84,8 @@ def build_conversation_fact_lookup(store, *, mode='strict'):
                         'notice': '以下 SKU 单价和库存均为该次历史观察，绝非当前值；不得与当前业务工具的数值互换。'}
                 else:
                     data = record['data']
-                    raw = data.get('text') if record['kind'] == 'tool_archive' else json.dumps(data, ensure_ascii=False)
+                    # 归档保存的是完整工具结构，按原结构分页，不能假定只有 text 字段。
+                    raw = json.dumps(data, ensure_ascii=False)
                     start = field_offset or (max(0, raw.find(query)-200) if query else 0)
                     excerpt = raw[start:start+2400]
                     record['data'] = {'excerpt': excerpt, 'field_offset': start,
@@ -103,7 +104,7 @@ def build_conversation_fact_lookup(store, *, mode='strict'):
                 while token_estimate(payload) > 3000 and page_budget > 256:
                     page_budget = max(256, page_budget - (token_estimate(payload) - 3000) - 128)
                     for record, source in zip(records, sources):
-                        if record['kind'] in {'products', 'product_details', 'display_batch', 'recommendation', 'comparison'}:
+                        if record['kind'] in PRODUCT_EVIDENCE_KINDS:
                             record['data'] = product_page({**source['data'], 'result_ref': source['result_ref']},
                                 offset=offset, limit=limit, product_id=product_id, sku_id=sku_id,
                                 position=position, fields=fields, field_offset=field_offset, token_limit=page_budget)

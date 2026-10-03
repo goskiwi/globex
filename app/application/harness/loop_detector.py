@@ -1,24 +1,22 @@
-"""比较同一会话中的业务进展；仅提示，不缓存结果或跳过真实核验。"""
-from collections import deque
-from dataclasses import dataclass, field
+"""对单个图任务的完整业务观察检测 A 重复及 AB 短周期；不持有跨会话历史。"""
+from dataclasses import dataclass
 import hashlib
 import json
 
 DEFAULT_REPEAT_THRESHOLD = 3
 DEFAULT_WINDOW = 6
-PROGRESS_HINT = (
-    "近期对 {tool} 的相同参数调用已得到相同结果 {count} 次，没有新进展。"
-    "请优先使用已有证据回答；确需补充时明确缺失字段，或按返回的下一页位置查询。"
-    "正常翻页、不同商品/字段及结果变化不属于此提示；历史结果不能替代当前状态核验。"
-)
+READ_TOOLS = frozenset({'product_search_tool', 'get_product_details', 'category_insight_tool',
+                        'conversation_fact_lookup', 'web_search_tool'})
+PROGRESS_HINT = '同一任务内的操作路径已经重复，完整业务结果未变化。'
 
 
 def _business_result(tool, value):
     if isinstance(value, list):
         return [_business_result(tool, item) for item in value]
-    if tool in {"product_search_tool", "get_product_details"} and isinstance(value, dict):
-        # 只排除这次查询生成的元数据；商品更新时间、价格、库存、SKU 均保留。
-        return {key: item for key, item in value.items() if key not in {"result_ref", "observed_at"}}
+    if isinstance(value, dict):
+        # 返回引用与观察时间不表示新业务信息；输入的引用、页码和游标不做此处理。
+        return {k: _business_result(tool, v) for k, v in value.items()
+                if k not in {'result_ref', 'observed_at'}}
     return value
 
 
@@ -26,31 +24,47 @@ def _fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoopDetector:
     repeat_threshold: int = DEFAULT_REPEAT_THRESHOLD
     window: int = DEFAULT_WINDOW
-    _observations: dict[str, deque] = field(default_factory=dict)
 
-    def observe(self, session_id, tool_name, arguments, result, state):
-        if state not in {"success", "error"}:
+    def observation(self, tool, arguments, result, status, conditions):
+        if tool not in READ_TOOLS or status not in {'success', 'error'}:
             return None
-        history = self._observations.get(session_id)
-        if history is None or history.maxlen != self.window:
-            history = self._observations[session_id] = deque(history or (), maxlen=self.window)
-        request_key = _fingerprint(arguments)
-        result_key = state + ":" + _fingerprint(_business_result(tool_name, result))
-        history.append((tool_name, request_key, result_key))
-        count = 0
-        for name, request, response in reversed(history):
-            if name != tool_name or request != request_key:
-                continue
-            if response != result_key:
-                break
-            count += 1
-        if count >= self.repeat_threshold:
-            return PROGRESS_HINT.format(tool=tool_name, count=count)
-        return None
+        return {'tool': tool, 'arguments': arguments,
+                'action': _fingerprint([tool, arguments, conditions]),
+                'result': _fingerprint([status, _business_result(tool, result)]), 'status': status}
 
-    def reset(self, session_id):
-        self._observations.pop(session_id, None)
+    def advance(self, previous, observations):
+        history = [*previous.get('history', []), *observations]
+        count = previous.get('count', 0) + len(observations)
+        history = history[-max(self.window, self.repeat_threshold, 4):]
+        updated = {**previous, 'history': history, 'count': count, 'stop': previous.get('stop', False)}
+        if not observations:
+            return updated, None
+        signatures = [(x['action'], x['result']) for x in history]
+        for period, repeats in ((1, self.repeat_threshold), (2, 2)):
+            width = period * repeats
+            if len(signatures) < width:
+                continue
+            pattern = signatures[-period:]
+            if period == 2 and pattern[0][0] == pattern[1][0]:
+                continue
+            if signatures[-width:] != pattern * repeats:
+                continue
+            # AB 与 BA 是同一个周期，不能因窗口起点移动而丢失已发出的纠偏提示。
+            cycle = min(pattern[i:] + pattern[:i] for i in range(period))
+            key = [list(x) for x in cycle]
+            warned = previous.get('warned')
+            if warned and warned['pattern'] == key:
+                updated['stop'] = count - warned['count'] >= period
+                return updated, None
+            updated['warned'] = {'pattern': key, 'count': count}
+            tried = [{'tool': x['tool'], 'arguments': x['arguments'], 'status': x['status']}
+                     for x in history[-period:]]
+            return updated, (PROGRESS_HINT + '\n已尝试：' + json.dumps(tried, ensure_ascii=False)
+                + '\n请对照当前目标与未解决问题，采用有新依据的查询或交付已有结论和缺口。'
+                  '调用成功但结果不变不等于服务失败；不要编造失败原因。继续相同周期将结束本轮自主探索。')
+        updated.pop('warned', None)
+        return updated, None

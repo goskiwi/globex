@@ -169,3 +169,35 @@ async def test_actual_context_usage_and_diagnostics_generate_harness_report(tmp_
     finally:
         await model.aclose()
         context_diagnostic_sink.reset(diagnostic_token);context_usage_sink.reset(usage_token);ShoppingContext.reset(token)
+
+
+async def test_structured_knowledge_archive_roundtrip_preserves_content_and_sources(tmp_path):
+    payload = {'insights': [{'content': f'第{i}条：杯盖密封与保温测试条件需要核验。' * 30,
+                             'source': f'guide-{i}', 'metadata': {'topic': '保温杯'}}
+                            for i in range(5)]}
+    messages = [HumanMessage(name='b', content='查询选购知识'),
+                AIMessage(content='', tool_calls=[{'id': 'knowledge', 'name': 'category_insight_tool', 'args': {}}]),
+                ToolMessage(id='knowledge-result', tool_call_id='knowledge', name='category_insight_tool',
+                            content=json.dumps(payload, ensure_ascii=False), artifact={'data': payload})]
+    messages.extend(HumanMessage(name='b', content='继续') for _ in range(6))
+    middleware = policy(tmp_path, product_tokens=1)
+    token = ShoppingContext.set(ShoppingContextSnapshot('s', 'b', 'zh-CN', 'CNY'))
+    try:
+        updates = await middleware.compact_checkpoint({'messages': messages, 'read_tool_messages': ['knowledge-result']})
+        reference = json.loads(updates['messages'][0].content)['result_ref']
+        saved = await middleware.store.get('b', 's', reference)
+        assert saved['kind'] == 'tool_archive' and saved['data'] == payload
+        lookup = build_conversation_fact_lookup(middleware.store, mode='bounded')
+        offset, pieces = 0, []
+        while offset is not None:
+            result = await lookup(result_ref=reference, field_offset=offset)
+            assert result.ok
+            page = result.data['records'][0]['data']
+            pieces.append(page['excerpt'])
+            next_offset = page['next_field_offset']
+            assert next_offset is None or next_offset > offset
+            offset = next_offset
+        assert len(pieces) > 1
+        assert json.loads(''.join(pieces)) == payload
+    finally:
+        ShoppingContext.reset(token)

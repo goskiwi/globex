@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""工具输出的轻量结构检查；交易前置条件由业务工具核验。"""
+"""完整工具输出的基本结构检查；交易前置条件仍由业务工具核验。"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -54,4 +54,6 @@ def check_schema(tool_name: str, tool_result: Any) -> AssertionOutcome:
                 "reason": f"缺少必需字段：{', '.join(missing)}",
             },
         )
+    if tool_name in {'product_search_tool','get_product_details'} and 'hits' in data and not isinstance(data['hits'],list):
+        outcome.failures.append({'type':'schema','tool':tool_name,'reason':'hits 必须是列表'})
     return outcome

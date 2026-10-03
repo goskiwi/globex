@@ -1,5 +1,5 @@
 """当前检索条件和按 SKU 保存的选购项；不保存报价或交易授权。"""
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from app.application.memory.preference_selector import preference_constraints
 from app.domain.catalog.taxonomy import MaterialTag
 
@@ -17,6 +17,29 @@ class Filters(StrictModel):
     required_material_tags: list[MaterialTag] = Field(default_factory=list)
 
 
+class PlanStep(StrictModel):
+    id: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_-]{0,39}$")
+    goal: str = Field(min_length=1, max_length=240)
+    filters: Filters = Field(default_factory=Filters)
+    requirements: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode='wrap')
+    def serialize(self, handler):
+        value = handler(self)
+        value['filters'] = self.filters.model_dump(exclude_unset=True)
+        return value
+
+
+def validate_plan(steps):
+    seen = set()
+    for step in steps:
+        if step.id in seen or set(step.depends_on) - seen:
+            raise ValueError("计划步骤ID必须唯一；依赖必须引用排在前面的步骤，不能有循环")
+        seen.add(step.id)
+    return steps
+
+
 class Choice(StrictModel):
     product_id: str = Field(pattern=r"^P\d{4,}$")
     sku_id: str = Field(pattern=r"^P\d{4,}-S\d+$")
@@ -32,6 +55,7 @@ class Choice(StrictModel):
 class ShoppingWork(StrictModel):
     filters: Filters  # 必填以拒绝旧 checkpoint，不转换旧多目标状态。
     goal: str = ""
+    plan: list[PlanStep] = Field(default_factory=list)
     preferences: list[str] = Field(default_factory=list)
     sort: str | None = None
     ignored_preferences: list[str] = Field(default_factory=list)
@@ -45,6 +69,7 @@ class ShoppingWork(StrictModel):
 
 
 class ShoppingUpdate(StrictModel):
+    plan: list[PlanStep] | None = Field(default=None, max_length=12, description="复杂多目标任务的研究计划；步骤只填目标、局部条件、依赖，状态由执行证据决定。修改时提交完整计划；[]清空。单步查询不建计划。")
     reset: bool = Field(default=False, description="明确开始新的选购任务才清空当前条件及选择")
     goal: str | None = Field(default=None, description="本轮选购目标，不填则保留；不是检索词或商品事实")
     filters: Filters | None = Field(default=None, description="只更新提供的字段；null 清空全部过滤，空列表清空该材质条件")
@@ -68,6 +93,8 @@ def apply_update(previous: ShoppingWork, update: ShoppingUpdate, source_message_
     if 'filters' in update.model_fields_set:
         work.filters = Filters() if update.filters is None else Filters.model_validate({
             **work.filters.model_dump(), **update.filters.model_dump(exclude_unset=True)})
+    if 'plan' in update.model_fields_set:
+        work.plan = validate_plan(update.plan or [])
     for key in ('goal', 'preferences', 'sort', 'ignored_preferences', 'unverified_requirements',
                 'comparisons', 'excluded_products', 'excluded_skus'):
         if key in update.model_fields_set:

@@ -61,7 +61,7 @@ def request_parts(system, messages, tools, available):
 class RequestComposition:
     """一轮请求的资料快照；所有候选历史都用相同规则重新装配和计量。"""
     FIXED_NAMES = {"skill_reference","skill_catalog","shopping_state","shopping_state_delta",
-                   "memory_hint","trade_state","candidate_state","delegated_task"}
+                   "memory_hint","task_plan","loop_feedback","trade_state","candidate_state","delegated_task"}
 
     def __init__(self, request, settings, skill_parts, working_mode):
         self.request, self.settings = request, settings

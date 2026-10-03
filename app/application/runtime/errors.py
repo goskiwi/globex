@@ -8,6 +8,7 @@ class ContextCapacityError(ValueError):
 class ExecutionStopped(RuntimeError):
     """执行限制已触发，不是模型提交错误，也不是可重试的服务故障。"""
     REASONS = {
+        "repeated_path": "纠偏后仍重复相同路径且业务结果未变化，已结束本轮自主探索",
         "output_limit": "模型输出达到上限，未完整生成回答",
         "provider_refusal": "模型服务拒绝生成本次回答",
         "budget_exhausted": "本轮预算不足，已停止继续调用模型",

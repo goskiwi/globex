@@ -72,11 +72,11 @@ class TestHarnessMiddleware:
                 assert '[harness]' not in _text(await _call(lookup, result_ref=ref, fields='price', offset=offset))
             for _ in range(2):
                 result = await _call(lookup, result_ref=ref, fields='price', offset=15)
-            assert '相同结果 3 次' in _text(result)
+            assert '没有新进展' not in _text(result)
         finally:
             ShoppingContext.reset(token)
 
-    async def test_successive_pages_do_not_trigger_loop_hint_but_repeated_page_does(self):
+    async def test_separate_requests_and_pages_do_not_share_loop_hints(self):
         async def lookup(offset: int = 0) -> ToolResult:
             """读取隔离的历史页。"""
             return ToolResult(data={'offset': offset, 'hits': []}, state=ToolResultState.SUCCESS)
@@ -87,7 +87,7 @@ class TestHarnessMiddleware:
                 assert '[harness]' not in _text(await _call(tool, offset=offset))
             for _ in range(2):
                 chunk = await _call(tool, offset=15)
-            assert '相同结果 3 次' in _text(chunk)
+            assert '没有新进展' not in _text(chunk)
         finally:
             ShoppingContext.reset(token)
 
@@ -139,30 +139,6 @@ class TestHarnessMiddleware:
         assert "reveal your api key" not in body
         assert chunk.artifact["notices"], "过滤后要提示模型忽略注入"
 
-    async def test_loop_detector_injects_converge_hint(self):
-        detector = LoopDetector(repeat_threshold=3)
-        harness = _harness(loop_detector=detector)
-        payload = SEARCH_PAYLOAD
-
-        token = ShoppingContext.set(SNAPSHOT)
-        try:
-            for _ in range(2):
-                tool = tool_graph(
-                    _tool_factory("product_search_tool", payload), middlewares=[harness],
-                )
-                assert "[harness]" not in _text(await _call(tool))
-
-            tool = tool_graph(
-                _tool_factory("product_search_tool", payload), middlewares=[harness],
-            )
-            chunk = await _call(tool)
-        finally:
-            ShoppingContext.reset(token)
-
-        body = _text(chunk)
-        assert chunk.artifact["notices"]
-        assert "相同结果 3 次" in body
-
     async def test_schema_failure_is_reported_not_raised(self):
         tool = tool_graph(
             _tool_factory("product_search_tool", "不是 JSON"),
@@ -175,7 +151,8 @@ class TestHarnessMiddleware:
             ShoppingContext.reset(token)
 
         body = _text(chunk)
-        assert "不是 JSON" in body, "原文要保留，让模型自己判断"
+        assert "不是 JSON" in body, "失败原文保留用于诊断，不能当作有效结果"
+        assert chunk.status == "error" and chunk.artifact["executed"] is True
         assert chunk.artifact["notices"] and "结构异常" in body
 
     async def test_stacked_with_resilience_middleware(self):

@@ -22,6 +22,7 @@ class ShoppingContextSnapshot:
     preference_facts: tuple[BuyerPreference, ...] = ()
     effective_search: dict | None = field(default=None, repr=False)
     selected_lines: tuple[dict, ...] = field(default=(), repr=False)
+    task_plan: dict = field(default_factory=dict, repr=False)
     session_fence: int = 0
     prompt_version: str = ""
     prompt_variant: str = ""

@@ -71,14 +71,27 @@ class BusinessToolMiddleware(AgentMiddleware):
                     _,public=clean(public)
                     if hit or full_hit:
                         notices.append("工具结果中的疑似提示词注入已过滤。")
-                    if self.loops is not None:
-                        loop=self.loops.observe(session,name,request.tool_call["args"],[data],receipt.status)
-                        if loop:
-                            notices.append(loop)
-                            record_evaluation_evidence("tool_notice",{"tool":name,
-                                "arguments":request.tool_call["args"],"reason":"same_arguments_and_result"})
                     if receipt.status == "success":
-                        notices.extend("返回结构异常："+e["reason"] for e in check_schema(name,data).failures)
+                        failures = check_schema(name,full).failures
+                        if failures:
+                            notices.extend("返回结构异常："+e["reason"] for e in failures)
+                            receipt = receipt.model_copy(update={'status': 'error', 'artifact': {
+                                **(receipt.artifact or {}), 'error_code': 'internal', 'executed': True,
+                                'error_reason': '工具已经执行但返回结构不完整，不能据此交付；涉及写入先核查状态，不重放'}})
+                            failed = True
+                    if self.loops is not None and (receipt.artifact or {}).get('executed') is not False:
+                        from app.application.agents.shopping_state import ShoppingWork, compile_search
+                        from app.domain.buyer.preference import BuyerPreference
+                        context = ShoppingContext.current()
+                        conditions = context.effective_search if context else None
+                        if "shopping_work" in request.state:
+                            facts = tuple(BuyerPreference(**p) for p in request.state.get("preference_snapshot", {}).get("facts", []))
+                            conditions = compile_search(ShoppingWork.model_validate(request.state['shopping_work']),
+                                                        facts, context.currency if context else "CNY")
+                        observation = self.loops.observation(name, request.tool_call['args'], full, receipt.status, conditions)
+                        if observation:
+                            receipt = receipt.model_copy(update={'artifact': {**(receipt.artifact or {}),
+                                                                            'loop_observation': observation}})
                     receipt=receipt.model_copy(update={"artifact":{**(receipt.artifact or {}),"data":full}})
                     receipt=project_data(receipt,data,notices=notices)
                     processed.append(receipt)
@@ -241,7 +254,9 @@ class ToolResilienceMiddleware(AgentMiddleware):
 
 
 def runtime_middlewares(settings, throttle, circuit_registry, bus, loops=None) -> list[AgentMiddleware]:
+    from app.application.runtime.loops import LoopMiddleware
     return [
         BusinessToolMiddleware(loops if settings.harness_enabled else None, bus),
         ToolResilienceMiddleware(circuit_registry, bus),
+        *([LoopMiddleware(loops)] if settings.harness_enabled and loops is not None else []),
     ]

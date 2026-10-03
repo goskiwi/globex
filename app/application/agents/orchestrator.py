@@ -396,8 +396,10 @@ class MainAgentOrchestrator:
         reason = result.get("execution_stop") if isinstance(result, dict) else None
         if not text.strip():
             return ExecutionResult("本轮未形成有效答复，请重试或缩小任务范围。", "failed", reason or "empty_delivery")
+        plan_steps = result.get('task_plan', {}).get('steps', [])
+        plan_incomplete = any(step['status'] != 'delivered' for step in plan_steps)
         return ExecutionResult(text, "needs_input" if result.get("delivery_needs_input") else
-                               "failed" if reason == "provider_refusal" else "partial" if reason else "completed", reason,
+                               "failed" if reason == "provider_refusal" else "partial" if reason or plan_incomplete else "completed", reason,
                                bool(result.get("product_delivery_complete")))
 
     async def _reply(self, session_id: str, session, inputs: list[BaseMessage]) -> ExecutionResult:

@@ -78,6 +78,16 @@ main_agent:
          只给选购建议不给商品算没完成任务。**
        - web_search_tool      （若可用）联网查知识库覆盖不到的时效信息
 
+    复杂多目标研究可通过 update_shopping_state 的 plan 保存步骤：每步包含 id、goal、filters、requirements、depends_on。
+    依赖只能引用前面的步骤；模型不填写完成状态。普通一步查询不建立计划。
+    计划中的任务派发必须填写 step_id，条件只从计划读取，不在 task.filters 重抄。
+    当前 task_plan 提示给出真实研究状态、证据和缺口。verified表示已有合格候选，不等于最终交付。
+    使用派发候选进行 recommend_products 或 compare_products 时，每个选择填写返回的 scope.task_id。
+    不得省略任务来源以使用更宽的主预算；条件变更使研究失效时重新核验，不沿用旧资格。
+    子任务和最终交付不能放在同一并行批次。多个独立研究仍可同时派发；依赖未完成时先处理缺口。
+    收到 loop_feedback 表示同一任务内操作及完整业务结果重复；有新依据再探索，否则交付已有结果和缺口。
+    纠偏后仍原样循环会由执行层收尾。不得通过新建子任务或改写无关参数规避预算和步骤限制。
+
     2. 调度工具 task_dispatch(subagent_type, task)：
        subagent_type 可选 search_agent（商品检索专家）/ trade_agent（下单交易专家）。
        task 只需 goal（研究或交易目标）；研究可填写 filters 中与当前状态不同的品类条件，

@@ -86,14 +86,17 @@ def test_new_search_reference_is_not_progress_but_inventory_is():
     payload={'hits':[{'product_id':'P1001','skus':[{'sku_id':'P1001-S1','stock':2}]}],
              'query_conditions':{'price_max_major':300},'result_ref':'ctx_a','observed_at':'a'}
     original=deepcopy(payload)
+    state={}
     for i in range(3):
         current={**payload,'result_ref':f'ctx_{i}','observed_at':str(i)}
-        hint=detector.observe('s','product_search_tool',{'normalized_query':'包'},[current],'success')
+        state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'包'},[current],'success',{})])
         assert bool(hint)==(i==2)
     assert payload==original
     changed=deepcopy(payload);changed['hits'][0]['skus'][0]['stock']=1
-    assert detector.observe('s','product_search_tool',{'normalized_query':'包'},[changed],'success') is None
-    assert detector.observe('s','product_search_tool',{'normalized_query':'另一个包'},[changed],'success') is None
+    state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'包'},[changed],'success',{})])
+    assert hint is None and not state['stop']
+    state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'另一个包'},[changed],'success',{})])
+    assert hint is None
 
 
 def test_failure_requires_explicit_code_no_legacy_alias():

@@ -2,6 +2,8 @@
 
 一个基于 **LangChain、LangGraph、AG-UI 和 React** 的全栈 Agent 实战项目，覆盖需求理解、商品检索、方案比较与交易确认。
 
+复杂选购研究可通过 `update_shopping_state.plan` 声明分项条件和依赖，完成状态由研究证据及最终交付产生；派发候选通过 `task_id` 保留局部约束。运行时使用图内 A/AB 重复检测，先提示，继续重复则按已有交付阶段收尾。普通单步查询不建立计划。实现与验证边界见[执行闭环修复记录](docs/改动记录/2026-10-03/任务计划与执行闭环修复.md)。
+
 2026-10-02已[收尾选购页面与澄清闭环](docs/改动记录/2026-10-02/选购页面与澄清闭环收尾.md)：普通推荐不强迫目的地，状态来源绑定真实买家消息而不要求模型抄原文；表单跟随原回复、提交后收起、刷新不复活。主界面为建议与紧凑可选商品卡，详细比较进窗口，购买复用已知国家和原确认流程。后端1669项、前端157项通过；真实DeepSeek/BGE、表单、四款比较、超预算只读和临时订单确认通过，Docker已更新。自由文案不计为全品类事实质量通过，检索模型仍按需启停。
 
 同日最后补齐发送即停止的创建边界：先等待真实RUN_STARTED再取消，不加延时重试；最后前端158项通过，真实网页立即停止成功，最终Docker前端已更新。测试浏览器、临时服务器和检索模型均已关闭，停止阶段401及创建前404原样保留在上述记录。
@@ -199,6 +201,8 @@ make docker-ps
 ```
 
 Compose 包含 API、worker、Redis、Qdrant 和静态前端，在 Docker Desktop 中显示为 `globex` 分组。以上命令加载 `.env` 和私有 `.env.bge`；运行数据使用 `globex_*` 专属命名卷，不会覆盖工程内的版本化目录。`make docker-up`先加载远端两个检索模型并连接隧道；演示结束执行`make docker-stop`，停止本项目容器、远端模型及隧道，不删除数据卷或权重。仅关闭网页不会执行这些停止动作。
+
+如果模型访问需要本机代理，在私有 `.env` 配置 `GLOBEX_HTTPS_PROXY` 为容器可访问的地址（Docker Desktop 可用 `http://host.docker.internal:<端口>`），再执行正常启动命令。留空关闭；内部服务由 `NO_PROXY` 排除。无需额外 Compose 文件。
 
 `make docker-up`在更新后重载前端Nginx，避免API容器地址变化后代理仍指向旧地址。若手动只更新app/worker，也需执行`docker compose --env-file .env --env-file .env.bge -f docker/docker-compose.yaml exec -T frontend nginx -s reload`，然后检查5173的`/health`，不能只检查8000。
 

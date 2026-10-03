@@ -1,5 +1,7 @@
 """商品上下文的无损入口投影、有界分页与历史引用。"""
 from __future__ import annotations
+
+PRODUCT_EVIDENCE_KINDS = frozenset({'products', 'product_details', 'product_view', 'display_batch', 'recommendation', 'comparison'})
 import json
 import math
 import re

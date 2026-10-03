@@ -16,6 +16,7 @@ class SkillReference(BaseModel):
 
 class DelegatedTask(BaseModel):
     """模型填写任务范围；当前买家原文和购物状态由服务端另外注入。"""
+    step_id: str | None = Field(default=None, description="已创建计划时必须引用步骤ID；该步骤的条件来自计划，不能在task.filters中重复覆盖")
     filters: Filters | None = Field(default=None, description="仅本品类与当前条件不同的字段；未提供字段继承当前状态，不写回主状态。多品类预算分别填写，禁止把全局总预算当每品类预算。")
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     goal: str = Field(min_length=1, description="本次子任务需要解决的问题")

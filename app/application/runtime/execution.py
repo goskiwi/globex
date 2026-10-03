@@ -54,6 +54,10 @@ class ExecutionMiddleware(AgentMiddleware):
         if rounds >= self.max_rounds:
             raise ExecutionStopped("model_call_limit")
         reason = request.state.get("execution_stop")
+        if request.state.get('loop_state', {}).get('stop'):
+            reason = 'repeated_path'
+            if not self.main:
+                raise ExecutionStopped(reason)
         try:
             raise_if_tool_stopped(request.messages)
         except ExecutionStopped as error:

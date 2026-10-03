@@ -90,9 +90,13 @@ def test_repeated_detail_reads_ignore_new_refs_but_notice_stock_changes():
     detector=LoopDetector()
     def result(index,stock):return {'hits':[{'product_id':'P3020','skus':[{'sku_id':'P3020-S1','stock':stock}]}],
                                   'result_ref':f'new-{index}','observed_at':index}
-    for index in (1,2):assert detector.observe('s','get_product_details',{'product_id':'P3020'},result(index,0),'success') is None
-    assert detector.observe('s','get_product_details',{'product_id':'P3020'},result(3,0),'success')
-    assert detector.observe('s','get_product_details',{'product_id':'P3020'},result(4,1),'success') is None
+    state={}
+    for index in (1,2,3):
+        observation=detector.observation('get_product_details',{'product_id':'P3020'},result(index,0),'success',{})
+        state,hint=detector.advance(state,[observation])
+        assert bool(hint)==(index==3)
+    state,hint=detector.advance(state,[detector.observation('get_product_details',{'product_id':'P3020'},result(4,1),'success',{})])
+    assert hint is None and not state['stop']
 
 
 async def test_precise_missing_ids_and_all_skus_even_when_specific_sku_requested(confirmation_env):

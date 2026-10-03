@@ -66,25 +66,28 @@ async def test_caller_cancellation_closes_tool_and_is_not_infrastructure_failure
         await asyncio.gather(task,return_exceptions=True)
 
 
-async def test_evaluation_observes_result_before_loop_notice_only_when_enabled():
+async def test_evaluation_observes_business_results_and_task_loop_notice():
     from app.infrastructure.context_usage import evaluation_evidence_sink
-    samples=[]
-    token=evaluation_evidence_sink.set(samples.append)
-    async def lookup():
+    from app.application.runtime.loops import LoopMiddleware
+    from app.application.runtime.tools import as_langchain_tool
+    from langchain.agents import create_agent
+    from langchain_core.messages import HumanMessage,AIMessage
+    from tests.test_agent_handoff import ScriptedModel,call
+    samples=[];token=evaluation_evidence_sink.set(samples.append)
+    async def product_search_tool():
         """固定业务结果。"""
-        return ToolResult({'hits':[]})
-    graph=tool_graph(lookup,middlewares=[BusinessToolMiddleware(
-        LoopDetector(repeat_threshold=2),TradeEventBus())])
+        return ToolResult({'hits':[],'recall_strategy':'test'})
+    detector=LoopDetector(repeat_threshold=2)
+    model=ScriptedModel(responses=[call('product_search_tool',{}),call('product_search_tool',{}),AIMessage(content='结束')])
+    graph=create_agent(
+        model,tools=[as_langchain_tool(product_search_tool)],middleware=[BusinessToolMiddleware(detector,TradeEventBus()),LoopMiddleware(detector)])
     try:
-        await call_tool(graph)
-        result=await call_tool(graph)
-        assert result.artifact['notices']
+        await graph.ainvoke({'messages':[HumanMessage(content='查询')]})
         observations=[s['payload'] for s in samples if s['kind']=='tool_result']
         assert len(observations)==2
-        assert all(s['result']==[{'hits':[]}] and s['state']=='success' for s in observations)
+        assert all(s['result']==[{'hits':[],'recall_strategy':'test'}] and s['state']=='success' for s in observations)
         assert any(s['kind']=='tool_notice' for s in samples)
-    finally:
-        evaluation_evidence_sink.reset(token)
+    finally:evaluation_evidence_sink.reset(token)
 
 
 async def test_native_tools_share_circuit_between_independent_redis_clients(isolated_redis_url):

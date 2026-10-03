@@ -11,6 +11,9 @@ name: globex
 # 存储用 SQLite，落在 app-data 卷（零外部依赖，无需额外容器）。
 # 注意：compose 形态下 QDRANT_URL 指向 qdrant 服务（覆盖本地嵌入模式）。
 x-agent-options: &agent-options
+  # 按本机网络可选配置；内部服务始终直连。
+  HTTPS_PROXY: ${GLOBEX_HTTPS_PROXY-}
+  NO_PROXY: localhost,127.0.0.1,host.docker.internal,redis,qdrant,app,worker
   IDENTITY_MODE: ${IDENTITY_MODE:-hmac}
   SESSION_OWNER_BINDING: ${SESSION_OWNER_BINDING:-1}
   IDENTITY_HMAC_SECRET: ${IDENTITY_HMAC_SECRET-}

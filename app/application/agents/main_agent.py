@@ -19,6 +19,7 @@ from app.application.runtime.skills import SkillReferenceMiddleware
 from app.application.runtime.context import RequestContextMiddleware
 from app.application.runtime.working_state import WorkingStateMiddleware
 from app.application.runtime.preferences import PreferenceStateMiddleware
+from app.application.runtime.task_plan import TaskPlanMiddleware
 from app.application.runtime.delivery import FinalDeliveryMiddleware
 from app.application.tools.shopping_state_tool import build_shopping_state_tool
 from app.application.tools.capability_tools import (
@@ -164,6 +165,7 @@ class MainAgentFactory:
                 PreferenceStateMiddleware(self._preference_store, self._preference_selector,
                                           self._settings.preference_top_k),
                 WorkingStateMiddleware(self._settings.context_state_mode),
+                TaskPlanMiddleware(),
                 context_policy,
             ],
             checkpointer=self._checkpointer,

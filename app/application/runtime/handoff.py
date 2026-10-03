@@ -5,6 +5,7 @@
 from dataclasses import dataclass
 from copy import deepcopy
 import json
+import math
 from typing_extensions import NotRequired
 
 from langchain.agents import AgentState
@@ -15,6 +16,7 @@ from pydantic import ValidationError
 from app.application.agents.handoff import AgentSubmission, SubagentResult
 from app.application.runtime.errors import ExecutionStopped, raise_if_tool_stopped
 from app.application.runtime.results import message_data
+from app.infrastructure.context_products import PRODUCT_EVIDENCE_KINDS
 
 
 def issue(code, field, message):
@@ -27,6 +29,7 @@ class TaskEvidence:
         self.session_id = session_id
         self.refs = set()
         self.facts = {}
+        self.qualification = {}
         self.quotes = {}
         self.identifiers = set()
         self.trade = []
@@ -63,6 +66,20 @@ class TaskEvidence:
                          "observed_at":observed_at, "product":common,
                          "sku":deepcopy(sku)}
                 self.facts[key] = facts
+                if sku:
+                    issues = list(sku.get('constraint_issues', []))
+                    stock, price = sku.get('stock'), sku.get('price_major')
+                    if type(stock) is int and stock <= 0:
+                        issues.append('out_of_stock')
+                    if stock is not None and type(stock) is not int:
+                        issues.append('invalid_stock')
+                    valid_price = type(price) in (int, float) and math.isfinite(price) and price >= 0
+                    if price is not None and not valid_price:
+                        issues.append('invalid_price')
+                    self.qualification[key] = {'historical': historical, 'issues': issues,
+                        'verified': (not historical and not issues and type(sku.get('stock')) is int
+                                     and sku['stock'] > 0 and valid_price
+                                     and isinstance(sku.get('currency'), str))}
                 self.identifiers.add(product_id)
                 if sku:
                     self.identifiers.add(sku["sku_id"])
@@ -92,7 +109,7 @@ class TaskEvidence:
                 self._lookups.add(key)
                 self.refs.add(record["result_ref"])
                 self.historical_refs.add(record["result_ref"])
-                if record.get("kind") in {"products", "display_batch", "recommendation", "comparison"}:
+                if record.get("kind") in PRODUCT_EVIDENCE_KINDS:
                     self._products(record.get("data", {}).get("hits", []), record["result_ref"], True,
                                    record.get("data", {}).get("observed_at"))
                 if record.get("kind") == "quote":
@@ -202,6 +219,14 @@ class TaskEvidence:
             elif candidate.sku_id is not None and candidate.sku_id not in self.products[candidate.product_id]:
                 errors.append(issue("sku_mismatch", f"candidates.{index}.sku_id",
                                     "该 SKU 不属于候选商品的已读证据，请按工具结果修正。"))
+            else:
+                known = [v for (pid, sid), v in self.qualification.items()
+                         if pid == candidate.product_id and (candidate.sku_id is None or sid == candidate.sku_id)
+                         and not v['historical']]
+                if known and all(v['issues'] for v in known):
+                    if result.status == 'completed' or not candidate.unmet_constraints:
+                        errors.append(issue('candidate_constraints_failed', f'candidates.{index}',
+                            '已读事实表明候选不符合本任务条件；移除候选或交回明确带缺口的partial结果。'))
         if result.status == "completed" and not self.successful_tools:
             errors.append(issue("completion_without_evidence", "status",
                                 "没有成功业务工具结果；如需用户补充或无法完成，请如实修改状态。"))

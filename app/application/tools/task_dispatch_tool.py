@@ -2,6 +2,7 @@
 import asyncio
 import json
 import time
+import uuid
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -23,6 +24,10 @@ from app.infrastructure.eventbus import observe_run_events
 from app.infrastructure.context_products import token_estimate
 from app.application.runtime.tool_view import bounded_tool_view
 from opentelemetry import trace
+
+
+class DelegationInputError(ValueError):
+    """派发前置条件不成立，不执行子任务。"""
 
 
 def _parent_context(runtime):
@@ -68,6 +73,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
         evidence = TaskEvidence(session_id)
         feedback = []
         stop_reason = None
+        scope = None
         try:
             budget = get_budget()
             if budget is not None and budget.exhausted:
@@ -79,10 +85,29 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 if context is None:
                     raise ValueError("派发缺少当前买家上下文")
                 scoped = ShoppingWork.model_validate(parent.pop("shopping_work"))
-                if subagent_type == "trade_agent" and task.filters is not None:
-                    raise ValueError("交易任务不能覆盖购物条件，请先由 Main 更新状态")
-                if task.filters is not None:
-                    changes = task.filters.model_dump(exclude_unset=True)
+                from app.application.runtime.task_plan import condition_identity
+                parent_conditions = condition_identity(compile_search(scoped, context.preference_facts, context.currency))
+                definition = None
+                filters = task.filters
+                if scoped.plan:
+                    if subagent_type != 'search_agent':
+                        raise DelegationInputError('计划步骤用于选购研究；交易准备按独立确认流程执行')
+                    step = next((s for s in scoped.plan if s.id == task.step_id), None)
+                    if step is None or task.filters is not None:
+                        raise DelegationInputError('计划任务须指定有效step_id，条件只从计划读取，不在task.filters重复填写')
+                    statuses = {s['id']: s['status'] for s in context.task_plan.get('steps', [])}
+                    if any(statuses.get(key) not in {'verified', 'delivered'} for key in step.depends_on):
+                        raise DelegationInputError('前置研究尚未取得合格候选，不能跳过依赖执行')
+                    definition = step.model_dump()
+                    task = task.model_copy(update={'goal': step.goal})
+                    filters = step.filters
+                    scoped.unverified_requirements = list(dict.fromkeys([*scoped.unverified_requirements, *step.requirements]))
+                elif task.step_id is not None:
+                    raise DelegationInputError('不存在研究计划，不能使用step_id')
+                if subagent_type == "trade_agent" and filters is not None:
+                    raise DelegationInputError("交易任务不能覆盖购物条件，请先由 Main 更新状态")
+                if filters is not None:
+                    changes = filters.model_dump(exclude_unset=True)
                     for field in ("excluded_material_tags", "required_material_tags"):
                         if field in changes:
                             changes[field] = list(dict.fromkeys([*getattr(scoped.filters, field), *changes[field]]))
@@ -92,6 +117,10 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 if task.preferences is not None:
                     scoped.preferences = task.preferences
                 effective = compile_search(scoped, context.preference_facts, context.currency)
+                scope = {'task_id': task.step_id or call_id or uuid.uuid4().hex, 'step_id': task.step_id,
+                         'goal': step.goal if scoped.plan else task.goal,
+                         'definition': definition, 'parent_conditions': parent_conditions,
+                         'effective_search': effective}
                 parent["effective_search"] = effective
                 parent["selected_products"] = list(context.selected_lines)
                 # 子任务只看到解析后的一份条件，不再同时接收原条件和覆盖值。
@@ -125,6 +154,9 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 "step_limit" if isinstance(error, GraphRecursionError) else
                 "context_capacity" if isinstance(error, ContextCapacityError) else "timeout")
             result = evidence.stopped_result(stop_reason)
+        except DelegationInputError as error:
+            feedback = [issue('task_precondition', 'task', str(error))]
+            result = SubagentResult(status='failed', summary='委派条件尚未满足，子任务未执行。', issues=[str(error)])
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -133,7 +165,12 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
             result = SubagentResult(status="failed", summary="子任务未交付可核验的完整结果。",
                                     issues=["execution_error:" + type(error).__name__])
 
+        selected_keys = {(c.product_id, c.sku_id) for c in result.candidates}
+        qualified = sorted(sid for (pid, sid), value in evidence.qualification.items()
+                           if value['verified'] and ((pid, sid) in selected_keys or (pid, None) in selected_keys))
         decision = {"agent": subagent_type, **result.model_dump(),
+                    'scope': scope, 'qualified_skus': qualified, 'observed_products': sorted(evidence.products),
+                    'observed_skus': {pid: sorted(skus) for pid, skus in evidence.products.items()},
                     "evidence_refs": sorted(evidence.refs), "feedback": feedback,
                     "historical_evidence_refs": sorted(evidence.historical_refs),
                     "trade_results": evidence.trade, "transaction_state": "none",

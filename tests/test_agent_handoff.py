@@ -255,10 +255,11 @@ async def test_parallel_results_do_not_share_evidence_and_failure_keeps_other_re
     assert bad.data["evidence_refs"] == []
 
 
-async def test_historical_lookup_is_valid_but_labelled_historical(tmp_path, monkeypatch):
+@pytest.mark.parametrize('kind',['products','product_details','product_view'])
+async def test_historical_lookup_is_valid_but_labelled_historical(tmp_path, monkeypatch, kind):
     from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
     factory, _, dispatch, _ = factories(tmp_path, monkeypatch, [])
-    ref = await factory.evidence_store.save("buyer", "handoff", "products", {
+    ref = await factory.evidence_store.save("buyer", "handoff", kind, {
         "hits": [{"product_id": "P1001", "title": "合成背包", "skus": [{"sku_id": "P1001-S1"}]}]})
     model = ScriptedModel(responses=[call("conversation_fact_lookup", {"result_ref": ref}),
         submission(candidates=[{"product_id": "P1001", "reason": "历史候选"}])])
