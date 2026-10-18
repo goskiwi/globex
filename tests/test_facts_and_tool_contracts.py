@@ -28,8 +28,8 @@ def card():
 
 
 def deliver(evidence, sku='P1003-S2'):
-    submission=AgentSubmission(status='completed',summary='研究结果',candidates=[
-        {'product_id':'P1003','sku_id':sku,'reason':'用途匹配'}])
+    submission=AgentSubmission(status='completed',candidates=[
+        {'product_id':'P1003','sku_id':sku,'evidence_fields': ['description']}])
     assert not evidence.validate(submission)
     return evidence.delivered(submission).candidates[0].facts
 
@@ -121,10 +121,11 @@ def test_optional_phone_is_plain_optional_text_without_format_conversion():
 
 
 def test_unknown_research_attributes_are_not_unmet_user_constraints():
-    result=AgentSubmission(status='completed',summary='研究结果',unknowns=['未标注电脑隔层'])
+    result=AgentSubmission(status='completed',candidates=[{'product_id':'P1003',
+        'evidence_fields':['description'], 'open_questions':['电脑隔层？']}])
     assert result.status=='completed' and not result.unmet_constraints
     with pytest.raises(ValidationError):
-        AgentSubmission(status='completed',summary='研究结果',unmet_constraints=['买家要求防水，未核验'])
+        AgentSubmission(status='completed',unmet_constraints=['买家要求防水，未核验'])
 
 
 async def test_delegation_keeps_prior_conditions_and_current_source_without_substring_gate():
@@ -158,8 +159,8 @@ def test_delegation_rejects_removed_research_dimensions_without_alias():
 @pytest.mark.parametrize('sku', ['', ' ', '\t\n'])
 def test_blank_sku_is_rejected_not_converted_to_product_only(sku):
     with pytest.raises(ValidationError):
-        AgentSubmission(status='completed',summary='候选',candidates=[
-            {'product_id':'P1003','sku_id':sku,'reason':'用途匹配'}])
+        AgentSubmission(status='completed',candidates=[
+            {'product_id':'P1003','sku_id':sku,'evidence_fields': ['description']}])
 
 
 def test_known_sku_and_product_only_candidates_have_real_facts():

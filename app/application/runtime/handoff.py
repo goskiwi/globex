@@ -161,12 +161,11 @@ class TaskEvidence:
         """停止时交回证据与缺口；检索命中不能自动升级为已筛选候选。"""
         return self.delivered(AgentSubmission(
             status="partial" if self.successful_tools else "failed",
-            summary=str(ExecutionStopped(reason)) + "；任务尚未完整完成。",
             issues=[reason]))
 
     def stopped_text(self, reason):
         result = self.stopped_result(reason)
-        lines = [result.summary]
+        lines = [str(ExecutionStopped(reason)) + '；' + result.summary]
         if self.products:
             lines.append(f"已读取 {len(self.products)} 件商品，完整资料保留在下列证据中；尚未完成筛选，不能当作推荐。")
         elif "product_search_tool" in self.successful_tools:
@@ -205,13 +204,15 @@ class TaskEvidence:
             candidate["facts"] = deepcopy(self.facts[key])
             candidate["facts"]["quotes"] = [deepcopy(value) for quote_key,value in self.quotes.items()
                 if key[1] is not None and quote_key[:2] == key]
-        return SubagentResult(**payload, evidence_refs=sorted(self.refs),
+        from app.application.usecases.research_report import research_summary
+        return SubagentResult(**payload, summary=research_summary(submission.status, payload['candidates']),
+            evidence_refs=sorted(self.refs),
             observed_product_count=len(self.products),
             observed_sku_count=sum(len(skus) for skus in self.products.values()))
 
     def validate(self, result):
         errors = []
-        # 只校验声明为推荐候选的对象，不扫描 summary/questions 等自由文本。
+        # 校验所选对象与规格，事实正文来自已读字段，不由模型重新填写。
         for index, candidate in enumerate(result.candidates):
             if candidate.product_id not in self.products:
                 errors.append(issue("candidate_unverified", f"candidates.{index}.product_id",

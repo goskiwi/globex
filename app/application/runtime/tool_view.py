@@ -38,7 +38,7 @@ def research_result_view(data, *, minimal=False):
         view['evidence_refs'] = sorted(refs)
     view['compact_view'] = True
     view['notice'] = ('候选事实和任务状态保留；未展开的观察全集及商品字段按引用回查。'
-                      '缺资料表示未知，不能从简短理由推导未核验属性；报价仍按其SKU、目的地、数量、币种和观察时间使用。')
+                      '待核验问题不能作为已确认属性；报价仍按其SKU、目的地、数量、币种和观察时间使用。')
     return view
 
 

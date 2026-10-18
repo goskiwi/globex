@@ -32,8 +32,8 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         call('get_product_details', {'product_id': product}),
         submission(status='partial' if partial and product == 'P1008' else 'completed',
             issues=['未核验用户额外要求'] if partial and product == 'P1008' else [],
-            unknowns=['没有电脑仓参数'], candidates=[{'product_id': product, 'sku_id': product + '-S1',
-            'reason': '明确资料支持的取舍'}])]) for product in ('P1003', 'P1008')])
+            candidates=[{'product_id': product, 'sku_id': product + '-S1',
+            'evidence_fields': ['description'], 'open_questions': ['是否有电脑仓？']}])]) for product in ('P1003', 'P1008')])
     steps = [{'id': key, 'goal': goal} for key, goal in [('bag', '背包研究'), ('cup', '水杯研究')]]
     model = ScriptedModel(responses=[
         call('update_shopping_state', {'update': {'plan': steps}}),
@@ -52,7 +52,7 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         assert '背包研究' in result.final_text and '水杯研究' in result.final_text
         assert 'Wanderlite' in result.final_text and 'P1003-S1' in result.final_text and 'P1008-S1' in result.final_text
         assert '129 CNY' in result.final_text and '0.38 kg' in result.final_text
-        assert '没有电脑仓参数' in result.final_text
+        assert '待核验问题：是否有电脑仓？' in result.final_text
         assert state['task_plan']['tasks']['bag']['reported']
         assert not state['task_plan']['tasks']['bag'].get('delivered')
         assert not await c.orchestrator._evidence_store.search('buyer', 's', kind='display_batch')
@@ -69,7 +69,8 @@ async def test_research_report_requires_existing_current_task(source):
     from types import SimpleNamespace
     from app.application.tools.research_delivery_tool import build_research_delivery_tool
     from tests.test_research_delivery_boundaries import research_receipt
-    tool = build_research_delivery_tool()
+    from app.domain.catalog.exchange_rate import ExchangeRateTable
+    tool = build_research_delivery_tool(ExchangeRateTable())
     report = research_receipt('P1003')
     report['candidates'][0]['facts']['sku'].update(price_major=11958.33, currency='JPY')
     messages = [ToolMessage(content='', name='task_dispatch', tool_call_id='failed',
@@ -96,7 +97,7 @@ def recommend(picks=None,mode='alternatives'):
 
 @pytest.mark.parametrize('budget,extra_goal',[(100,False),(150,False),(150,True)])
 async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,monkeypatch,budget,extra_goal):
-    candidate={'product_id':'P1003','sku_id':'P1003-S1','reason':'旅行收纳'}
+    candidate={'product_id':'P1003','sku_id':'P1003-S1','evidence_fields': ['description']}
     child=ScriptedModel(responses=[call('get_product_details',{'product_id':'P1003'}),
                                   submission(candidates=[candidate]),submission(candidates=[candidate]),submission(candidates=[candidate])])
     steps=[{'id':'bag','goal':'选择背包','filters':{'price_max_major':budget}}]
@@ -134,7 +135,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
 
 async def test_scoped_bundle_budget_uses_combined_quote(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),submission(candidates=[
-        {'product_id':'P1003','sku_id':sku,'reason':'旅行收纳'} for sku in ['P1003-S1','P1003-S2']])])
+        {'product_id':'P1003','sku_id':sku,'evidence_fields': ['description']} for sku in ['P1003-S1','P1003-S2']])])
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
         'filters':{'landed_budget_major':500,'ship_to':'CN','target_currency':'CNY'},
         'plan':[{'id':'bag','goal':'组合背包','filters':{'landed_budget_major':200}}]}}),
@@ -224,7 +225,7 @@ async def test_complete_business_changes_not_hidden_by_bounded_view(tmp_path):
 
 async def test_changed_plan_invalidates_old_qualification(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
-        submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','reason':'旅行收纳'}])])
+        submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','evidence_fields': ['description']}])])
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
         'filters':{'price_max_major':300,'target_currency':'CNY'},
         'plan':[{'id':'bag','goal':'选背包','filters':{'price_max_major':150}}]}}),
@@ -246,7 +247,7 @@ async def test_changed_plan_invalidates_old_qualification(tmp_path,monkeypatch):
 
 async def test_implicit_task_conditions_cannot_be_omitted_at_delivery(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
-        submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','reason':'旅行收纳'}])])
+        submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','evidence_fields': ['description']}])])
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'filters':{'price_max_major':300,'target_currency':'CNY'}}}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','filters':{'price_max_major':150}}}),
         recommend([pick(task_id=None)]),AIMessage(content='需要带上研究来源')])
@@ -263,7 +264,7 @@ async def test_implicit_task_conditions_cannot_be_omitted_at_delivery(tmp_path,m
 async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_path,monkeypatch,within_budget):
     child=ScriptedModel(responses=[call('get_product_details',{'product_id':'P1003'}),
         submission(status='partial',unmet_constraints=[] if within_budget else ['超出背包预算'],issues=['研究尚未完成'],candidates=[
-            {'product_id':'P1003','sku_id':sku,'reason':'作为超预算对照','unmet_constraints':[] if within_budget else ['超出预算']}
+            {'product_id':'P1003','sku_id':sku,'evidence_fields': ['description'],'unmet_constraints':[] if within_budget else ['超出预算']}
             for sku in ['P1003-S1','P1003-S2']])])
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
         'filters':{'price_max_major':300,'target_currency':'CNY'},
@@ -311,7 +312,7 @@ def research(step=None):
 def research_responses(count):
     return [response for _ in range(count) for response in (
         call('get_product_details', {'product_id': 'P1003'}),
-        submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'reason': '旅行收纳'}]))]
+        submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'evidence_fields': ['description']}]))]
 
 
 async def test_reset_clears_research_but_preserves_historical_evidence(tmp_path, monkeypatch):

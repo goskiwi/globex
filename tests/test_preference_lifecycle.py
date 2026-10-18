@@ -153,7 +153,7 @@ async def test_resumed_preferences_reach_child_search_and_final_recommendation(t
     from tests.test_agent_handoff import submission
     store = SemanticPreferenceStore(tmp_path/'memory.db', Extract(), Embed(), 'test', .5)
     child = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1001'}),
-        submission(status='partial', summary='没有符合条件的商品', unmet_constraints=['材质不符合'])])
+        submission(status='partial', unmet_constraints=['材质不符合'])])
     model = ScriptedModel(responses=[
         call('product_search_tool', {'product_id': 'P1001'}),
         call('remember_preference_tool', {'kind': 'dislike', 'statement': '不要合成聚合物'}),

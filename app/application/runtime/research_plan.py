@@ -120,7 +120,8 @@ def record_research(plan: ResearchPlan, work: ShoppingWork, data: dict) -> None:
         'evidence_refs': data.get('evidence_refs', []),
         'required_gaps': [*data.get('unmet_constraints', []), *scope['effective_search'].get('unverified_requirements', [])],
         'gaps': [*data.get('unmet_constraints', []), *data.get('questions', []),
-                 *data.get('issues', []), *data.get('unknowns', [])],
+                 *data.get('issues', []),
+                 *(question for candidate in data.get('candidates', []) for question in candidate.get('open_questions', []))],
     }
 
 

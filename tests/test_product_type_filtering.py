@@ -110,7 +110,7 @@ async def test_parallel_research_keeps_type_in_each_scope_and_candidate_facts(tm
     steps=[{'id':'bag','goal':'找背包','filters':{'product_type':'背包','price_max_major':300}},
            {'id':'ear','goal':'找耳机','filters':{'product_type':'耳机','price_max_major':600}}]
     children=iter([ScriptedModel(responses=[call('get_product_details',{'product_id':pid}),
-        submission(candidates=[{'product_id':pid,'sku_id':pid+'-S1','reason':'用户明确要的类型'}])])
+        submission(candidates=[{'product_id':pid,'sku_id':pid+'-S1','evidence_fields': ['description']}])])
         for pid in ('P1003','P1022')])
     main=ScriptedModel(responses=[call('update_shopping_state',{'update':{
         'filters':{'ship_to':'CN','target_currency':'CNY'},'plan':steps}}),

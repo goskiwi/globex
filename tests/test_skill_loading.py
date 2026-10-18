@@ -110,7 +110,7 @@ async def test_child_loads_own_reference_without_parent_history(env,tmp_path,mon
     search,_,dispatch,bus=factories(tmp_path,monkeypatch,[])
     search.capability_registry=env.registry;search.buyer_skill_store=env.personal
     child=ScriptedModel(responses=[load_call(env.skill),call('read_candidates',{}),
-        submission(candidates=[{'product_id':'P1001','reason':'候选'}])])
+        submission(candidates=[{'product_id':'P1001','evidence_fields': ['description']}])])
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**k:child)
     out=(await dispatch('search_agent',task(skill_refs=[{'id':env.skill['id'],'version':'1'}]))).data
     assert out['status']=='completed'
@@ -154,8 +154,7 @@ async def test_real_compaction_and_reopened_evidence_are_readable_by_child(env,t
     search,_,dispatch,_=factories(tmp_path,monkeypatch,[],tools=[tool])
     search.capability_registry=env.registry;search.buyer_skill_store=env.personal
     child=ScriptedModel(responses=[load_call(env.skill),call('conversation_fact_lookup',{'result_ref':ref}),
-        submission(status='partial',summary='已回查历史，尚需当前核验',
-            candidates=[{'product_id':'P0','reason':'历史已读对象'}],
+        submission(status='partial',candidates=[{'product_id':'P0','evidence_fields': ['description']}],
             unmet_constraints=['尚未重新核验当前库存'])])
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     output=(await dispatch('search_agent',task(

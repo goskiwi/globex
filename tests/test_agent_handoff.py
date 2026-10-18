@@ -58,7 +58,7 @@ def call(name, args, identifier="call-1"):
 
 
 def submission(**updates):
-    return call("SubagentResult", {"status": "completed", "summary": "已完成候选研究", **updates}, "submit-1")
+    return call("SubagentResult", {"status": "completed", **updates}, "submit-1")
 
 
 def task(**updates):
@@ -103,7 +103,7 @@ def factories(tmp_path, monkeypatch, responses, role="search", tools=None):
 
 
 async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_path, monkeypatch):
-    candidate = {"product_id": "P1001", "sku_id": "P1001-S1", "reason": "符合要求"}
+    candidate = {"product_id": "P1001", "sku_id": "P1001-S1", 'evidence_fields': ['description']}
     search, child, dispatch, bus = factories(tmp_path, monkeypatch, [call("read_candidates", {}),
         submission(candidates=[candidate])])
     parent = ScriptedModel(responses=[call("update_shopping_state", {"update":{
@@ -124,7 +124,7 @@ async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_p
     assert "无关旧话题" not in json.dumps(sent, ensure_ascii=False)
     result = next(m for m in state["messages"] if isinstance(m, ToolMessage) and m.name == "task_dispatch")
     delivered = json.loads(result.content)["candidates"][0]
-    assert {k:v for k,v in delivered.items() if k != "facts"} == {**candidate, "unmet_constraints": []}
+    assert {k:v for k,v in delivered.items() if k != "facts"} == {**candidate, "open_questions": [], "unmet_constraints": []}
     assert delivered["facts"]["result_ref"] == "ctx_demo"
     assert json.loads(result.content)["status"] == "completed"
     assert not any(isinstance(m, ToolMessage) and m.name == "read_candidates" for m in state["messages"])
@@ -143,8 +143,8 @@ async def test_invalid_or_unsupported_completion_is_failed(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("updates", [
-    {"candidates": [{"product_id": "NOT-IN-CATALOG", "reason": "推荐"}]},
-    {"candidates": [{"product_id": "P1001", "sku_id": "P1002-S1", "reason": "推荐"}]},
+    {"candidates": [{"product_id": "NOT-IN-CATALOG", 'evidence_fields': ['description']}]},
+    {"candidates": [{"product_id": "P1001", "sku_id": "P1002-S1", 'evidence_fields': ['description']}]},
     {"evidence_refs": ["ctx_invented"]},
 ])
 async def test_result_must_match_actual_child_evidence(tmp_path, monkeypatch, updates):
@@ -156,10 +156,12 @@ async def test_result_must_match_actual_child_evidence(tmp_path, monkeypatch, up
 
 async def test_nonblocking_notes_do_not_turn_completed_task_into_failure(tmp_path, monkeypatch):
     _, _, dispatch, _ = factories(tmp_path, monkeypatch, [call("read_candidates", {}),
-        submission(summary="已完成；未提供用户本次未要求的容量数据")])
+        submission(candidates=[{"product_id": "P1001", "evidence_fields": ["description"],
+                                "open_questions": ["容量数据？"]}])])
     result = (await dispatch("search_agent", task())).data
     assert result["status"] == "completed"
-    assert "未提供用户本次未要求的容量数据" in result["summary"]
+    assert result["candidates"][0]["open_questions"] == ["容量数据？"]
+    assert "1款商品" in result["summary"]
 
 
 @pytest.mark.parametrize("updates", [
@@ -176,7 +178,7 @@ async def test_explicit_noncompleted_statuses_survive_handoff(tmp_path, monkeypa
 
 async def test_pending_confirmation_never_becomes_executed(tmp_path, monkeypatch):
     factory, _, dispatch, bus = factories(tmp_path, monkeypatch, [call("prepare_trade", {}),
-        submission(summary="订单已经支付发货")], role="trade")
+        submission()], role="trade")
 
     @tool
     def prepare_trade() -> str:
@@ -242,7 +244,7 @@ async def test_parallel_results_do_not_share_evidence_and_failure_keeps_other_re
 
     class Factory:
         def build(self):
-            answer = submission(candidates=[{"product_id": "P1001", "reason": "候选"}])
+            answer = submission(candidates=[{"product_id": "P1001", 'evidence_fields': ['description']}])
             return create_agent(ScriptedModel(responses=[call("read_scope", {}), answer, answer, answer]),
                 tools=[read_scope, build_submission_tool()], middleware=[HandoffMiddleware()],
                 context_schema=HandoffContext)
@@ -262,7 +264,7 @@ async def test_historical_lookup_is_valid_but_labelled_historical(tmp_path, monk
     ref = await factory.evidence_store.save("buyer", "handoff", kind, {
         "hits": [{"product_id": "P1001", "title": "合成背包", "skus": [{"sku_id": "P1001-S1"}]}]})
     model = ScriptedModel(responses=[call("conversation_fact_lookup", {"result_ref": ref}),
-        submission(candidates=[{"product_id": "P1001", "reason": "历史候选"}])])
+        submission(candidates=[{"product_id": "P1001", 'evidence_fields': ['description']}])])
     monkeypatch.setattr("app.application.agents.search_agent.create_chat_model", lambda *a, **kw: model)
     factory.build_tools = lambda: [as_langchain_tool(build_conversation_fact_lookup(factory.evidence_store))]
     result = (await dispatch("search_agent", task(evidence_refs=[ref]))).data
@@ -283,7 +285,7 @@ async def test_real_trade_tools_prepare_without_order_or_inventory_write(confirm
     await env.evidence.save("buyer", "handoff", "products", {"hits": [{
         "product_id": product.product_id, "default_sku_id": sku.sku_id,
         "skus": [{"sku_id": sku.sku_id}]}]})
-    result_messages = [submission(summary="确认单准备完成")] if valid_submission else [submission(status="partial") for _ in range(3)]
+    result_messages = [submission()] if valid_submission else [submission(status="partial") for _ in range(3)]
     model = ScriptedModel(responses=[call("create_order_tool", {
         "sku_ids": [sku.sku_id], "shipping_address": asdict(sample_address())}),
         *result_messages])

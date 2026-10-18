@@ -1,0 +1,128 @@
+"""报告内容反例：不让模型重写已读事实，跨币种/规格/数量比较由代码负责。"""
+from copy import deepcopy
+
+import pytest
+from pydantic import ValidationError
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
+from app.application.agents.handoff import AgentSubmission, build_submission_tool
+from app.application.tools.research_delivery_tool import _report
+from app.application.usecases.research_report import project_research_report, research_summary
+from app.domain.catalog.exchange_rate import ExchangeRateTable
+from tests.test_research_delivery_boundaries import research_receipt
+
+
+RATES = ExchangeRateTable()
+
+
+def report_pair():
+    data = research_receipt('P1022', description='支持蓝牙和降噪，未提供佩戴形式')
+    other = research_receipt('P40018')['candidates'][0]
+    data['candidates'].append(other)
+    first = data['candidates'][0]['facts']
+    first['sku'].update(price_major=299, currency='CNY')
+    first['quotes'][0]['line']['total_amount_minor'] = 32400
+    other['facts']['sku'].update(price_major=54.94, currency='SGD')
+    other['facts']['quotes'][0]['line']['total_amount_minor'] = 31618
+    return data
+
+
+def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
+    data = report_pair()
+    data['summary'] = '3款头戴式耳机，P1022是最低价'
+    before = deepcopy(data)
+    result = project_research_report(data, RATES)
+    assert result['product_count'] == 2 and result['sku_count'] == 2
+    unit, landed = result['price_comparisons']
+    assert unit['minimum_minor'] == 29118 and unit['maximum_minor'] == 29900
+    assert unit['spread_minor'] == 782 and unit['lowest'][0]['sku_id'] == 'P40018-S1'
+    assert landed['minimum_minor'] == 31618 and landed['maximum_minor'] == 32400
+    text = _report(result)
+    assert '2款商品、2个明确规格' in text and '3款' not in text and '头戴式' not in text
+    assert '最低 291.18 CNY（P40018-S1）' in text
+    assert '最低 316.18 CNY（P40018-S1）' in text
+    assert '不含运税' in text and '配送至CN' in text
+    assert '待核验问题：是否有电脑仓？' in text
+    assert data == before, '事实投影不能改写原始回执'
+
+
+def test_counts_distinguish_canonical_products_and_explicit_skus():
+    data = report_pair()
+    first, second = data['candidates']
+    first['facts']['product']['canonical_product_id'] = 'same-product'
+    second['facts']['product']['canonical_product_id'] = 'same-product'
+    result = project_research_report(data, RATES)
+    assert (result['product_count'], result['sku_count']) == (1, 2)
+    assert '1款商品、2个明确规格' in research_summary('completed', data['candidates'])
+
+
+@pytest.mark.parametrize('change', ['missing', 'sku', 'quantity', 'destination', 'currency', 'historical'])
+def test_incomparable_quotes_never_create_landed_ranking(change):
+    data = report_pair()
+    facts = data['candidates'][1]['facts']
+    quote = facts['quotes'][0]
+    if change == 'missing':
+        facts['quotes'] = []
+    elif change == 'sku':
+        quote['line']['sku_id'] = 'P40018-S2'
+    elif change == 'quantity':
+        quote['line']['quantity'] = 2
+    elif change == 'destination':
+        quote['ship_to'] = 'US'
+    elif change == 'currency':
+        quote['currency'] = quote['line']['currency'] = 'USD'
+    else:
+        quote['historical'] = True
+    comparisons = project_research_report(data, RATES)['price_comparisons']
+    assert len(comparisons) == 1 and comparisons[0]['kind'] == 'unit_price'
+
+
+@pytest.mark.parametrize('historical', [False, True])
+def test_product_only_or_historical_candidates_do_not_borrow_current_sku_prices(historical):
+    data = report_pair()
+    candidate = data['candidates'][1]
+    if historical:
+        candidate['facts']['historical'] = True
+    else:
+        candidate['sku_id'] = None
+        candidate['facts']['sku'] = None
+    result = project_research_report(data, RATES)
+    assert result['price_comparisons'] == []
+    assert ('历史资料：' in _report(result)) is historical
+
+
+def test_tied_prices_keep_all_lowest_candidates_and_selected_facts_are_literal():
+    data = report_pair()
+    data['candidates'][1]['facts']['sku'].update(price_major=299, currency='CNY')
+    data['candidates'][0]['evidence_fields'] = ['description', 'highlights', 'description']
+    result = project_research_report(data, RATES)
+    unit = result['price_comparisons'][0]
+    assert unit['spread_minor'] == 0 and len(unit['lowest']) == len(unit['highest']) == 2
+    assert result['items'][0]['evidence'] == [{'field':'description', 'label':'商品原文',
+        'value': '支持蓝牙和降噪，未提供佩戴形式'}]
+
+
+@pytest.mark.parametrize('field,value', [('summary', '最便宜'), ('unknowns', ['没电脑仓']),
+                                         ('reason', '头戴式')])
+def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
+    schema = convert_to_openai_tool(build_submission_tool())['function']['parameters']
+    assert 'summary' not in schema['properties'] and 'unknowns' not in schema['properties']
+    properties = schema['properties']['candidates']['items']['properties']
+    assert 'reason' not in properties and 'evidence_fields' in properties
+    payload = {'status': 'completed', 'candidates': [
+        {'product_id': 'P1022', 'evidence_fields': ['description']}]}
+    if field == 'reason':
+        payload['candidates'][0][field] = value
+    else:
+        payload[field] = value
+    with pytest.raises(ValidationError):
+        AgentSubmission.model_validate(payload)
+
+
+def test_fact_selection_cannot_inject_new_field_or_duplicate_candidate():
+    candidate = {'product_id': 'P1022', 'evidence_fields': ['wearing_style']}
+    with pytest.raises(ValidationError):
+        AgentSubmission(status='completed', candidates=[candidate])
+    candidate['evidence_fields'] = ['description']
+    with pytest.raises(ValidationError, match='不能重复'):
+        AgentSubmission(status='completed', candidates=[candidate, candidate])
