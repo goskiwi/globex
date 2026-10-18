@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.application.runtime.execution import ExecutionMiddleware, graph_step_limit
 
 import json
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -185,15 +186,41 @@ class SessionRegistry:
         *,
         enforce_owner: bool = True,
         prompt_registry: Any = None,
+        max_cached_sessions: int = 32,
     ) -> None:
+        if type(max_cached_sessions) is not int or max_cached_sessions < 1:
+            raise ValueError("会话图缓存容量必须为正整数")
         self._main_factory = main_factory
         self._session_store = session_store
-        self._agents: dict[str, GraphSession] = {}
+        self._agents: OrderedDict[str, GraphSession] = OrderedDict()
         self._claims: dict[str, Any] = {}
+        self._active: set[str] = set()
+        self._max_cached_sessions = max_cached_sessions
         self._enforce_owner = enforce_owner
         self._prompt_registry = prompt_registry
 
     async def get_or_create(self, shopping_session_id: str) -> GraphSession:
+        # 应用层串行同一会话；get到persist/invalidate期间不能淘汰其执行票据。
+        self._active.add(shopping_session_id)
+        try:
+            session = await self._load_session(shopping_session_id)
+            self._agents.move_to_end(shopping_session_id)
+            self._evict_idle()
+            return session
+        except BaseException:
+            self._active.discard(shopping_session_id)
+            self._evict_idle()
+            raise
+
+    def _evict_idle(self):
+        for session_id in list(self._agents):
+            if len(self._agents) <= self._max_cached_sessions:
+                break
+            if session_id not in self._active:
+                self._agents.pop(session_id)
+                self._claims.pop(session_id, None)
+
+    async def _load_session(self, shopping_session_id: str) -> GraphSession:
         from app.domain.session.ports.session_store import SessionOwnerMismatch
         from app.infrastructure.prompt_registry import PromptContractChanged
 
@@ -242,10 +269,14 @@ class SessionRegistry:
     async def invalidate(self, shopping_session_id: str) -> None:
         self._agents.pop(shopping_session_id, None)
         self._claims.pop(shopping_session_id, None)
+        self._active.discard(shopping_session_id)
+        self._evict_idle()
 
     async def persist(self, shopping_session_id: str) -> bool:
         claim = self._claims.get(shopping_session_id)
         if claim is None:
+            self._active.discard(shopping_session_id)
+            self._evict_idle()
             return False
         payload = json.dumps(
             {"runtime": "langgraph", "thread_id": shopping_session_id, "schema": 1},
@@ -261,3 +292,6 @@ class SessionRegistry:
             if self._claims.get(shopping_session_id) == claim:
                 await self.invalidate(shopping_session_id)
             raise
+        finally:
+            self._active.discard(shopping_session_id)
+            self._evict_idle()
