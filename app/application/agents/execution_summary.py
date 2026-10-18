@@ -7,6 +7,7 @@ TOOL_LABELS = {
     'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐',
     'compare_products': '准备比较结果', 'show_shopping_form': '补充选购需求',
     'SubagentResult': '提交研究结果', 'category_insight_tool': '查询选购知识',
+    'present_research': '交付研究报告',
     'web_search_tool': '核实外部资料', 'task_dispatch': '委派专家任务',
     'remember_preference_tool': '保存购物偏好', 'forget_preference_tool': '删除购物偏好',
     'update_preference_tool': '修改购物偏好', 'create_order_tool': '准备下单确认',
@@ -54,6 +55,16 @@ def label(name, arguments, data=None):
     return TOOL_LABELS.get(name, '执行工具')
 
 
+def step_status(name, data, success):
+    """工具执行成功与业务完成分开投影，报告部分完成不能显示成全部完成。"""
+    if not success:
+        return 'failed'
+    if name in {'task_dispatch', 'present_research', 'SubagentResult'} and isinstance(data, dict):
+        return {'completed':'completed', 'partial':'partial', 'needs_input':'waiting_input',
+                'failed':'failed'}.get(text(data.get('status')), 'unconfirmed')
+    return 'completed'
+
+
 def conditions(arguments):
     update = arguments.get('update')
     if not isinstance(update, dict):
@@ -61,6 +72,9 @@ def conditions(arguments):
     filters = update.get('filters')
     parts = []
     if isinstance(filters, dict):
+        if 'product_type' in filters:
+            parts.append('商品类型：' + filters['product_type'] if text(filters.get('product_type'))
+                         else '清除商品类型限制')
         currency = text(filters.get('target_currency'))
         for key, caption in [('landed_budget_major', '到手预算'), ('price_max_major', '商品价上限')]:
             amount = filters.get(key)
@@ -86,6 +100,8 @@ def request_summary(name, arguments):
         return conditions(arguments)
     if name == 'product_search_tool' and text(arguments.get('normalized_query')):
         return '检索词：' + arguments['normalized_query']
+    if name == 'present_research' and isinstance(arguments.get('task_ids'), list):
+        return f'汇总{len(set(arguments["task_ids"]))}项研究成果'
     if name == 'quote_products':
         parts = ['配送至' + destination(arguments['ship_to'])] if text(arguments.get('ship_to')) else []
         if text(arguments.get('currency')):
@@ -175,6 +191,14 @@ def failure_summary(failure):
 
 
 def result_summary(name, arguments, data, success, *, failure=None):
+    if name == 'present_research' and success and isinstance(data, dict):
+        tasks, completed = data.get('task_ids'), data.get('completed_task_ids')
+        if not isinstance(tasks, list) or not isinstance(completed, list):
+            return '研究报告返回，完成范围尚未确认'
+        total = len(set(tasks))
+        remaining = total - len(set(tasks) & set(completed))
+        return (f'已交付{total}份研究报告；其中{remaining}份仍有未完成事项，详见报告'
+                if remaining else f'已交付{total}份完整研究报告')
     if name in {'task_dispatch','SubagentResult'} and isinstance(data,dict):
         captions = {'completed': '任务已完成', 'partial': '任务部分完成',
                     'needs_input': '需要补充信息', 'failed': '任务未完成'}

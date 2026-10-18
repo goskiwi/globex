@@ -73,6 +73,31 @@ def test_child_partial_and_needs_input_do_not_become_completed_tool_success():
         assert step['label']=='商品研究' and step['status']==expected
 
 
+@pytest.mark.parametrize('status,completed,expected', [
+    ('completed',['a','b'],'completed'), ('partial',['a'],'partial')])
+async def test_research_delivery_status_and_summary_survive_history_restore(tmp_path,status,completed,expected):
+    journal=AGUIJournal(tmp_path/'runs.db')
+    saved,_=await journal.reserve(body('r'),'b1','owner')
+    events=[]
+    target=AGUIRunAdapter(RunAgentInput.model_validate(saved['input']),events.append)
+    target.start()
+    start(target,'report','present_research',{'task_ids':['a','b']})
+    end(target,'report','present_research',{'status':status,'task_ids':['a','b'],'completed_task_ids':completed})
+    target.finish('研究报告',status,None)
+    await journal.append('r','owner',[e.model_dump(mode='json',by_alias=True,exclude_none=True) for e in events])
+    restored=await AGUIJournal(tmp_path/'runs.db').session('s1','b1')
+    step=restored['run']['state']['process']['steps'][0]
+    assert step['label']=='交付研究报告' and step['status']==expected
+    assert '2份' in step['summary']
+    assert ('未完成事项' in step['summary']) == (status=='partial')
+    assert 'task_ids' not in json.dumps(step,ensure_ascii=False)
+
+
+def test_type_change_summary_and_clear_are_explicit():
+    assert result_summary('update_shopping_state',{'update':{'filters':{'product_type':'耳机'}}},{},True)=='商品类型：耳机'
+    assert result_summary('update_shopping_state',{'update':{'filters':{'product_type':None}}},{},True)=='清除商品类型限制'
+
+
 def test_pending_delivery_does_not_claim_published_before_commit():
     payload={'hits':[{'product_id':'P1001','title':'背包','default_sku_id':'P1001-S1'}],'preferred_sku_id':'P1001-S1'}
     a=adapter();start(a,'rec','recommend_products')

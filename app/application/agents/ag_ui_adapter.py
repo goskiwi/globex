@@ -27,7 +27,7 @@ from ag_ui.core import (
 )
 
 from app.infrastructure.eventbus import TradeEvent
-from app.application.agents.execution_summary import TOOL_LABELS as _TOOL_LABELS, DELIVERY_TOOLS, label, request_summary, result_summary, delivery_summary
+from app.application.agents.execution_summary import TOOL_LABELS as _TOOL_LABELS, DELIVERY_TOOLS, label, request_summary, result_summary, delivery_summary, step_status
 
 class AGUIRunAdapter:
     def __init__(self, request: RunAgentInput, emit: Callable[[BaseEvent], None], *, authoritative_state: dict | None = None) -> None:
@@ -151,10 +151,7 @@ class AGUIRunAdapter:
             arguments = self._tool_arguments.pop(event.tool_call_id,{})
             if success and name=='update_shopping_state' and isinstance(event.data,dict) and isinstance(event.data.get('filters'),dict):
                 self.state['shoppingFilters']=copy.deepcopy(event.data['filters'])
-            step_status = 'completed' if success else 'failed'
-            if success and name=='task_dispatch' and isinstance(event.data,dict):
-                step_status = {'completed':'completed','partial':'partial','needs_input':'waiting_input','failed':'failed'}.get(str(event.data.get('status')),'unconfirmed')
-            self._progress(call_id, label(name,arguments,event.data), step_status,
+            self._progress(call_id, label(name,arguments,event.data), step_status(name,event.data,success),
                 result_summary(name,arguments,event.data,success,failure=event.failure))
             if success and name in DELIVERY_TOOLS:
                 self._delivery_steps[DELIVERY_TOOLS[name]] = call_id
