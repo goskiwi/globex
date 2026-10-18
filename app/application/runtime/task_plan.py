@@ -19,23 +19,36 @@ def condition_identity(policy):
     return {k: policy.get(k) for k in ('parameters', 'unverified_requirements', 'excluded_products', 'excluded_skus')}
 
 
+def dependent_steps(steps, changed):
+    """计划已按依赖排序；返回直接及间接下游，不改变独立分支。"""
+    affected = set(changed)
+    for step in steps:
+        if affected.intersection(step.depends_on):
+            affected.add(step.id)
+    return affected - set(changed)
+
+
 def project_plan(work, policy, saved):
     tasks = deepcopy(saved.get('tasks', {}))
     definitions = {s.id: s.model_dump() for s in work.plan}
     for value in tasks.values():
         scope = value['scope']
-        value['stale'] = (scope['parent_conditions'] != condition_identity(policy)
+        value['stale'] = (value.get('stale', False) or scope['parent_conditions'] != condition_identity(policy)
                           or (scope.get('step_id') is not None
                               and definitions.get(scope['step_id']) != scope.get('definition')))
     steps = []
+    statuses = {}
     for step in work.plan:
         value = tasks.get(step.id)
+        if value and any(statuses[key] not in {'verified', 'delivered'} for key in step.depends_on):
+            value['stale'] = True
         status = ('pending' if not value or value['stale'] else
                   'delivered' if value.get('delivered') else
                   'verified' if value['status'] == 'completed' and value.get('qualified_skus') and not value.get('required_gaps') else 'blocked')
         steps.append({**step.model_dump(), 'status': status,
                       'gaps': (value.get('gaps', []) if value and not value['stale'] else []),
                       'evidence_refs': (value.get('evidence_refs', []) if value and not value['stale'] else [])})
+        statuses[step.id] = status
     return {'steps': steps, 'tasks': tasks, 'last_batch': saved.get('last_batch')}
 
 
@@ -95,6 +108,10 @@ class TaskPlanMiddleware(AgentMiddleware):
                 if not isinstance(data, dict) or not data.get('scope'):
                     continue
                 scope = data['scope']
+                # 前置研究每次重新执行，都要求其下游重新核验；不能让旧结果自动复活。
+                for key in dependent_steps(work.plan, {scope['task_id']}):
+                    if key in plan['tasks']:
+                        plan['tasks'][key]['stale'] = True
                 plan['tasks'][scope['task_id']] = {'scope': scope, 'status': data['status'],
                     'qualified_skus': data.get('qualified_skus', []),
                     'observed_products': data.get('observed_products', []),
@@ -124,6 +141,10 @@ class TaskPlanMiddleware(AgentMiddleware):
         step_ids = [c['args']['task'].get('step_id') for c in calls
                     if c['name'] == 'task_dispatch' and isinstance(c['args'].get('task'), dict)
                     and c['args']['task'].get('step_id') is not None]
+        work = ShoppingWork.model_validate(request.state['shopping_work'])
+        if any(dependent_steps(work.plan, {key}).intersection(step_ids) for key in step_ids):
+            return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
+                               content='存在前后依赖的研究不能同批执行；先完成前置研究，再执行后续步骤。本批均未执行。')
         if len(step_ids) != len(set(step_ids)) or sum(c['name'] in DELIVERIES for c in calls) > 1:
             return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
                                content='同一批次不能重复执行一个计划步骤，也不能提交多个最终交付；本批均未执行。')

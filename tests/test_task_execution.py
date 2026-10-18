@@ -240,3 +240,95 @@ async def test_duplicate_plan_step_in_parallel_batch_does_not_execute(tmp_path,m
         assert len(receipts)==2 and all(m.status=='error' and '本批均未执行' in m.content for m in receipts)
         assert child.cursor==0
     finally:await c.shutdown()
+
+
+def research(step=None):
+    task = {'goal': '核验旅行背包'}
+    if step is not None:
+        task['step_id'] = step
+    return call('task_dispatch', {'subagent_type': 'search_agent', 'task': task})
+
+
+def research_responses(count):
+    return [response for _ in range(count) for response in (
+        call('get_product_details', {'product_id': 'P1003'}),
+        submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'reason': '旅行收纳'}]))]
+
+
+async def test_reset_clears_research_but_preserves_historical_evidence(tmp_path, monkeypatch):
+    child = ScriptedModel(responses=research_responses(1))
+    model = ScriptedModel(responses=[research(), AIMessage(content='已研究'),
+        call('update_shopping_state', {'update': {'reset': True, 'goal': '新的选购任务'}}),
+        call('product_search_tool', {'product_id': 'P1003'}),
+        recommend([pick(task_id=None)]), AIMessage(content='推荐未完成')])
+    c = await _container(tmp_path, monkeypatch, model)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: child)
+    try:
+        _, before = await ask(c, '研究旅行背包')
+        assert before['task_plan']['tasks']
+        receipt = next(m for m in before['messages'] if isinstance(m, ToolMessage) and m.name == 'task_dispatch')
+        reference = receipt.artifact['data']['evidence_refs'][0]
+        result, after = await ask(c, '重新开始，使用之前看过的背包直接推荐')
+        assert result.status == 'completed'
+        assert after['task_plan']['tasks'] == {} and after['task_plan']['steps'] == []
+        delivered = next(m for m in reversed(after['messages']) if isinstance(m, ToolMessage) and m.name == 'recommend_products')
+        assert delivered.status == 'success', delivered.content
+        store = ContextEvidenceStore(tmp_path / 'context_evidence.db')
+        assert await store.get('buyer', 's', reference) is not None
+    finally:
+        await c.shutdown()
+
+
+@pytest.mark.parametrize('change_definition', [True, False])
+async def test_dependency_invalidation_survives_turns_and_requires_fresh_research(tmp_path, monkeypatch, change_definition):
+    steps = [{'id': 'a', 'goal': '研究背包'},
+             {'id': 'b', 'goal': '根据背包研究搭配', 'depends_on': ['a']},
+             {'id': 'c', 'goal': '根据搭配进一步核验', 'depends_on': ['b']},
+             {'id': 'd', 'goal': '独立研究'}]
+    changed = deepcopy(steps)
+    changed[0]['goal'] = '重新研究不同用途的背包'
+    child = ScriptedModel(responses=research_responses(7))
+    update = call('update_shopping_state', {'update': {'plan': changed}}) if change_definition else research('a')
+    model = ScriptedModel(responses=[call('update_shopping_state', {'update': {'plan': steps}}),
+        research('a'), research('b'), research('c'), research('d'), AIMessage(content='研究完成'),
+        update, recommend([pick(task_id='c')]), AIMessage(content='需要重做后续研究'),
+        *([research('a')] if change_definition else []), AIMessage(content='前置研究已完成'),
+        research('b'), research('c'), AIMessage(content='后续重新核验完成')])
+    c = await _container(tmp_path, monkeypatch, model)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: child)
+    try:
+        _, state = await ask(c, '按依赖关系研究，并独立研究另一方向')
+        assert all(s['status'] == 'verified' for s in state['task_plan']['steps'])
+        _, state = await ask(c, '重新研究前置步骤')
+        statuses = {s['id']: s['status'] for s in state['task_plan']['steps']}
+        assert statuses == {'a': 'pending' if change_definition else 'verified', 'b': 'pending', 'c': 'pending', 'd': 'verified'}
+        assert next(m for m in reversed(state['messages']) if isinstance(m, ToolMessage) and m.name == 'recommend_products').status == 'error'
+        _, state = await ask(c, '完成前置研究')
+        assert [s['status'] for s in state['task_plan']['steps']] == ['verified', 'pending', 'pending', 'verified']
+        _, state = await ask(c, '重新核验所有后续步骤')
+        assert all(s['status'] == 'verified' for s in state['task_plan']['steps'])
+        delegated = [m.content for batch in child.seen for m in batch if getattr(m, 'name', None) == 'delegated_task']
+        assert any('dependency_research' in text and 'qualified_skus' in text for text in delegated)
+    finally:
+        await c.shutdown()
+
+
+async def test_dependent_research_cannot_rerun_in_same_batch(tmp_path, monkeypatch):
+    first, second = research('a'), research('b')
+    child = ScriptedModel(responses=research_responses(2))
+    model = ScriptedModel(responses=[call('update_shopping_state', {'update': {'plan': [
+        {'id': 'a', 'goal': '前置研究'}, {'id': 'b', 'goal': '后续研究', 'depends_on': ['a']}]}}),
+        first, second, AIMessage(content='已研究'),
+        AIMessage(content='', tool_calls=[{**first.tool_calls[0], 'id': 'retry-a'},
+                                         {**second.tool_calls[0], 'id': 'retry-b'}]),
+        AIMessage(content='需要顺序执行')])
+    c = await _container(tmp_path, monkeypatch, model)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: child)
+    try:
+        await ask(c, '先研究前置再研究后续')
+        _, state = await ask(c, '重做这两项研究')
+        assert child.cursor == 4
+        rejected = [m for m in state['messages'] if isinstance(m, ToolMessage) and m.tool_call_id.startswith(('retry-a-', 'retry-b-'))]
+        assert len(rejected) == 2 and all(m.status == 'error' for m in rejected)
+    finally:
+        await c.shutdown()

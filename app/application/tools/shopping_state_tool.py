@@ -32,9 +32,12 @@ def build_shopping_state_tool(evidence_store):
         except (ValueError, KeyError) as error:
             return ToolMessage(content=str(error),tool_call_id=runtime.tool_call_id,name='update_shopping_state',
                 status='error',artifact={'error_code':'business_rejected','error_reason':str(error)})
-        return Command(update={'shopping_work': result.model_dump(), 'messages': [ToolMessage(
+        updates = {'shopping_work': result.model_dump(), 'messages': [ToolMessage(
             content='当前条件与选购项已更新；价格库存仍以业务工具为准。', tool_call_id=runtime.tool_call_id,
-            artifact={'event_data':{'filters':result.filters.model_dump()}})]})
+            artifact={'event_data':{'filters':result.filters.model_dump()}})]}
+        if update.reset:
+            updates['task_plan'] = {}
+        return Command(update=updates)
 
     tool = TypedTool.from_function(coroutine=update_shopping_state)
     tool.args_schema = create_model("ShoppingStateArguments", __base__=tool.args_schema,
