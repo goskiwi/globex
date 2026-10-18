@@ -25,7 +25,7 @@ import uuid
 from app.application.agents.orchestrator import SubmitIntentInput
 from app.application.runtime.execution import ExecutionResult
 from app.composition import build_container
-from app.domain.queue.ports.task_queue import IntentTask
+from app.domain.queue.ports.task_queue import IntentTask, NonRetryableTaskError
 from app.infrastructure.queue.redis_stream_queue import current_execution_lease
 from app.infrastructure.tracing import install_log_correlation, trace_worker_task
 
@@ -58,6 +58,8 @@ async def _execute_traced_task(task: IntentTask, orchestrator, bus):
     )
     # Orchestrator 会把常规异常封装成结果，不能把 [error] 误标成 done。
     if result.error:
+        if getattr(result, "error_code", None) == "PERSISTENCE_FAILED":
+            raise NonRetryableTaskError(result.error)
         raise RuntimeError(result.error)
     return ExecutionResult(result.final_text, result.status, result.stop_reason)
 

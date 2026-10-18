@@ -19,7 +19,7 @@ from langgraph.graph import END
 from langgraph.errors import GraphRecursionError
 
 from app.application.runtime.events import ReplyStart, approval_event
-from app.domain.session.ports.conversation_store import ConversationEventRecord, ConversationStore, ConversationTurn
+from app.domain.session.ports.conversation_store import ConversationStore
 from app.infrastructure.budget import init_budget, get_budget
 from app.infrastructure.capability_registry import CapabilityVersionChanged
 from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
@@ -31,6 +31,7 @@ from app.application.runtime.errors import ContextCapacityError, ExecutionStoppe
 from app.application.runtime.handoff import TaskEvidence
 from app.application.runtime.execution import ExecutionResult
 from app.application.runtime.sessions import SessionCoordinator, SessionBusy
+from app.application.runtime.finalization import RunFinalizer, RunPersistenceError
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,15 @@ class MainAgentOrchestrator:
             metrics = begin_request()
             status = "failed"
             try:
-                result = await self._handle_intent(intent, persistence_guard)
+                try:
+                    result = await self._handle_intent(intent, persistence_guard)
+                except RunPersistenceError:
+                    logger.exception("执行收尾失败，不自动重放业务操作")
+                    message = "本轮操作可能已生效，但执行记录保存未完成；请先核查订单、确认单和会话状态，不要直接重复操作。"
+                    result = SubmitIntentOutput(intent.shopping_session_id, message, message,
+                        "PERSISTENCE_FAILED", status="failed", stop_reason="persistence_error")
+                self._bus.publish(intent.shopping_session_id, "final.result", {
+                    "text": result.final_text, "status": result.status, "stop_reason": result.stop_reason})
                 status = result.status
                 return result
             except asyncio.CancelledError:
@@ -244,7 +253,6 @@ class MainAgentOrchestrator:
                     execution = ExecutionResult(final_text, "needs_input")
                 final_text = self._guard_final_text(session_id, final_text)
                 delivered = recommendation if execution.product_delivery_complete else None
-                self._bus.publish(session_id, "final.result", {"text": final_text, "status": execution.status, "stop_reason": execution.stop_reason})
                 return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
                                           product_delivery_complete=execution.product_delivery_complete)
             if pending:
@@ -252,7 +260,8 @@ class MainAgentOrchestrator:
                 observer = self._native_observer.get()
                 if event is not None and observer is not None:
                     observer(event)
-                return SubmitIntentOutput(session_id, "请先确认或拒绝待处理的长期记忆操作，再继续对话。", status="needs_input")
+                final_text = "请先确认或拒绝待处理的长期记忆操作，再继续对话。"
+                return SubmitIntentOutput(session_id, final_text, status="needs_input")
 
             messages = list(snapshot.values.get("messages", [])) if isinstance(snapshot.values, dict) else []
             trade_state = await self._trade_state_provider(intent.buyer_id, session_id) if self._trade_state_provider else {}
@@ -291,7 +300,6 @@ class MainAgentOrchestrator:
                 final_text = "这次长期记忆变更还未执行，请在下方确认或拒绝。"
                 execution = ExecutionResult(final_text, "needs_input")
             delivered = recommendation if execution.product_delivery_complete else None
-            self._bus.publish(session_id, "final.result", {"text": final_text, "status": execution.status, "stop_reason": execution.stop_reason})
             return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
                                       product_delivery_complete=execution.product_delivery_complete)
         except ContextCapacityError:
@@ -312,30 +320,9 @@ class MainAgentOrchestrator:
             return SubmitIntentOutput(session_id, f"[error] {message}", message, status="failed", stop_reason="execution_error")
         finally:
             try:
-                if persistence_guard is None or persistence_guard():
-                    persisted = await self._sessions.persist(session_id)
-                    if persisted is not False:
-                        record = self._record_conversation(
-                            intent, final_text, int((time.monotonic() - started_at) * 1000), trace
-                        )
-                        if final_text.startswith("[cancelled]"):
-                            record_task = asyncio.create_task(record)
-                            try:
-                                await asyncio.shield(record_task)
-                            except asyncio.CancelledError:
-                                await record_task
-                                raise
-                        else:
-                            await record
-                        if self._evidence_store is not None:
-                            if delivered is not None:
-                                await self._evidence_store.save(intent.buyer_id, session_id, "display_batch", delivered)
-                            await self._evidence_store.save(intent.buyer_id, session_id, "conversation", {
-                                "buyer": intent.raw_query,
-                                "agent": final_text,
-                            })
-                else:
-                    await self._sessions.invalidate(session_id)
+                finalizer = RunFinalizer(self._sessions, self._bus, self._conversation_store, self._evidence_store)
+                await finalizer.finish(intent, final_text, delivered,
+                    int((time.monotonic() - started_at) * 1000), trace, persistence_guard)
             finally:
                 if trace is not None:
                     self._bus.unsubscribe(session_id, trace)
@@ -404,37 +391,3 @@ class MainAgentOrchestrator:
         # 模型故障只在模型中间件重试；不在外层自动重放整轮。
         return await self._invoke_graph(session_id, session, {"messages": inputs})
 
-    async def _record_conversation(self, intent, final_text: str, latency_ms: int, trace) -> None:
-        if self._conversation_store is None:
-            return
-        events: list[ConversationEventRecord] = []
-        if trace is not None:
-            self._bus.unsubscribe(intent.shopping_session_id, trace)
-            while not trace.empty():
-                event = trace.get_nowait()
-                events.append(ConversationEventRecord(
-                    session_id=intent.shopping_session_id,
-                    type=event.type,
-                    payload=event.payload if isinstance(event.payload, dict) else {"value": event.payload},
-                    occurred_at=event.occurred_at,
-                ))
-        try:
-            await self._conversation_store.touch_session(
-                intent.shopping_session_id, intent.buyer_id, intent.locale, intent.currency
-            )
-            await self._conversation_store.append_turn(ConversationTurn(
-                session_id=intent.shopping_session_id,
-                buyer_id=intent.buyer_id,
-                role="buyer",
-                content=intent.raw_query,
-            ))
-            await self._conversation_store.append_turn(ConversationTurn(
-                session_id=intent.shopping_session_id,
-                buyer_id=intent.buyer_id,
-                role="agent",
-                content=final_text,
-                latency_ms=latency_ms,
-            ))
-            await self._conversation_store.append_events(events)
-        except Exception as error:
-            logger.warning("对话记录写入失败：%s", error)

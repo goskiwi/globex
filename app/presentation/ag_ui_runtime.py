@@ -150,7 +150,7 @@ class AGUIRuntime:
             if getattr(result,"error_code",None)=="SESSION_VERSION_CHANGED":
                 adapter.state["resumeDestination"]=await self.journal.latest_destination(intent.shopping_session_id,intent.buyer_id)
             if result.error or adapter.error:
-                adapter.fail(result.error if getattr(result,"error_code",None) in {"SESSION_VERSION_CHANGED","CONTEXT_CAPACITY_EXCEEDED"} else adapter.error or "本轮服务暂时未能完成请求，请重试。", code=getattr(result,"error_code",None))
+                adapter.fail(result.error if getattr(result,"error_code",None) in {"SESSION_VERSION_CHANGED","CONTEXT_CAPACITY_EXCEEDED","PERSISTENCE_FAILED"} else adapter.error or "本轮服务暂时未能完成请求，请重试。", code=getattr(result,"error_code",None))
             else:
                 adapter.finish(result.final_text, result.status, result.stop_reason,
                                product_delivery_complete=result.product_delivery_complete)

@@ -427,3 +427,26 @@ async def test_session_lease_wait_is_bounded(real_redis):
                 raise AssertionError("不能抢占有效会话租约")
     async with queue.session_lease("session-1", lease_ms=300):
         await asyncio.create_task(competing(), context=Context())
+
+
+async def test_worker_persistence_failure_is_terminal_without_business_replay(real_redis):
+    from app.worker import execute_intent_task
+    from app.infrastructure.eventbus import TradeEventBus
+    queue = RedisStreamTaskQueue(real_redis)
+    await queue.enqueue(task())
+    calls = []
+    class Orchestrator:
+        async def handle_intent(self, intent, **kwargs):
+            calls.append(intent)
+            return SimpleNamespace(error="执行已发生，请核查状态", error_code="PERSISTENCE_FAILED")
+    async def handler(intent):
+        return await execute_intent_task(intent, Orchestrator(), TradeEventBus())
+    stopping = asyncio.Event()
+    runner = consume(queue, handler, stopping, max_deliveries=3)
+    try:
+        await eventually(lambda: has_state(queue, "task-1", "failed"))
+    finally:
+        await stop_consumer(runner, stopping)
+    assert len(calls) == 1
+    assert (await queue.get_status("task-1")).error == "执行已发生，请核查状态"
+    assert (await real_redis.xpending(_STREAM, _GROUP))["pending"] == 0

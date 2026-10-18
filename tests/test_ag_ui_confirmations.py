@@ -157,3 +157,33 @@ async def test_orchestrator_passes_recovered_trade_fact_to_model_and_bypasses_te
     messages = orchestrator._reply.call_args.args[2]
     assert "order-test" in str(messages[0].content)
     assert "CANCELLED" in str(messages[0].content)
+
+
+@pytest.mark.parametrize("stage", ["session", "evidence"])
+async def test_finalization_failure_is_explicit_and_never_publishes_success(stage):
+    from app.infrastructure.eventbus import observe_run_events
+    orchestrator, agent, sessions = make_orchestrator()
+    if stage == "session":
+        sessions.persist = AsyncMock(side_effect=OSError("synthetic save failure"))
+    else:
+        orchestrator._evidence_store = SimpleNamespace(search=AsyncMock(return_value=[]),
+            save=AsyncMock(side_effect=OSError("synthetic evidence failure")))
+    observed = []
+    with observe_run_events(lambda event: observed.append(event)):
+        body = RunAgentInput.model_validate(request_data())
+        result = await orchestrator.handle_intent(parse_intent(body))
+    assert agent.calls == 1
+    assert result.error_code == "PERSISTENCE_FAILED" and result.status == "failed"
+    assert "不要直接重复操作" in result.final_text
+    finals = [event.payload for event in observed if event.type == "final.result"]
+    assert len(finals) == 1 and finals[0]["status"] == "failed"
+    assert orchestrator.session_coordinator.active_sessions == 0
+
+
+async def test_optional_conversation_record_failure_does_not_replay_successful_execution():
+    orchestrator, agent, _ = make_orchestrator()
+    orchestrator._conversation_store = SimpleNamespace(touch_session=AsyncMock(side_effect=OSError("synthetic audit failure")))
+    body = RunAgentInput.model_validate(request_data())
+    result = await orchestrator.handle_intent(parse_intent(body))
+    assert result.error is None and result.status == "completed"
+    assert agent.calls == 1

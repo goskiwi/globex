@@ -20,6 +20,10 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class NonRetryableTaskError(RuntimeError):
+    """已进入业务执行，不能靠消息重投恢复的确定性结果。"""
+
+
 @dataclass(frozen=True)
 class IntentTask:
     task_id: str

@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from app.domain.queue.ports.task_queue import NonRetryableTaskError
+
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar
@@ -490,6 +492,9 @@ class RedisStreamTaskQueue(TaskQueue):
         except asyncio.CancelledError:
             lease.invalidate()
             raise
+        except NonRetryableTaskError as err:
+            if lease.is_valid():
+                await self._dead_letter(delivery, str(err), task.task_id, lease)
         except QueueLeaseLost as err:
             lease.invalidate()
             logger.warning("失去执行权，消息留在 pending：%s（%s）", task.task_id, err)
