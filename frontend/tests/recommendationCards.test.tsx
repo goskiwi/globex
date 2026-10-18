@@ -3,7 +3,7 @@ import {expect, it} from "vitest";
 import ProductCards, {money} from "../src/components/ProductCards";
 import type {ProductCard} from "../src/types";
 
-it("推荐卡保留原项目图片区和评分，金额仍对应具体数量与SKU", () => {
+it("原版紧凑卡片以商品价为主，到手报价另列，不夹带推荐长文案或选择按钮", () => {
   const product: ProductCard = {
     product_id:"P1001", title:"旅行套装", brand:"test", category:"旅行装备", origin_country:"CN",
     price_major:189, currency:"CNY", highlights:[], score:0, default_sku_id:"P1001-S1", quantity:2,
@@ -19,12 +19,15 @@ it("推荐卡保留原项目图片区和评分，金额仍对应具体数量与S
   const html = renderToStaticMarkup(<ProductCards mode="recommendation" products={[product]} favoriteIds={new Set()} comparedIds={new Set()}
     onFavorite={()=>{}} onCompare={()=>{}} onDetail={()=>{}}/>).replace(/<!--.*?-->/g, "");
   expect(html).toContain(money(418,"CNY"));
-  expect(html).toContain("2件到手价");
-  expect(html).not.toContain(money(189,"CNY"));
+  expect(html).toContain("2件");
+  expect(html).toContain(money(189,"CNY"));
   expect(html).not.toContain("运费");expect(html).not.toContain("税费");
-  expect(html).not.toContain("配送至");expect(html).not.toContain("P1001-S1");
-  expect(html).toContain("适合旅行收纳");
-  expect(html).toContain("需要权衡：只有一种颜色");
+  expect(html).toContain("配送至 CN");expect(html).not.toContain("P1001-S1");
+  expect(html).not.toContain("适合旅行收纳");
+  expect(html).not.toContain("需要权衡");
+  expect(html).not.toContain("preferred-pick");
+  expect(html).not.toContain("选这款");
+  expect(html).toContain("看看细节");
   expect(html).not.toContain("评分为快照");
   expect(html).not.toContain("未下单");
   expect(html).toContain("327");
@@ -45,5 +48,5 @@ it("没有匹配的规格报价时只显示商品价，不把别的规格到手�
   const html=renderToStaticMarkup(<ProductCards mode="recommendation" products={[product]} favoriteIds={new Set()} comparedIds={new Set()}
     onFavorite={()=>{}} onCompare={()=>{}} onDetail={()=>{}}/>);
   expect(html).toContain(money(129,"CNY"));expect(html).toContain('商品价');
-  expect(html).not.toContain('到手价');expect(html).not.toContain('P1003-S1');
+  expect(html).toContain('到手价待目的地与规格确认');expect(html).not.toContain(money(1024,'CNY'));expect(html).not.toContain('P1003-S1');
 });

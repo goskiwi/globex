@@ -259,7 +259,6 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
     <ProductCards
       mode="recommendation"
       products={products}
-      preferredSkuId={decision?.preferred_sku_id}
       favoriteIds={favoriteIds}
       comparedIds={comparedIds}
       onFavorite={toggleFavorite}

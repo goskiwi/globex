@@ -3,6 +3,9 @@ import {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {expect,it,vi} from 'vitest';
 import App from './WorkspaceFixture';
+import {renderToStaticMarkup} from 'react-dom/server';
+import ResearchReports from '../src/components/ResearchReports';
+import type {ResearchDelivery} from '../src/types';
 import {readResearchReports} from '../src/lib/research';
 
 const assessment='适合优先减轻随身负担的人，折叠后也方便收纳。若每天携带电脑，独立电脑仓和保护能力仍需核验。';
@@ -50,7 +53,8 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     const section=host.querySelector<HTMLElement>('.research-reports')!;
     expect(section).not.toBeNull();
     expect(section.closest('.assistant-turn')?.getAttribute('data-message-id')).toBe(`${firstRun}:final:answer`);
-    expect(section.textContent).toContain(assessment);
+    expect(section.querySelector('.research-analysis')?.textContent).toContain(assessment);
+    expect(section.querySelector('.product-card')?.textContent).not.toContain(assessment);
     expect(section.textContent).toContain('11,958.33');
     expect(section.textContent).toContain('部分完成');
     expect(section.querySelector('.answer-collapsible')).toBeNull();
@@ -71,4 +75,27 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await verify();
     expect(posts).toBe(2);
   }finally{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();}
+});
+
+
+it('研究卡片仅展示唯一匹配规格、数量和币种的报价，不猜多目的地报价',()=>{
+  const data=structuredClone(delivery) as ResearchDelivery;
+  const candidate=data.reports[0].items[0];
+  candidate.facts.sku!.display_price_major=574;candidate.facts.sku!.display_currency='CNY';
+  const quote={ship_to:'CN',currency:'CNY',historical:false,line:{product_id:'P1003',sku_id:'P1003-S1',title:'合成报价',quantity:1,
+    unit_price_minor:57400,source_unit_price_minor:1195833,source_currency:'JPY',currency:'CNY',
+    subtotal_minor:57400,freight_minor:2500,tariff_minor:0,total_amount_minor:59900}};
+  candidate.facts.quotes=[quote];
+  let html=renderToStaticMarkup(<ResearchReports delivery={data}/>);
+  expect(html).toContain('¥574.00');expect(html).toContain('¥599.00');
+  candidate.facts.quotes.push({...quote,ship_to:'US'});
+  html=renderToStaticMarkup(<ResearchReports delivery={data}/>);
+  expect(html).toContain('到手价待目的地与规格确认');expect(html).not.toContain('¥599.00');
+  candidate.facts.quotes=[{...quote,line:{...quote.line,sku_id:'P1003-S2'}}];
+  html=renderToStaticMarkup(<ResearchReports delivery={data}/>);
+  expect(html).not.toContain('¥599.00');
+  candidate.facts.quotes=[{...quote,line:{...quote.line,currency:'USD'}}];
+  expect(renderToStaticMarkup(<ResearchReports delivery={data}/>)).not.toContain('¥599.00');
+  candidate.facts.quotes=[{...quote,line:{...quote.line,quantity:2}}];
+  expect(renderToStaticMarkup(<ResearchReports delivery={data}/>)).not.toContain('¥599.00');
 });

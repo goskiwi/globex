@@ -1,9 +1,10 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useState } from "react";
 import { comparisonKey, comparisonQuote } from "../lib/comparison";
 import { availableOffers, groupProductRecords, platformLabel, skuPrice, type ProductGroup } from "../lib/productGroups";
 import type { ProductCard } from "../types";
 import Icon from "./Icon";
 import {useProductMedia,ProductImageCaption,type MediaProduct} from "./CatalogMedia";
+import "./originalProductCard.css";
 import "./compactProductCards.css";
 
 export function money(value: number, currency: string) {
@@ -49,12 +50,9 @@ export function ProductImage({
 interface CommonCardsProps {
   products: ProductCard[];
   onDetail: (group: ProductGroup) => void;
-  onSelect?: (group: ProductGroup) => void;
-  researchContent?: (product: ProductCard) => ReactNode;
 }
 interface RecommendationCardsProps extends CommonCardsProps {
   mode: "recommendation";
-  preferredSkuId?: string | null;
   favoriteIds: Set<string>;
   comparedIds: Set<string>;
   onFavorite: (product: ProductCard) => void;
@@ -74,14 +72,14 @@ function viewPrice(group: ProductGroup) {
 function ProductCards(props: ProductCardsProps) {
   const entries = props.mode === "view" ? groupProductRecords(props.products)
     : props.products.map(product => ({ ...groupProductRecords([product])[0], key: comparisonKey(product), initialSkuId: product.default_sku_id }));
-  return <div className={`product-grid compact-product-grid ${entries.length===1?'product-grid--single':''}`}>
+  return <div className="product-grid compact-product-grid">
     {entries.map((group, index) => {
       const product = group.product;
       const recommendation = props.mode === "recommendation" ? props : null;
       const saved = recommendation?.favoriteIds.has(product.product_id) ?? false;
       const selected = recommendation?.comparedIds.has(comparisonKey(product)) ?? false;
       const primary = product.skus.find(sku => sku.sku_id === product.default_sku_id);
-      const landed = recommendation ? comparisonQuote(product) : null;
+      const landed = props.mode !== "view" ? comparisonQuote(product) : null;
       const price = viewPrice(group);
       return <article className={`product-card ${selected ? "selected" : ""}`} key={group.key}
         data-card-mode={props.mode} style={{ animationDelay: `${Math.min(index, 5) * 55}ms` }}>
@@ -96,27 +94,23 @@ function ProductCards(props: ProductCardsProps) {
         </div>}
         <div className="product-body">
           <div className="product-topline"><span>{product.brand || "精选商品"}</span>
-            {product.rating_summary && <span className="rating">★ {product.rating_summary.average} <span>({product.rating_summary.review_count}{product.rating_is_live ? '' : ' · 样例'})</span></span>}
-            {recommendation?.preferredSkuId != null && recommendation.preferredSkuId === product.default_sku_id
-              && <strong className="preferred-pick">首选</strong>}
+            {product.rating_summary && <span className="rating"><i>★</i> {product.rating_summary.average.toFixed(1)} <span>({product.rating_summary.review_count}{product.rating_is_live ? '' : ' · 样例'})</span></span>}
           </div>
           <button className="product-title" onClick={() => props.onDetail(group)}>{product.title}</button>
           <div className="product-subtitle">{(recommendation || props.mode === "research") ? (primary?.spec || product.highlights[0] || "查看商品详细信息")
             : [...new Set(group.records.map(p => platformLabel(p.source_platform)))].join(" · ")}</div>
           <div className="product-price-row">
-            <div className="price">{recommendation
-              ? money(landed ? landed.total_amount_minor / 100 : product.price_major, landed?.currency ?? product.currency) : props.mode === "research" ? (primary ? money(product.price_major,product.currency) : "规格待确认") : price.text}</div>
-            <span className="price-kind">{recommendation ? (landed ? ((product.quantity ?? 1) > 1 ? `${product.quantity}件到手价` : "到手价") : "商品价") : props.mode === "research" ? "商品价" : price.kind}</span>
+            <div className="price">{props.mode === "view" ? price.text : primary ? money(product.price_major,product.currency) : "规格待确认"}</div>
+            <span className="price-kind">{props.mode === "view" ? price.kind : "商品价"}</span>
           </div>
-          {(recommendation || props.mode === "research") && product.recommendation_reason && <p>{product.recommendation_reason}</p>}
-          {recommendation&&!!product.tradeoffs?.length&&<p className="product-tradeoff">需要权衡：{product.tradeoffs[0]}</p>}
-          {props.mode === "view" && product.highlights.length > 0 && <p>{product.highlights.slice(0, 2).join("；")}</p>}
-          {props.mode === "research" && props.researchContent?.(product)}
+          {landed ? <div className="card-landed">
+            到手价 {money(landed.total_amount_minor/100,landed.currency)}
+            <span>配送至 {landed.ship_to} · {landed.items[0].quantity===1 ? '当前规格' : `${landed.items[0].quantity}件`}</span>
+          </div> : <div className="card-landed pending">到手价待目的地与规格确认</div>}
           <div className="product-footer">
             {recommendation && <label className="compare-check"><input type="checkbox" checked={selected}
               onChange={() => recommendation.onCompare(product)} aria-label={`将 ${product.title} 加入比较`} />加入比较</label>}
-            <button className="detail-button" onClick={() => props.onDetail(group)}>查看详情<Icon name="arrow" /></button>
-            {props.mode !== "research" && <button className="select-product" onClick={()=> (props.onSelect??props.onDetail)(group)}>选这款</button>}
+            <button className="detail-button" onClick={() => props.onDetail(group)}>看看细节<Icon name="arrow" /></button>
           </div>
         </div>
       </article>;

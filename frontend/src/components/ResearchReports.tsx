@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import type {ResearchDelivery, ResearchCandidate, ProductCard} from '../types';
+import type {ResearchDelivery, ResearchCandidate, ProductCard, PriceQuote} from '../types';
 import ProductCards, {money} from './ProductCards';
 import Modal from './Modal';
 import './researchReports.css';
@@ -14,11 +14,17 @@ function factText(value: unknown): string {
 /** 把当前研究证据投影到共用卡片；不查询新库存、不补猜图片或规格。 */
 function card(candidate: ResearchCandidate): ProductCard {
   const {product,sku}=candidate.facts;
+  const currency=sku?.display_currency ?? sku?.currency ?? '';
+  const quotes=candidate.facts.historical ? [] : candidate.facts.quotes.filter(q=>!q.historical && q.currency===currency
+    && q.line.currency===currency && q.line.product_id===candidate.product_id && q.line.sku_id===candidate.sku_id && q.line.quantity===1);
+  const read=quotes.length===1 ? quotes[0] : null;
+  const quote: PriceQuote|undefined=read ? {...read,items:[read.line],subtotal_minor:read.line.subtotal_minor,
+    freight_minor:read.line.freight_minor,tariff_minor:read.line.tariff_minor,total_amount_minor:read.line.total_amount_minor} : undefined;
   return {...product,product_id:candidate.product_id,title:product.title ?? candidate.product_id,
     brand:product.brand ?? '',category:product.category ?? '',origin_country:product.origin_country ?? '',
     highlights:product.highlights ?? [],score:0,skus:sku?[sku]:[],default_sku_id:sku?.sku_id,
     price_major:sku?.display_price_major ?? sku?.price_major ?? Number.NaN,
-    currency:sku?.display_currency ?? sku?.currency ?? '',recommendation_reason:candidate.assessment};
+    currency,landed_price:quote,recommendation_reason:candidate.assessment};
 }
 
 function Questions({candidate}: {candidate: ResearchCandidate}) {
@@ -36,12 +42,15 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
     {delivery.reports.map(report=><section className="research-category" key={report.task_id} aria-label={report.goal}>
       <div className="research-heading"><h3>{report.goal}</h3><span>{report.status==='completed'?'研究完成':report.status==='partial'?'部分完成':report.status==='needs_input'?'需要补充信息':'研究未完成'}</span></div>
       <p className="research-count">{report.product_count}款商品 · {report.sku_count}个明确规格</p>
+      {!!report.items.length && <div className="research-analysis" aria-label="选择依据与取舍">
+        {report.items.map(candidate=><div key={`${candidate.product_id}:${candidate.sku_id}`}>
+          <p><strong>{candidate.facts.product.title ?? candidate.product_id}：</strong>{candidate.assessment}</p>
+          {candidate.facts.historical && <p>历史资料，尚未重新核验。</p>}
+          {!!candidate.unmet_constraints.length && <p>未满足要求：{candidate.unmet_constraints.join('；')}</p>}
+        </div>)}
+      </div>}
       <ProductCards mode="research" products={report.items.map(card)}
-        onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}
-        researchContent={product=>{
-          const candidate=report.items.find(c=>c.product_id===product.product_id && (c.sku_id ?? undefined)===product.default_sku_id)!;
-          return <>{candidate.facts.historical && <p className="product-tradeoff">历史资料，尚未重新核验</p>}<Questions candidate={candidate}/></>;
-        }}/>
+        onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}/>
       {!report.items.length && <p>本次没有交回符合要求的候选，未满足条件见上方说明。</p>}
       {!!report.price_comparisons.length && <details className="research-prices"><summary>同口径价格比较</summary>
         {report.price_comparisons.map((price,i)=><div key={i}>

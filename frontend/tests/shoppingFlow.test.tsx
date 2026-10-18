@@ -64,7 +64,7 @@ it('完整App表单归属原回复，提交后接一次结果、收起表单，�
     expect(host.querySelector('.product-card')!.closest('.assistant-turn')?.getAttribute('data-message-id')).toBe(lastRun+':final:answer');
     const text=host.querySelector('.conversation')!.textContent!;
     expect(text.indexOf('使用场景：通勤')).toBeLessThan(text.indexOf('更推荐便携款。'));
-    expect(host.querySelector('.product-grid--single')).not.toBeNull();expect(host.querySelector('.product-visual')).not.toBeNull();
+    expect(host.querySelector('.product-grid')).not.toBeNull();expect(host.querySelector('.product-visual')).not.toBeNull();
     await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
     await vi.waitFor(()=>expect(host.querySelector('.shopping-form-receipt')).not.toBeNull());
     expect(host.querySelector('.shopping-form')).toBeNull();expect(host.querySelector('.shopping-form-receipt button')).toBeNull();

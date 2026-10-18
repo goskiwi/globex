@@ -119,7 +119,7 @@ it("实际 App 四张卡全部可勾选，手动比较复用首选与关注点�
       input.dispatchEvent(new Event('input',{bubbles:true}));
     });
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="发送选购需求"]')!.click());
-    expect(host.querySelectorAll('.preferred-pick')).toHaveLength(1);
+    expect(host.querySelectorAll('.preferred-pick')).toHaveLength(0);
     expect(host.querySelector('.composer-plan-toggle')).toBeNull();
     expect(host.textContent).not.toContain('结果来自商品目录');
     expect(host.textContent).toContain(decision.guidance);
