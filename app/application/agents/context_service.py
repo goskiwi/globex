@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from contextlib import AsyncExitStack
 
 from app.domain.session.ports.session_store import SessionNotFound, StaleSessionWrite
@@ -12,21 +13,39 @@ from app.application.runtime.request_scope import ShoppingContext, ShoppingConte
 from app.application.runtime.context_summary import render_summary
 from app.application.runtime.sessions import SessionBusy
 
+logger = logging.getLogger(__name__)
+
 
 class ContextService:
     def __init__(self, orchestrator, store, evidence, confirmations=None):
         self.orchestrator, self.store, self.evidence = orchestrator, store, evidence
         self.confirmations = confirmations
         self.tasks: dict[str, asyncio.Task] = {}
+        self._cleanup_tasks: set[asyncio.Task] = set()
 
     async def startup(self):
         if hasattr(self.store, "recover_context_operations"):
             await self.store.recover_context_operations()
 
     async def shutdown(self):
-        for task in self.tasks.values():
+        active = list(self.tasks.values())
+        for task in active:
             task.cancel()
-        await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        await asyncio.gather(*active, return_exceptions=True)
+        # 完成回调可能为尚未调度的任务创建收尾；关停必须等其持久终态。
+        while self._cleanup_tasks:
+            await asyncio.gather(*list(self._cleanup_tasks), return_exceptions=True)
+
+    async def _finish_unstarted(self, operation, buyer, permit):
+        try:
+            await self.store.finish_context_operation(operation["operation_id"], buyer, "interrupted", {
+                "message": "整理在开始前已中断，原记录保留",
+            })
+        except Exception as error:
+            # 存储故障或进程崩溃仍由既有持久租约到期恢复，不假报已保存。
+            logger.warning("未启动整理的中断状态保存失败：%s", type(error).__name__)
+        finally:
+            permit.release()
 
     async def view(self, session, buyer):
         result = await self.store.context_view(session, buyer)
@@ -69,10 +88,20 @@ class ContextService:
             if not created:
                 permit.release()
                 return operation
-            task = asyncio.create_task(self._run(operation, buyer, permit), name="context:" + operation["operation_id"])
+            started = False
+            async def run():
+                nonlocal started
+                started = True
+                await self._run(operation, buyer, permit)
+            task = asyncio.create_task(run(), name="context:" + operation["operation_id"])
             self.tasks[operation["operation_id"]] = task
             def finished(_):
-                permit.release()  # 首次调度前取消时也要释放；重复释放无副作用。
+                if not started:
+                    cleanup = asyncio.create_task(self._finish_unstarted(operation, buyer, permit))
+                    self._cleanup_tasks.add(cleanup)
+                    cleanup.add_done_callback(self._cleanup_tasks.discard)
+                else:
+                    permit.release()
                 self.tasks.pop(operation["operation_id"], None)
             task.add_done_callback(finished)
             return operation

@@ -118,3 +118,27 @@ async def test_compaction_rechecks_pending_operations_after_cross_process_lease(
     assert store.finish_context_operation.await_args.args[2] == "failed"
     assert store.finish_context_operation.await_args.args[3]["error_code"] == "StaleSessionWrite"
     assert orchestrator.session_coordinator.active_sessions == 0
+
+
+async def test_shutdown_finishes_compaction_cancelled_before_its_first_schedule(tmp_path, monkeypatch):
+    import asyncio
+    from app.application.usecases.intents import SubmitIntentInput
+    from tests.test_langgraph_runtime import _container, ScriptedModel
+    container = await _container(tmp_path, monkeypatch, ScriptedModel())
+    try:
+        await container.orchestrator.handle_intent(SubmitIntentInput("s", "buyer", "zh-CN", "CNY", "synthetic request"))
+        service = container.context_service
+        revision = (await service.store.context_view("s", "buyer"))["revision"]
+        operation = await service.start("s", "buyer", "before-start", revision)
+        service.tasks[operation["operation_id"]].cancel()
+        await service.shutdown()
+        saved = await service.store.context_operation(operation["operation_id"], "buyer")
+        assert saved["status"] == "interrupted"
+        assert not service.tasks and not service._cleanup_tasks
+        assert container.orchestrator.session_coordinator.active_sessions == 0
+        # 不必等待30秒租约，新的整理可立即创建并完成。
+        following = await service.start("s", "buyer", "following", revision)
+        await asyncio.gather(*list(service.tasks.values()))
+        assert (await service.store.context_operation(following["operation_id"], "buyer"))["status"] == "noop"
+    finally:
+        await container.shutdown()
