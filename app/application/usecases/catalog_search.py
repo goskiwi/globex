@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 import asyncio
 import re
-from dataclasses import dataclass, field
 from typing import Optional
 
 from app.domain.catalog.exchange_rate import ExchangeRateTable
@@ -37,7 +36,8 @@ from app.domain.catalog.sku import Sku
 from app.domain.catalog.product_search_spec import ProductSearchSpec
 from app.domain.shipping.tariff_schedule import TariffSchedule
 from app.application.usecases.pricing import PricingService
-from app.application.usecases.product_media import product_media
+from app.application.usecases.product_cards import ProductCard, assemble_product_card
+from app.domain.catalog.eligibility import sku_constraint_issues
 from app.infrastructure.retrieval.bm25 import bm25_rank, reciprocal_rank_fusion
 
 logger = logging.getLogger(__name__)
@@ -49,80 +49,6 @@ _MAX_VECTOR_RECALL = 256
 # 被硬约束挡掉的候选回传条数上限（只回摘要，避免上下文膨胀）
 _FILTERED_OUT_LIMIT = 3
 
-
-@dataclass(frozen=True)
-class ProductCard:
-    product_id: str
-    title: str
-    brand: str
-    category: str
-    origin_country: str
-    price_major: float
-    currency: str
-    source_price_major: float
-    source_currency: str
-    highlights: list[str]
-    skus: list[dict]
-    score: float
-    landed_price: Optional[dict]  # ship_to 命中时的到手价明细，未命中为 None
-    source_platform: str
-    canonical_product_id: str
-    material_tags: list[str]
-    weight_kg: float | None
-    # 展示资料与具体默认 SKU 的价库存一起组装。
-    description: str = ""
-    rating_summary: dict[str, float | int] | None = None
-    rating_is_live: bool = False  # 当前目录是评测快照，评分不来自实时平台查询。
-    ships_to: list[str] = field(default_factory=list)
-    dimensions_cm: dict[str, float] = field(default_factory=dict)
-    package_dimensions_cm: dict[str, float] = field(default_factory=dict)
-    updated_at: str = ""
-    default_sku_id: str = ""
-    image_url: str | None = None
-    image_kind: str = "placeholder"
-    image_alt: str = "暂无商品图片"
-    source_language: str = ""
-    source_locale: str = ""
-    data_provenance: str = ""
-
-    def to_dict(self) -> dict:
-        card = {
-            "product_id": self.product_id,
-            "title": self.title,
-            "brand": self.brand,
-            "category": self.category,
-            "origin_country": self.origin_country,
-            "price_major": self.price_major,
-            "currency": self.currency,
-            "source_price_major": self.source_price_major,
-            "source_currency": self.source_currency,
-            "highlights": self.highlights,
-            "skus": self.skus,
-            "score": round(self.score, 4),
-            "source_platform": self.source_platform,
-            "canonical_product_id": self.canonical_product_id,
-            "material_tags": self.material_tags,
-            "description": self.description,
-            "rating_summary": self.rating_summary,
-            "rating_is_live": self.rating_is_live,
-            "ships_to": self.ships_to,
-            "dimensions_cm": self.dimensions_cm,
-            "package_dimensions_cm": self.package_dimensions_cm,
-            "updated_at": self.updated_at,
-            "default_sku_id": self.default_sku_id,
-            "image_url": self.image_url,
-            "image_kind": self.image_kind,
-            "image_alt": self.image_alt,
-        }
-        if self.landed_price is not None:
-            card["landed_price"] = self.landed_price
-        if self.weight_kg is not None:
-            card["weight_kg"] = self.weight_kg
-        if self.source_language:
-            card.update(source_language=self.source_language, source_locale=self.source_locale)
-        if self.data_provenance:
-            card["data_provenance"] = self.data_provenance
-        return card
 
 
 def tokenize(text: str) -> set[str]:
@@ -372,26 +298,7 @@ class CatalogSearchUseCase:
         return {"hits": [card], "missing_identifiers": [], "existence_checked": True, "purpose": "product_details"}
 
     def sku_constraint_issues(self, product: Product, sku: Sku, spec: ProductSearchSpec) -> list[str]:
-        """搜索、推荐及详情说明共用逐 SKU 资格；不同规格不能互借价格或库存。"""
-        issues = []
-        if product.product_id in spec.excluded_product_ids:
-            issues.append("product_excluded")
-        if sku.sku_id in spec.excluded_sku_ids:
-            issues.append("sku_excluded")
-        if sku.stock <= 0:
-            issues.append("out_of_stock")
-        if spec.category and product.category != spec.category:
-            issues.append("category_mismatch")
-        if set(product.material_tags) & (set(spec.excluded_material_tags) | set(spec.excluded_materials_by_category.get(product.category, []))):
-            issues.append("material_excluded")
-        if set(spec.required_material_tags) - set(product.material_tags):
-            issues.append("material_required_missing")
-        if spec.ship_to and spec.ship_to not in product.ships_to:
-            issues.append("ship_to_unavailable")
-        price = self._tariff.rates.convert(sku.price, spec.target_currency)
-        if spec.price_max_major is not None and price.to_major_units() > spec.price_max_major:
-            issues.append("over_price_cap")
-        return issues
+        return sku_constraint_issues(product, sku, spec, self._tariff.rates)
 
     def _sort_skus(self, skus: list[Sku], spec: ProductSearchSpec) -> list[Sku]:
         return sorted(skus, key=lambda sku: (
@@ -487,57 +394,4 @@ class CatalogSearchUseCase:
 
     def product_card(self, score: float, product: Product, spec: ProductSearchSpec, *,
                      primary: Sku, skus: list[Sku]) -> ProductCard:
-        """调用方明确传入本次规格集合；详情、候选、最终选择各自按用途提供。"""
-        media = product_media(product.product_id, product.title)
-        primary_in_target = self._tariff.rates.convert(primary.price, spec.target_currency)
-        landed_price: Optional[dict] = None
-        if spec.ship_to:
-            try:
-                line = self.pricing.price_sku(product, primary, 1, spec.ship_to, spec.target_currency)
-                landed_price = self.pricing.assemble([line], spec.ship_to, spec.target_currency)
-            except ValueError as err:
-                # 目的国不在规则表内：如实标注，不编造数字
-                landed_price = {"unavailable_reason": str(err)}
-        return ProductCard(
-            product_id=product.product_id,
-            title=product.title,
-            brand=product.brand,
-            category=product.category,
-            origin_country=product.origin_country,
-            # 商品卡价格必须与预算过滤使用同一目标币种；原始报价单独保留，
-            # SKU 详情继续维持平台原币种，方便后续下单时选择具体规格。
-            price_major=primary_in_target.to_major_units(),
-            currency=spec.target_currency,
-            source_price_major=primary.price.to_major_units(),
-            source_currency=primary.price.currency,
-            highlights=[f"{h.label}：{h.detail}" if h.detail else h.label for h in product.highlights],
-            skus=[
-                {
-                    "sku_id": sku.sku_id,
-                    "spec": sku.spec,
-                    "price_major": sku.price.to_major_units(),
-                    "currency": sku.price.currency,
-                    "stock": sku.stock,
-                }
-                for sku in skus
-            ],
-            score=score,
-            landed_price=landed_price,
-            source_platform=product.source_platform,
-            canonical_product_id=product.canonical_product_id,
-            material_tags=product.material_tags,
-            weight_kg=product.weight_kg,
-            description=product.description,
-            rating_summary=dict(product.rating_summary) if product.rating_summary is not None else None,
-            ships_to=list(product.ships_to),
-            dimensions_cm=dict(product.dimensions_cm),
-            package_dimensions_cm=dict(product.package_dimensions_cm),
-            updated_at=product.updated_at,
-            source_language=product.source_language,
-            source_locale=product.source_locale,
-            data_provenance=product.data_provenance,
-            default_sku_id=primary.sku_id,
-            image_url=media.image_url,
-            image_kind=media.image_kind,
-            image_alt=media.image_alt,
-        )
+        return assemble_product_card(score, product, spec, primary=primary, skus=skus, pricing=self.pricing)
