@@ -10,6 +10,7 @@ from contextlib import AsyncExitStack
 from app.domain.session.ports.session_store import SessionNotFound, StaleSessionWrite
 from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
 from app.application.runtime.context_summary import render_summary
+from app.application.runtime.sessions import SessionBusy
 
 
 class ContextService:
@@ -47,7 +48,6 @@ class ContextService:
         return result
 
     async def start(self, session, buyer, request_id, expected_revision):
-        lock = self.orchestrator._session_locks.setdefault(session, asyncio.Lock())
         identifier = hashlib.sha256(json.dumps([session, buyer, request_id]).encode()).hexdigest()
         try:
             old = await self.store.context_operation(identifier, buyer)
@@ -56,26 +56,30 @@ class ContextService:
             return old
         except SessionNotFound:
             pass
-        if lock.locked():
-            raise StaleSessionWrite("当前正在选购或整理，请等待完成")
-        await lock.acquire()
+        try:
+            permit = await self.orchestrator.session_coordinator.acquire(session, wait=False)
+        except SessionBusy as error:
+            raise StaleSessionWrite(str(error)) from error
         try:
             if self.confirmations is not None:
                 if await self.confirmations.pending(buyer, session):
                     raise StaleSessionWrite("请先完成或拒绝待确认操作")
             operation, created = await self.store.create_context_operation(session, buyer, request_id, expected_revision)
             if not created:
-                lock.release()
+                permit.release()
                 return operation
-            task = asyncio.create_task(self._run(operation, buyer, lock), name="context:" + operation["operation_id"])
+            task = asyncio.create_task(self._run(operation, buyer, permit), name="context:" + operation["operation_id"])
             self.tasks[operation["operation_id"]] = task
-            task.add_done_callback(lambda _: self.tasks.pop(operation["operation_id"], None))
+            def finished(_):
+                permit.release()  # 首次调度前取消时也要释放；重复释放无副作用。
+                self.tasks.pop(operation["operation_id"], None)
+            task.add_done_callback(finished)
             return operation
         except BaseException:
-            lock.release()
+            permit.release()
             raise
 
-    async def _run(self, operation, buyer, lock):
+    async def _run(self, operation, buyer, permit):
         session_id, identifier = operation["session_id"], operation["operation_id"]
         context_token = ShoppingContext.set(ShoppingContextSnapshot(session_id, buyer, "zh-CN", "CNY"))
         owner = asyncio.current_task()
@@ -132,4 +136,4 @@ class ContextService:
             renewal.cancel()
             await asyncio.gather(renewal, return_exceptions=True)
             ShoppingContext.reset(context_token)
-            lock.release()
+            permit.release()

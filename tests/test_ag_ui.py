@@ -333,7 +333,7 @@ async def test_http_disconnect_preserves_run_until_explicit_cancel(swallow_cance
     assert not saved_turns
     stopped = await runtime.journal.run("run-test", "buyer-test")
     assert stopped["status"] == "stopped"
-    assert not orchestrator._session_locks["session-test"].locked()
+    assert orchestrator.session_coordinator.active_sessions == 0
     assert not any(b"RUN_FINISHED" in message.get("body", b"") for message in responses)
 
 @pytest.mark.parametrize('kind',['capability','contract'])

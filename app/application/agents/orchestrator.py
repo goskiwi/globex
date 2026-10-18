@@ -30,6 +30,7 @@ from app.infrastructure.security.output_guard import audit_output
 from app.application.runtime.errors import ContextCapacityError, ExecutionStopped
 from app.application.runtime.handoff import TaskEvidence
 from app.application.runtime.execution import ExecutionResult
+from app.application.runtime.sessions import SessionCoordinator, SessionBusy
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ class MainAgentOrchestrator:
         self._session_lease_factory = session_lease_factory
         self._trade_state_provider = trade_state_provider
         self._evidence_store = evidence_store
-        self._session_locks: dict[str, asyncio.Lock] = {}
+        self.session_coordinator = SessionCoordinator()
         self._native_observer: ContextVar[Callable[[Any], None] | None] = ContextVar(
             "globex_native_event_observer", default=None
         )
@@ -148,8 +149,7 @@ class MainAgentOrchestrator:
         fresh_session: bool = False,
         persistence_guard: Callable[[], bool] | None = None,
     ) -> SubmitIntentOutput:
-        lock = self._session_locks.setdefault(intent.shopping_session_id, asyncio.Lock())
-        async with lock, AsyncExitStack() as stack:
+        async with self.session_coordinator.hold(intent.shopping_session_id), AsyncExitStack() as stack:
             if self._session_lease_factory is not None:
                 lease = await stack.enter_async_context(self._session_lease_factory(intent.shopping_session_id))
                 caller_guard = persistence_guard
@@ -174,14 +174,14 @@ class MainAgentOrchestrator:
     @asynccontextmanager
     async def session_operation(self, session_id):
         """会话管理与执行共享同一进程锁及原Redis租约。"""
-        lock=self._session_locks.setdefault(session_id,asyncio.Lock())
-        if lock.locked():
+        try:
+            async with self.session_coordinator.hold(session_id, wait=False), AsyncExitStack() as stack:
+                if self._session_lease_factory is not None:
+                    await stack.enter_async_context(self._session_lease_factory(session_id, wait_timeout=0))
+                yield
+        except SessionBusy as error:
             from app.infrastructure.ag_ui_journal import JournalConflict
-            raise JournalConflict("对话正在执行或整理，请先停止或等待完成")
-        async with lock,AsyncExitStack() as stack:
-            if self._session_lease_factory is not None:
-                await stack.enter_async_context(self._session_lease_factory(session_id,wait_timeout=0))
-            yield
+            raise JournalConflict(str(error)) from error
 
     async def _handle_intent(self, intent, persistence_guard) -> SubmitIntentOutput:
         session_id = intent.shopping_session_id

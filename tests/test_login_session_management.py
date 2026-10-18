@@ -38,7 +38,8 @@ async def environment(tmp_path):
         graph=StateGraph(MessagesState);graph.add_node('echo',lambda state:{});graph.add_edge(START,'echo');graph.add_edge('echo',END)
         compiled=graph.compile(checkpointer=saver)
         runner=MainAgentOrchestrator.__new__(MainAgentOrchestrator)
-        runner._session_locks={};runner._session_lease_factory=None
+        from app.application.runtime.sessions import SessionCoordinator
+        runner.session_coordinator=SessionCoordinator();runner._session_lease_factory=None
         runner._sessions=SimpleNamespace(invalidate=AsyncMock())
         service=SessionManagement(runner,journal,store,conversations,evidence,forms,saver)
         api=FastAPI();api.state.identity_policy=POLICY
