@@ -42,6 +42,29 @@ async def prepare(client, **changes):
     return result.json()["confirmation"]
 
 
+async def test_http_restore_keeps_old_actionable_confirmation_after_twenty_decisions(route_env):
+    from datetime import timedelta
+    env, client = route_env
+    original = await prepare(client)
+    for _ in range(20):
+        env.now[0] += timedelta(seconds=1)
+        current = await prepare(client)
+        resolved = await client.post(f"/commerce/confirmations/{current['confirmation_id']}/resolve",
+                                    json=decision(current, approved=False))
+        assert resolved.status_code == 200
+    response = await client.get("/commerce/confirmations?buyer_id=buyer-1&session_id=session-1")
+    assert response.status_code == 200
+    cards = response.json()["confirmations"]
+    assert len(cards) == 21
+    assert any(c["confirmation_id"] == original["confirmation_id"] and c["status"] == "pending"
+               and not c["expired"] for c in cards)
+    # 恢复的旧确认仍可正常批准，重试不会重复创建订单。
+    first = await client.post(f"/commerce/confirmations/{original['confirmation_id']}/resolve", json=decision(original))
+    repeated = await client.post(f"/commerce/confirmations/{original['confirmation_id']}/resolve", json=decision(original))
+    assert first.status_code == repeated.status_code == 200
+    assert first.json()["order"]["order_id"] == repeated.json()["order"]["order_id"]
+
+
 async def test_http_prepare_persists_only_confirmation_and_get_list_restore_it(route_env):
     env, client = route_env
     prepared = await prepare(client)
