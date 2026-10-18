@@ -256,7 +256,6 @@ export interface ResearchCandidate {
     result_ref?: string;
     quotes: {ship_to: string; currency: string; historical: boolean; line: PriceLine}[];
   };
-  evidence: {field: string; label: string; value: unknown}[];
 }
 export interface ResearchReport {
   task_id: string;

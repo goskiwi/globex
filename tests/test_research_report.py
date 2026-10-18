@@ -53,7 +53,7 @@ def test_assessment_is_presented_separately_without_replacing_facts_or_price_com
     assert result['items'][0]['assessment'] == candidate['assessment']
     assert result['items'][0]['facts'] == before
     text = _report(result)
-    assert result['items'][0]['evidence'][0]['value'] == '支持蓝牙和降噪，未提供佩戴形式'
+    assert result['items'][0]['facts']['product']['description'] == '支持蓝牙和降噪，未提供佩戴形式'
     assert result['items'][0]['facts']['sku']['price_major'] == 299
     assert result['price_comparisons'][0]['minimum_minor'] == 29118
     assert candidate['assessment'] not in text, '取舍由组件完整展示，正文不重复'
@@ -64,8 +64,7 @@ def test_submission_requires_current_assessment_without_filling_old_payload():
     schema = convert_to_openai_tool(build_submission_tool())['function']['parameters']
     assert 'assessment' in schema['properties']['candidates']['items']['required']
     with pytest.raises(ValidationError) as failure:
-        AgentSubmission(status='completed', candidates=[{'product_id': 'P1022',
-                                                        'evidence_fields': ['description']}])
+        AgentSubmission(status='completed', candidates=[{'product_id': 'P1022'}])
     assert any(e['loc'] == ('candidates', 0, 'assessment') and e['type'] == 'missing'
                for e in failure.value.errors())
 
@@ -115,27 +114,30 @@ def test_product_only_or_historical_candidates_do_not_borrow_current_sku_prices(
     assert result['items'][1]['facts']['historical'] is historical
 
 
-def test_tied_prices_keep_all_lowest_candidates_and_selected_facts_are_literal():
+def test_tied_prices_keep_all_lowest_candidates_and_full_read_facts():
     data = report_pair()
     data['candidates'][1]['facts']['sku'].update(price_major=299, currency='CNY')
-    data['candidates'][0]['evidence_fields'] = ['description', 'highlights', 'description']
+    product = data['candidates'][0]['facts']['product']
+    product['catalog_extension'] = {'value': '保留原始目录字段'}
+    before = deepcopy(product)
     result = project_research_report(data, RATES)
     unit = result['price_comparisons'][0]
     assert unit['spread_minor'] == 0 and len(unit['lowest']) == len(unit['highest']) == 2
-    assert result['items'][0]['evidence'] == [{'field':'description', 'label':'商品原文',
-        'value': '支持蓝牙和降噪，未提供佩戴形式'}]
+    assert result['items'][0]['facts']['product'] == before
+    assert result['items'][0]['facts']['product']['weight_kg'] == .38
+    assert 'evidence' not in result['items'][0]
 
 
 @pytest.mark.parametrize('field,value', [('summary', '最便宜'), ('unknowns', ['没电脑仓']),
-                                         ('reason', '头戴式')])
+                                         ('reason', '头戴式'), ('evidence_fields', ['weight_kg'])])
 def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
     schema = convert_to_openai_tool(build_submission_tool())['function']['parameters']
     assert 'summary' not in schema['properties'] and 'unknowns' not in schema['properties']
     properties = schema['properties']['candidates']['items']['properties']
-    assert 'reason' not in properties and 'evidence_fields' in properties
+    assert 'reason' not in properties and 'evidence_fields' not in properties
     payload = {'status': 'completed', 'candidates': [
-        {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description']}]}
-    if field == 'reason':
+        {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]}
+    if field in {'reason', 'evidence_fields'}:
         payload['candidates'][0][field] = value
     else:
         payload[field] = value
@@ -143,10 +145,10 @@ def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
         AgentSubmission.model_validate(payload)
 
 
-def test_fact_selection_cannot_inject_new_field_or_duplicate_candidate():
-    candidate = {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['wearing_style']}
+def test_model_cannot_inject_facts_or_duplicate_candidate():
+    candidate = {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
     with pytest.raises(ValidationError):
-        AgentSubmission(status='completed', candidates=[candidate])
-    candidate['evidence_fields'] = ['description']
+        AgentSubmission(status='completed', candidates=[{**candidate, 'facts': {'product': {'weight_kg': .01}}}])
+    assert AgentSubmission(status='completed', candidates=[candidate]).candidates[0].product_id == 'P1022'
     with pytest.raises(ValidationError, match='不能重复'):
         AgentSubmission(status='completed', candidates=[candidate, candidate])

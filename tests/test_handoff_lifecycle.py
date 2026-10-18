@@ -34,7 +34,7 @@ async def test_input_product_can_be_mentioned_in_question_without_lookup(tmp_pat
 @pytest.mark.parametrize("submit_first", [True, False])
 async def test_mixed_round_waits_for_tools_and_ends_on_valid_result(tmp_path, monkeypatch, submit_first):
     read = call("read_candidates", {}, "read").tool_calls[0]
-    submit = submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description']}]).tool_calls[0]
+    submit = submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]).tool_calls[0]
     batch = [submit, read] if submit_first else [read, submit]
     _, model, dispatch, _ = factories(tmp_path, monkeypatch, [AIMessage(content="", tool_calls=batch)])
     out = (await dispatch("search_agent", task())).data
@@ -43,7 +43,7 @@ async def test_mixed_round_waits_for_tools_and_ends_on_valid_result(tmp_path, mo
 
 
 async def test_invalid_candidate_feedback_and_exhaustion_are_specific(tmp_path, monkeypatch):
-    invalid = submission(candidates=[{"product_id": "invented", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description']}])
+    invalid = submission(candidates=[{"product_id": "invented", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
     _, model, dispatch, _ = factories(tmp_path, monkeypatch, [call("read_candidates", {}), invalid, invalid, invalid])
     out = (await dispatch("search_agent", task())).data
     assert out["status"] == "failed" and model.cursor == 4

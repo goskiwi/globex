@@ -17,17 +17,6 @@ def research_summary(status, candidates):
     return f"{caption}：交回{counts['product_count']}款商品、{counts['sku_count']}个明确规格。"
 
 
-FIELD_LABELS = {'description':'商品原文', 'highlights':'目录亮点', 'dimensions_cm':'商品尺寸（厘米）',
-                'material_tags':'目录材质', 'rating_summary':'目录评分', 'ships_to':'目录配送范围'}
-
-
-def selected_evidence(candidate):
-    """模型只能选已存在的字段，不能把新属性或解释写成商品事实。"""
-    product = candidate['facts']['product']
-    return [{'field': key, 'label': FIELD_LABELS[key], 'value': product[key]}
-            for key in dict.fromkeys(candidate['evidence_fields']) if product.get(key) not in (None, '', [], {})]
-
-
 def _price_comparison(rows, **conditions):
     amounts = [row['amount_minor'] for row in rows]
     low, high = min(amounts), max(amounts)
@@ -78,6 +67,6 @@ def report_prices(data, rates: ExchangeRateTable):
 def project_research_report(data, rates):
     return {'task_id': data['scope']['task_id'], 'goal': data['scope']['goal'], 'status': data['status'],
             **research_counts(data['candidates']), 'price_comparisons': report_prices(data, rates),
-            'items': [{**candidate, 'evidence': selected_evidence(candidate)} for candidate in data['candidates']],
+            'items': data['candidates'],
             **{key: data[key] for key in ('unmet_constraints', 'questions', 'issues')},
             'transaction_state': data['transaction_state']}

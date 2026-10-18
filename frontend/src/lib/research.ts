@@ -18,8 +18,7 @@ export function readResearchReports(value: unknown): ResearchDelivery[] {
         && strings(c.open_questions) && strings(c.unmet_constraints) && record(c.facts) && record(c.facts.product)
         && typeof c.facts.historical === 'boolean' && Array.isArray(c.facts.quotes)
         && (c.facts.sku === null || record(c.facts.sku) && typeof c.facts.sku.spec === 'string'
-          && amount(c.facts.sku.price_major) && typeof c.facts.sku.currency === 'string')
-        && Array.isArray(c.evidence) && c.evidence.every((e: unknown)=>record(e) && typeof e.label === 'string'))
+          && amount(c.facts.sku.price_major) && typeof c.facts.sku.currency === 'string'))
       && Array.isArray(r.price_comparisons) && r.price_comparisons.every((p: unknown)=>record(p)
         && ['unit_price','landed_price'].includes(p.kind) && typeof p.currency === 'string'
         && ['minimum_minor','maximum_minor','spread_minor','quantity','compared_sku_count'].every(k=>amount(p[k]))

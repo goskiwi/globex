@@ -5,6 +5,11 @@ import Modal from './Modal';
 import './researchReports.css';
 
 const labels: Record<string,string> = {length:'长',width:'宽',height:'高',average:'评分',review_count:'评价数'};
+const detailFields: {field: keyof ProductCard; label: string}[] = [
+  {field:'highlights',label:'目录亮点'}, {field:'dimensions_cm',label:'商品尺寸（厘米）'},
+  {field:'material_tags',label:'目录材质'}, {field:'rating_summary',label:'目录评分'},
+  {field:'ships_to',label:'目录配送范围'},
+];
 function factText(value: unknown): string {
   if (Array.isArray(value)) return value.map(factText).join('；');
   if (value && typeof value === 'object') return Object.entries(value).map(([k,v])=>`${labels[k] ?? k} ${factText(v)}`).join(' · ');
@@ -71,7 +76,11 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
         {detail.facts.product.weight_kg != null && <p>重量：{detail.facts.product.weight_kg} kg</p>}
         {detail.facts.historical && <p>历史资料，尚未重新核验。</p>}
         {detail.facts.product.description && <p>{detail.facts.product.description}</p>}
-        {detail.evidence.filter(e=>e.field!=='description').map((e,i)=><p key={i}><strong>{e.label}：</strong>{factText(e.value)}</p>)}
+        {detailFields.map(({field,label})=> {
+          const value=detail.facts.product[field];
+          return value == null || value === '' || typeof value === 'object' && !Object.keys(value).length
+            ? null : <p key={field}><strong>{label}：</strong>{factText(value)}</p>;
+        })}
         {detail.facts.product.updated_at && <p>目录日期：{detail.facts.product.updated_at}</p>}
         {detail.facts.observed_at && <p>读取时间：{detail.facts.observed_at}</p>}
         {detail.facts.quotes.map((quote,i)=><p key={i}>{quote.historical ? '历史' : '已读'}到手报价：{quote.line.quantity}件，配送至{quote.ship_to}，{money(quote.line.total_amount_minor/100,quote.currency)}</p>)}

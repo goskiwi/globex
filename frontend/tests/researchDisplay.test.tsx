@@ -12,9 +12,9 @@ const assessment='适合优先减轻随身负担的人，折叠后也方便收�
 const report={task_id:'bag',goal:'通勤背包研究',status:'partial',product_count:1,sku_count:1,
   unmet_constraints:['电脑仓资料尚未核实'],questions:[],issues:[],price_comparisons:[],items:[{
     product_id:'P1003',sku_id:'P1003-S1',assessment,open_questions:['是否有独立电脑仓？'],unmet_constraints:[],
-    evidence:[{field:'description',label:'商品原文',value:'完整目录原文仍保留，防泼水且可折叠。'}],
     facts:{product:{product_id:'P1003',title:'Wanderlite 折叠旅行双肩包 35L',weight_kg:0.38,
-      description:'完整目录原文仍保留，防泼水且可折叠。'},
+      description:'完整目录原文仍保留，防泼水且可折叠。',highlights:['支持折叠'],
+      dimensions_cm:{length:50},material_tags:['尼龙'],rating_summary:{average:4.6,review_count:217},ships_to:['CN']},
       sku:{sku_id:'P1003-S1',spec:'石墨黑',price_major:11958.33,currency:'JPY',stock:5},quotes:[],historical:false}}]};
 const delivery={runId:'r',guidance:'背包研究已交回，电脑仓资料尚未核实。',reports:[report],status:'partial',task_ids:['bag'],completed_task_ids:[]};
 
@@ -64,6 +64,10 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     await act(async()=>section.querySelector<HTMLButtonElement>('.detail-button')!.click());
     const drawer=host.querySelector('.drawer')!;
     expect(drawer.textContent).toContain('完整目录原文仍保留');
+    expect(drawer.textContent).toContain('重量：0.38 kg');
+    for (const label of ['目录亮点：支持折叠','商品尺寸（厘米）：长 50','目录材质：尼龙','目录评分：评分 4.6 · 评价数 217','目录配送范围：CN']) {
+      expect(drawer.textContent).toContain(label);
+    }
     expect(drawer.textContent).not.toContain('准备下单');
     await act(async()=>drawer.querySelector<HTMLButtonElement>('[aria-label="关闭"]')!.click());
     expect(section.textContent).not.toContain('准备下单');

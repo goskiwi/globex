@@ -158,12 +158,11 @@ def test_completed_status_alone_cannot_publish_an_unfinished_batch():
 
 async def test_large_selected_facts_use_source_refs_without_truncation():
     from app.application.runtime.tool_view import bounded_tool_view
-    decision = {'candidates': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description'],
+    decision = {'candidates': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。',
         'facts': {'result_ref': 'ctx_source', 'historical': False, 'observed_at': 'now',
                   'product': {'description': '必须保留的长资料' * 10000}}}]}
     before = json.dumps(decision, ensure_ascii=False)
     projected = await bounded_tool_view(decision, None, None, kind='handoff', token_limit=2000)
-    assert projected['candidates'][0]['evidence_fields'] == ['description']
     assert projected['candidates'][0]['assessment'] == decision['candidates'][0]['assessment']
     assert projected['candidates'][0]['facts']['offloaded'] is True
     assert projected['candidates'][0]['facts']['result_ref'] == 'ctx_source'
@@ -185,7 +184,7 @@ def research_receipt(identifier, *, description='目录明确记载防水卷口'
     return {'agent': 'search_agent', 'status': 'completed', 'summary': '该品类研究完成',
         'scope': {'task_id': identifier, 'goal': '通勤研究', 'effective_search': {'parameters': {'ship_to': 'CN', 'target_currency': 'CNY'}},
                   'parent_conditions': {'unused': '原始条件' * 100}},
-        'candidates': [{'product_id': identifier, 'sku_id': identifier + '-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description', 'dimensions_cm'],
+        'candidates': [{'product_id': identifier, 'sku_id': identifier + '-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。',
                         'open_questions': ['是否有电脑仓？'], 'unmet_constraints': [],
                         'facts': facts}],
         'evidence_refs': ['ctx_' + identifier], 'observed_products': ['仅观察未选中' * 200],
