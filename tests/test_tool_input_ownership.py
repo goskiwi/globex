@@ -10,7 +10,7 @@ from app.application.agents.handoff import DelegatedTask, build_submission_tool
 from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 from app.application.tools.product_search_tool import build_product_search_tool, SearchQuery
 from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 
 

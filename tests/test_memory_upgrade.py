@@ -82,7 +82,7 @@ async def test_semantic_tools_require_ids_and_permission_checks_target_before_as
     from app.application.tools.update_preference_tool import build_update_preference_tool
     from app.application.tools.forget_preference_tool import build_forget_preference_tool
     from app.infrastructure.eventbus import TradeEventBus
-    from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
     store=make(tmp_path);await store.append(BuyerPreference('a','like','喜欢裙子'))
     for builder in (build_update_preference_tool,build_forget_preference_tool):
         tool=as_langchain_tool(builder(store,TradeEventBus()))

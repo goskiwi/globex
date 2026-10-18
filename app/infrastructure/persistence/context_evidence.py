@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 import time
 import uuid
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 class ContextEvidenceStore:

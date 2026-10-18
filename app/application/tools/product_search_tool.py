@@ -17,7 +17,7 @@ from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.product_search_spec import ProductSearchSpec
 from app.domain.catalog.exchange_rate import ExchangeRateTable
 from app.domain.shipping.tariff_schedule import TariffSchedule
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
 
 

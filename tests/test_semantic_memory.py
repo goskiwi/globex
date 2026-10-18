@@ -6,7 +6,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from app.domain.buyer.preference import BuyerPreference
 from app.infrastructure.semantic_memory import SemanticPreferenceStore,PreferenceDistiller,MemoryUnavailable
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 class Extract:
     async def extract(self,p,existing=()):

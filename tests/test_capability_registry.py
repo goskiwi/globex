@@ -11,7 +11,7 @@ from app.application.runtime.tools import as_langchain_tool
 from app.infrastructure.capability_registry import CapabilityRegistry, CapabilityError, CapabilityVersionChanged
 from app.application.tools.capability_tools import build_capability_tools
 from app.infrastructure.eventbus import TradeEventBus
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from scripts.capabilities import main
 
 

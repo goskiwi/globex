@@ -16,7 +16,7 @@ from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.confirmation_service import ConfirmationService
 from app.application.usecases.order_usecases import PlaceOrderUseCase, QueryOrderUseCase, CancelOrderUseCase, OrderItemInput
 from app.domain.order.address import Address
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.runtime.context import RequestContextMiddleware
 from app.application.agents.main_agent import SessionRegistry
 from app.application.agents.orchestrator import MainAgentOrchestrator, SubmitIntentInput

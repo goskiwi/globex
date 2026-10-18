@@ -12,7 +12,7 @@ from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.runtime.tools import as_langchain_tool
 from app.application.runtime.middleware import runtime_middlewares
 from app.application.harness.loop_detector import LoopDetector
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.settings import load_settings
 from app.infrastructure.llm import create_chat_model, create_chat_client
 from app.infrastructure.eventbus import TradeEventBus

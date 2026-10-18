@@ -22,7 +22,7 @@ from app.application.runtime.results import ToolResult
 from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
 from app.application.harness.loop_detector import LoopDetector
 from app.infrastructure.budget import init_budget, get_budget
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_usage import context_usage_sink
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.llm import create_chat_model, create_chat_client

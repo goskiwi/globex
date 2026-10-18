@@ -2,7 +2,7 @@
 import asyncio
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.domain.session.ports.session_store import StaleSessionWrite
 
 

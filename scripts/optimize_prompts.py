@@ -229,7 +229,7 @@ class SearchEvaluator:
             InMemoryProductRepository,
         )
         from app.infrastructure.eventbus import TradeEventBus, observe_run_events
-        from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+        from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
         from app.infrastructure.context_usage import (
             context_usage_sink,
             context_call_kind,

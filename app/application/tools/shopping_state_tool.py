@@ -5,7 +5,7 @@ from app.application.runtime.tools import TypedTool
 from langgraph.types import Command
 from pydantic import ConfigDict, create_model
 from app.application.agents.shopping_state import ShoppingWork, ShoppingUpdate, apply_update
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 def build_shopping_state_tool(evidence_store):

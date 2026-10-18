@@ -16,7 +16,7 @@ from app.application.agents.orchestrator import SubmitIntentInput
 from app.application.runtime.skills import skill_directory
 from app.infrastructure.buyer_skills import BuyerSkillConflict
 from app.infrastructure.capability_registry import CapabilityRegistry, CapabilityVersionChanged
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.domain.session.ports.session_store import StaleSessionWrite
 from tests.test_capability_registry import publish, document
 from tests.native_model_helpers import client_model, completion

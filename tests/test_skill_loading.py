@@ -16,7 +16,7 @@ from app.application.tools.capability_tools import build_capability_tools, CAPAB
 from app.application.agents.skill_access import read_skill
 from app.infrastructure.buyer_skills import BuyerSkillStore
 from app.infrastructure.capability_registry import CapabilityRegistry
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.ag_ui_journal import AGUIJournal, JournalConflict
 from app.presentation.ag_ui import parse_intent

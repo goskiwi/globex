@@ -8,7 +8,7 @@ import json
 from contextlib import AsyncExitStack
 
 from app.domain.session.ports.session_store import SessionNotFound, StaleSessionWrite
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.runtime.context_summary import render_summary
 from app.application.runtime.sessions import SessionBusy
 

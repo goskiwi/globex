@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.application.runtime.tool_view import bounded_tool_view
 
 

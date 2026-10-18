@@ -16,7 +16,7 @@ from app.application.runtime.execution import ExecutionMiddleware
 from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.working_state import WorkingStateMiddleware
 from app.application.tools.shopping_state_tool import build_shopping_state_tool
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from tests.native_context_helpers import policy
 from tests.native_model_helpers import client_model, completion

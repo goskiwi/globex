@@ -98,7 +98,7 @@ def _session_hash(session_id: str) -> str:
 
 def _shopping_session() -> str:
     # 避免把应用上下文导入成 eventbus 的循环依赖。
-    from app.infrastructure.context import ShoppingContext
+    from app.application.runtime.request_scope import ShoppingContext
     try:
         snapshot = ShoppingContext.current()
         return snapshot.shopping_session_id
@@ -111,7 +111,7 @@ def current_correlation(session_id: str = "") -> dict[str, str]:
     session_id = session_id or _shopping_session()
     if session_id:
         result["session_id"] = _session_hash(session_id)
-    from app.infrastructure.context import ShoppingContext
+    from app.application.runtime.request_scope import ShoppingContext
     snapshot = ShoppingContext.current()
     if snapshot is not None and snapshot.prompt_version:
         result.update(prompt_version=snapshot.prompt_version, prompt_variant=snapshot.prompt_variant,

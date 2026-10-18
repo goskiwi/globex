@@ -11,7 +11,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.application.runtime.context import RequestContextMiddleware
 from app.application.runtime.skills import SkillReferenceMiddleware
 from app.application.runtime.errors import ContextCapacityError
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.capability_registry import CapabilityRegistry
 from app.infrastructure.buyer_skills import BuyerSkillStore
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore

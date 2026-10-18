@@ -9,7 +9,7 @@ from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.runtime.tools import as_langchain_tool
 from app.application.runtime.delivery import FinalDeliveryMiddleware
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env
 
 

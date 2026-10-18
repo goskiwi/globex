@@ -5,7 +5,7 @@ import json
 import pytest
 from langchain_core.messages import ToolMessage,AIMessage
 from app.application.runtime.results import ToolResultState
-from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from app.infrastructure.context_products import business_view,product_page
 from app.application.runtime.projections import read_output,share_identical_products
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore

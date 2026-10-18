@@ -274,7 +274,7 @@ class TestTwoStageRecall:
     async def test_tool_event_carries_hits_for_frontend(self, indexed):
         """tool.result 事件必须带 hits，否则前端商品卡渲染不出来（三期浏览器验证曾暴露此缺陷）。"""
         from app.application.tools.product_search_tool import build_product_search_tool
-        from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+        from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
         from app.infrastructure.eventbus import TradeEventBus
 
         repo, embedder, index = indexed

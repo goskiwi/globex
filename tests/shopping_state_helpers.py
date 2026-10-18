@@ -15,7 +15,7 @@ def selected_lines(*sku_ids, quantity=1):
 async def run_search(tool, *args, filters=None, **query):
     """测试夹具：先显式装配条件，再以新查询接口执行；不是产品兼容入口。"""
     from dataclasses import replace
-    from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
     from app.application.agents.shopping_state import compile_search
     current = ShoppingContext.current() or ShoppingContextSnapshot('anonymous','test-buyer','zh-CN','CNY')
     effective = current.effective_search

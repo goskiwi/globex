@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.application.agents.main_agent import SessionRegistry, GraphSession
 from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
 from app.domain.session.ports.session_store import SessionOwnerMismatch, SessionOwnerUnbound, StaleSessionWrite
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.persistence.json_file_stores import JsonFileSessionStore
 from app.infrastructure.persistence.sql.repositories import SqlSessionStore, create_engine
 from app.infrastructure.persistence.sql.tables import ConversationSessionRow

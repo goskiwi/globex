@@ -19,7 +19,7 @@ from app.application.runtime.handoff import TaskEvidence, HandoffContext, issue
 from app.application.runtime.errors import ExecutionStopped, ContextCapacityError
 from app.infrastructure.resilience import DEFAULT_TIMEOUTS
 from app.infrastructure.budget import get_budget
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import observe_run_events
 from app.infrastructure.context_products import token_estimate
 from app.application.runtime.tool_view import bounded_tool_view

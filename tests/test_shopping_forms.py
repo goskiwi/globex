@@ -129,7 +129,7 @@ async def test_agent_surface_is_projected_to_agui_and_replay_state(tmp_path):
     from app.application.agents.ag_ui_adapter import AGUIRunAdapter
     from app.application.tools.shopping_form_tool import build_shopping_form_tool
     from app.infrastructure.eventbus import TradeEventBus, observe_run_events
-    from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 
     events = []
     adapter = AGUIRunAdapter(RunAgentInput(**request_data()), events.append)
@@ -237,7 +237,7 @@ async def test_native_graph_calls_clarification_tool_then_accepts_answer(tmp_pat
     from app.application.runtime.tools import as_langchain_tool
     from app.application.tools.shopping_form_tool import build_shopping_form_tool
     from app.infrastructure.shopping_forms import ClarificationRequest
-    from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
     from app.infrastructure.eventbus import TradeEventBus,observe_run_events
     from tests.native_model_helpers import client_model,completion
     calls=[]

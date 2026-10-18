@@ -6,7 +6,7 @@ from app.application.runtime.middleware import ToolResilienceMiddleware, Busines
 from app.application.harness.loop_detector import LoopDetector
 from app.infrastructure.resilience import CircuitBreakerRegistry
 from app.infrastructure.eventbus import TradeEventBus
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.native_tool_helpers import tool_graph, call_tool
 from tests.test_queue_reliability import isolated_redis_url
 

@@ -3,7 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.tools.order_tools import _ok, _fail
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 class ProductViewInput(BaseModel):

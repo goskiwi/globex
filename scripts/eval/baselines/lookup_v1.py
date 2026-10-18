@@ -3,7 +3,7 @@
 import json
 from app.application.runtime.results import ToolResultState
 from app.application.runtime.results import ToolResult
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from scripts.eval.baselines.products_v1 import product_page, token_estimate
 
 

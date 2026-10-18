@@ -16,7 +16,7 @@ from app.application.agents.orchestrator import MainAgentOrchestrator
 from app.application.tools.capability_tools import build_capability_tools
 from app.infrastructure.ag_ui_journal import AGUIJournal
 from app.infrastructure.capability_registry import CapabilityRegistry
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.identity import IdentityPolicy
 from app.presentation.ag_ui import register_ag_ui_routes

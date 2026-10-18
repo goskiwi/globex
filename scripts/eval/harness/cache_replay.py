@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 import uuid
 
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_usage import context_usage_sink
 from app.infrastructure.llm import create_chat_model, create_chat_client
 

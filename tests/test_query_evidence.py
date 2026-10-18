@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 from langchain_core.tools import StructuredTool
 from app.application.runtime.context import RequestContextMiddleware
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from tests.test_retrieval import _settings
 

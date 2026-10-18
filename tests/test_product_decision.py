@@ -8,7 +8,7 @@ from app.application.tools.recommendation_tools import (
 )
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env
 
 

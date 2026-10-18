@@ -18,7 +18,7 @@ from app.application.agents.search_agent import SearchAgentFactory
 from app.application.agents.trade_agent import TradeAgentFactory
 from app.application.harness.loop_detector import LoopDetector
 from app.application.usecases.catalog_search import CatalogSearchUseCase
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.llm import create_chat_model, create_chat_client
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository

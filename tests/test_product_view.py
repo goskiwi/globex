@@ -7,7 +7,7 @@ from app.application.agents.ag_ui_adapter import AGUIRunAdapter
 from app.application.agents.shopping_state import ShoppingWork,Filters,compile_search
 from app.application.tools.product_view_tool import build_product_view_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
-from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEvent
 from app.infrastructure.ag_ui_journal import AGUIJournal
 from tests.trade_test_helpers import confirmation_env

@@ -1,5 +1,5 @@
 """Skill 唯一只读入口：保留目录版本、买家归属和角色工具范围校验。"""
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.capability_registry import SKILL_TOOL_ALLOWLIST
 
 

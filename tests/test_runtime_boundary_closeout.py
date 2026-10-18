@@ -22,7 +22,7 @@ from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.tools.order_tools import build_query_order_tool
 from app.application.usecases.order_usecases import QueryOrderUseCase
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.operational_metrics import begin_request, finish_request
 from app.presentation.ag_ui import parse_intent

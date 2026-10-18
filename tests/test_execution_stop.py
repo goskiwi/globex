@@ -18,7 +18,7 @@ from app.application.runtime.tools import as_langchain_tool
 from app.application.runtime.results import ToolResult
 from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
 from app.infrastructure.budget import init_budget
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.resilience import CircuitBreakerRegistry, DEFAULT_TIMEOUTS
 from tests.test_agent_handoff import ScriptedModel, call, factories, task, submission

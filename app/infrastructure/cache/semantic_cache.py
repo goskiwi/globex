@@ -114,7 +114,7 @@ class SemanticCache:
 
     @staticmethod
     def _prompt_version() -> str:
-        from app.infrastructure.context import ShoppingContext
+        from app.application.runtime.request_scope import ShoppingContext
         snapshot = ShoppingContext.current()
         if snapshot is None:
             return ""

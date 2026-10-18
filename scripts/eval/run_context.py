@@ -15,7 +15,7 @@ import re
 import time
 from dataclasses import replace
 from pathlib import Path
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_products import business_view, token_estimate, result_identity
 from app.infrastructure.context_usage import context_usage_sink
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore, product_decision_view

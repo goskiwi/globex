@@ -11,7 +11,7 @@ from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.tools.recommendation_tools import build_recommendation_tool,Pick
 from app.application.tools.order_tools import _verified_order_items
 from app.application.usecases.catalog_search import CatalogSearchUseCase
-from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env
 
 

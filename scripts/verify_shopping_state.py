@@ -18,7 +18,7 @@ from app.application.runtime.tools import as_langchain_tool
 from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.buyer.preference import BuyerPreference, MaterialExclusion
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.llm import create_chat_model, create_chat_client
 from app.infrastructure.settings import load_settings

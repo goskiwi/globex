@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage
 from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
 from app.application.agents.shopping_state import ShoppingWork, Filters
 from app.domain.buyer.preference import BuyerPreference, MaterialExclusion
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 
 class RecordingFactory:

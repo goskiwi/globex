@@ -130,7 +130,7 @@ def test_unknown_research_attributes_are_not_unmet_user_constraints():
 async def test_delegation_keeps_prior_conditions_and_current_source_without_substring_gate():
     from tests.test_subagent_preference_inject import RecordingFactory
     from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
-    from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
     from langchain_core.messages import HumanMessage
     from types import SimpleNamespace
     token=ShoppingContext.set(ShoppingContextSnapshot('s','b','zh-CN','CNY'))

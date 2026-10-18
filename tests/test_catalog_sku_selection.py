@@ -15,7 +15,7 @@ from app.domain.catalog.product import Product
 from app.domain.catalog.product_search_spec import ProductSearchSpec
 from app.domain.catalog.sku import Sku
 from app.domain.catalog.ports.retrieval_ports import VectorHit
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
 from app.infrastructure.persistence.seed_products import build_seed_products
 from tests.trade_test_helpers import confirmation_env, test_address as address

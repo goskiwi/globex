@@ -3,7 +3,7 @@ import json
 import time
 from copy import deepcopy
 from app.application.runtime.results import ToolResult, ToolResultState
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.context_products import product_page, token_estimate, normalize_lookup_fields, PRODUCT_EVIDENCE_KINDS
 from app.infrastructure.context_usage import record_context_diagnostic, record_evaluation_evidence
 

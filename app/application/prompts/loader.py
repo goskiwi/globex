@@ -21,7 +21,7 @@ def _load_default_prompts() -> dict:
 
 
 def load_prompts() -> dict:
-    from app.infrastructure.context import ShoppingContext
+    from app.application.runtime.request_scope import ShoppingContext
     snapshot = ShoppingContext.current()
     if snapshot is not None and snapshot.prompt_document_json:
         # 每次返回新对象，调用方不能修改不可变版本的共享正文。

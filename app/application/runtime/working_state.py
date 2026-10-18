@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import ValidationError
 
 from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 class WorkingState(AgentState):

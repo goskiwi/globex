@@ -155,7 +155,7 @@ async def test_stale_execution_cannot_write_graph_checkpoint_or_task_result(tmp_
     from langgraph.checkpoint.base import empty_checkpoint
     from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
     from app.infrastructure.persistence.sql.repositories import create_engine, SqlSessionStore
-    from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
     from app.domain.session.ports.session_store import StaleSessionWrite
     engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'sessions.db'}")
     store = SqlSessionStore(engine)

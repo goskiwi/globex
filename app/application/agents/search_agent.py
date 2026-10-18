@@ -52,6 +52,10 @@ class SearchAgentFactory:
         self.capability_registry = None
         self.buyer_skill_store = None
 
+    @property
+    def catalog_search(self) -> CatalogSearchUseCase:
+        return self._catalog_search
+
     def bind_harness(self, loop_detector: Any) -> None:
         self._loop_detector = loop_detector
 

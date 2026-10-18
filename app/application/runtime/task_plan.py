@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.types import Command
 from app.application.agents.shopping_state import ShoppingWork, compile_search
 from app.domain.buyer.preference import BuyerPreference
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.application.runtime.results import tool_receipts
 
 from app.application.runtime.research_plan import (

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from app.application.tools.order_tools import _verified_order_items, _ok, _fail
 from app.application.usecases.pricing import QuoteItem
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.application.agents.shopping_state import Choice
 
 MAX_DECISION_ITEMS = 12

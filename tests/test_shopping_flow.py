@@ -15,7 +15,7 @@ from app.application.tools.shopping_state_tool import build_shopping_state_tool
 from app.application.tools.recommendation_tools import build_recommendation_tool, Pick
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.shopping_forms import ShoppingFormStore
 from app.infrastructure.ag_ui_journal import AGUIJournal, JournalConflict

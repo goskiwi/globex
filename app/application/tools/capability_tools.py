@@ -6,7 +6,7 @@ import json
 from app.application.runtime.results import ToolResult, ToolResultState
 
 from app.infrastructure.capability_registry import CAPABILITY_CONTRACT_VERSION, SKILL_TOOL_ALLOWLIST
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.application.agents.skill_access import read_skill
 
 CAPABILITY_TOOL_CONTRACT_VERSION = CAPABILITY_CONTRACT_VERSION

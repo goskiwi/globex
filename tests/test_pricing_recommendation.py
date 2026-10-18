@@ -6,7 +6,7 @@ from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.pricing import QuoteItem
 from app.application.usecases.order_usecases import OrderItemInput
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env, test_address as address
 
 

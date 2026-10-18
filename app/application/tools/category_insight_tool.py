@@ -11,7 +11,7 @@ from pathlib import Path
 
 from app.application.runtime.results import ToolResult, ToolResultState
 
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.rag.category_knowledge import (
     has_answerable_knowledge,

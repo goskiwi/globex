@@ -5,7 +5,7 @@ import json
 
 import httpx
 import pytest
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.runtime.working_state import WorkingStateMiddleware
 from tests.shopping_state_helpers import work_fixture
 from langchain_core.messages import HumanMessage,AIMessage

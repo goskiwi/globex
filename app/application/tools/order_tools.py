@@ -17,7 +17,7 @@ from app.application.usecases.order_usecases import (
 )
 from app.domain.order.address import Address
 from app.application.tools.order_inputs import CreateOrderInput, ShippingAddressInput
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
 
 

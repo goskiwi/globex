@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.infrastructure.persistence.sql.session_store import SqlFencedSessionStore,ContextCheckpointRow,ContextOperationRow
 from app.domain.session.ports.session_store import StaleSessionWrite,SessionOwnerMismatch
 from langchain_core.messages import AIMessage,HumanMessage,ToolMessage
-from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from app.infrastructure.context_products import business_view,product_page,token_estimate,result_identity
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup

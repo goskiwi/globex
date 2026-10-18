@@ -43,7 +43,7 @@ async def test_benchmark_compaction_uses_native_graph_policy(tmp_path):
     from langgraph.checkpoint.memory import InMemorySaver
     from tests.native_context_helpers import history,policy
     from tests.test_langgraph_runtime import ScriptedModel
-    from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+    from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
     from scripts.eval.run_context import compact_for_evaluation
     middleware=policy(tmp_path)
     graph=create_agent(ScriptedModel(),middleware=[middleware],checkpointer=InMemorySaver())

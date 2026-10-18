@@ -2,7 +2,7 @@
 
 import json
 from app.application.runtime.results import ToolResult, ToolResultState
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 def build_shopping_form_tool(store, bus):

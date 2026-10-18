@@ -3,7 +3,7 @@ from typing import Literal
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.infrastructure.semantic_memory import MemoryUnavailable
 from app.domain.buyer.preference import BuyerPreference
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 def build_update_preference_tool(store, bus):

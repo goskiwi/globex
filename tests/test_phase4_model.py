@@ -10,7 +10,7 @@ from openai import APIStatusError
 from langchain.agents.middleware import ModelRequest
 from langchain_core.messages import HumanMessage
 from app.application.runtime.middleware import GatewayModelMiddleware
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.throttle import GatewayThrottle
 from tests.native_model_helpers import client_model, completion

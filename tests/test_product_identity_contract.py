@@ -12,7 +12,7 @@ from app.application.tools.order_tools import build_create_order_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.order_usecases import PlaceOrderUseCase
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from tests.trade_test_helpers import confirmation_env, test_address as address  # noqa: F401
 from tests.shopping_state_helpers import selected_lines

@@ -15,7 +15,7 @@ from app.application.runtime.tools import as_langchain_tool
 from app.application.tools.capability_tools import build_capability_tools
 from app.infrastructure.capability_registry import CapabilityRegistry
 from app.infrastructure.buyer_skills import BuyerSkillStore
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_products import token_estimate
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from app.infrastructure.eventbus import TradeEventBus

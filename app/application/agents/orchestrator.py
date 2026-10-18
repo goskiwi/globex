@@ -18,7 +18,7 @@ from app.application.runtime.events import approval_event
 from app.domain.session.ports.conversation_store import ConversationStore
 from app.infrastructure.budget import init_budget
 from app.infrastructure.capability_registry import CapabilityVersionChanged
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.operational_metrics import begin_request, finish_request
 from app.infrastructure.prompt_registry import PromptContractChanged

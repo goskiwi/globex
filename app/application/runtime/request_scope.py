@@ -2,7 +2,7 @@
 """ShoppingContext
 
 用 ContextVar 保存当前任务的会话快照（shopping_session_id / buyer_id / locale / currency），
-跨层透明传递：工具与子 Agent 执行时随时读取，无需层层透传参数。
+应用层拥有执行上下文，框架工具边界绑定；基础设施适配器只读取执行身份。
 多用户并发任务依赖 asyncio Task 级隔离，不会串台。
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import Optional
 from app.domain.buyer.preference import BuyerPreference
+from app.application.runtime.research_plan import ResearchPlan
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,7 @@ class ShoppingContextSnapshot:
     preference_facts: tuple[BuyerPreference, ...] = ()
     effective_search: dict | None = field(default=None, repr=False)
     selected_lines: tuple[dict, ...] = field(default=(), repr=False)
-    task_plan: dict = field(default_factory=dict, repr=False)
+    task_plan: ResearchPlan = field(default_factory=dict, repr=False)
     session_fence: int = 0
     prompt_version: str = ""
     prompt_variant: str = ""

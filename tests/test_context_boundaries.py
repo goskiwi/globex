@@ -21,7 +21,7 @@ from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.money import Money
 from app.domain.catalog.product import Product
 from app.domain.catalog.sku import Sku
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_products import token_estimate
 from app.infrastructure.context_usage import context_diagnostic_sink, context_usage_sink
 from app.infrastructure.eventbus import TradeEventBus

@@ -20,7 +20,7 @@ from app.application.tools.forget_preference_tool import build_forget_preference
 from app.domain.buyer.preference import BuyerPreference
 from app.infrastructure.buyer_skills import BuyerSkillStore, BuyerSkillConflict
 from app.infrastructure.capability_registry import CapabilityRegistry
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.identity import IdentityPolicy
 from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore

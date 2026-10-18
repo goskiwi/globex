@@ -15,7 +15,7 @@ from app.infrastructure.persistence.sql.repositories import create_engine,bootst
 from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from app.infrastructure.shopping_forms import ShoppingFormStore
-from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from app.domain.session.ports.conversation_store import ConversationTurn
 from app.domain.session.ports.session_store import SessionNotFound,StaleSessionWrite
 from app.application.agents.orchestrator import MainAgentOrchestrator

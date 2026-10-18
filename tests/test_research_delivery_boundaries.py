@@ -15,7 +15,7 @@ from app.application.runtime.handoff import TaskEvidence, HandoffContext, Handof
 from app.application.runtime.delivery import FinalDeliveryMiddleware
 from app.application.runtime.results import ToolResult
 from app.application.runtime.tools import as_langchain_tool
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from tests.native_context_helpers import history, policy
 from tests.native_model_helpers import client_model, completion

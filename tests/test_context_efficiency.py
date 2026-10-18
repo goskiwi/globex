@@ -6,7 +6,7 @@ import httpx
 import pytest
 from langchain_core.messages import HumanMessage,AIMessage,ToolMessage
 from app.infrastructure.context_usage import context_diagnostic_sink
-from app.infrastructure.context import ShoppingContext,ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from app.application.runtime.state_projection import *
 from app.application.runtime.projections import share_identical_products,read_output,EVIDENCE_RULES
 from app.infrastructure.context_products import token_estimate

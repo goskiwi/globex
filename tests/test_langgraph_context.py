@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.application.runtime.context import RequestContextMiddleware
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from tests.native_context_helpers import summary_selection
 from app.application.runtime.context_summary import render_summary

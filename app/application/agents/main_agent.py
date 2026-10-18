@@ -32,7 +32,7 @@ from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
 from app.application.tools.update_preference_tool import build_update_preference_tool
 from app.domain.buyer.preference import PreferenceStore
 from app.domain.session.ports.session_store import SessionStore
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.llm import create_chat_model
 from app.infrastructure.settings import Settings
@@ -94,11 +94,11 @@ class MainAgentFactory:
         tools = [*self._search_factory.build_tools(), *self._trade_factory.build_tools()]
         from app.application.tools.recommendation_tools import build_recommendation_tool, RecommendationInput, build_comparison_tool, ComparisonInput
         from app.application.tools.product_view_tool import build_product_view_tool, ProductViewInput
-        tools.append(as_langchain_tool(build_product_view_tool(self._search_factory._catalog_search,
+        tools.append(as_langchain_tool(build_product_view_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=ProductViewInput))
-        tools.append(as_langchain_tool(build_recommendation_tool(self._search_factory._catalog_search,
+        tools.append(as_langchain_tool(build_recommendation_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=RecommendationInput))
-        tools.append(as_langchain_tool(build_comparison_tool(self._search_factory._catalog_search,
+        tools.append(as_langchain_tool(build_comparison_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=ComparisonInput))
         tools.append(build_shopping_state_tool(self._search_factory.evidence_store))
         functions = [

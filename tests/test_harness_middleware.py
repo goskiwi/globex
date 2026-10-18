@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.infrastructure.eventbus import TradeEventBus
 
 from app.application.harness.loop_detector import LoopDetector
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.runtime.middleware import BusinessToolMiddleware, ToolResilienceMiddleware
 from app.infrastructure.resilience import (
     CircuitBreakerRegistry,

@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 from langchain.agents.middleware import ModelRequest
 from langgraph.graph.message import add_messages
 from app.application.runtime.context import RequestContextMiddleware
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_products import token_estimate
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from scripts.eval.harness.contracts import write_json

@@ -6,7 +6,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
 from app.application.memory.preference_resolution import resolve_preferences
 from app.domain.buyer.preference import BuyerPreference
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 
 
 class PreferenceState(AgentState):

@@ -12,7 +12,7 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest, ToolCallR
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.types import interrupt
 
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.llm import create_chat_model
 from app.infrastructure.resilience import DEFAULT_TIMEOUTS, _allow, _record_failure, _record_success
 from app.infrastructure.transient import is_transient_error

@@ -14,7 +14,7 @@ from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.domain.buyer.preference import BuyerPreference, MaterialExclusion
 from tests.test_agent_handoff import ScriptedModel

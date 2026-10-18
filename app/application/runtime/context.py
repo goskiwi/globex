@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, Remove
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.types import Command
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.context_products import token_estimate, result_identity
 from app.application.runtime.errors import ContextCapacityError
 from app.application.runtime.results import message_data, project_data

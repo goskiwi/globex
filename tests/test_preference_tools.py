@@ -9,7 +9,7 @@
 from app.application.tools.forget_preference_tool import build_forget_preference_tool
 from app.application.tools.remember_preference_tool import build_remember_preference_tool
 from app.domain.buyer.preference import BuyerPreference
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
 

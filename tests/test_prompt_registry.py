@@ -14,7 +14,7 @@ import yaml
 
 from app.application.prompts.loader import load_prompts
 from app.infrastructure.cache.semantic_cache import SemanticCache
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.prompt_registry import PromptRegistry, PromptRegistryError
 from app.infrastructure.prompt_release import compare_release_manifests
 from app.infrastructure.tracing import current_correlation

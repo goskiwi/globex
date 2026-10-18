@@ -10,7 +10,7 @@ from app.application.runtime.middleware import BusinessToolMiddleware, ToolResil
 from app.application.runtime.results import ToolResult, ToolResultState, receipt_failure
 from app.application.runtime.tools import as_langchain_tool
 from app.application.tools.recommendation_tools import RecommendationInput
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.resilience import CircuitBreakerRegistry
 from tests.native_tool_helpers import tool_graph, call_tool

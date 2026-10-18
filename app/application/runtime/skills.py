@@ -7,7 +7,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import Command, Overwrite
 from app.application.agents.skill_access import read_skill
-from app.infrastructure.context import ShoppingContext
+from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.capability_registry import SKILL_TOOL_ALLOWLIST
 from app.infrastructure.security.content_filter import sanitize_tool_output
 from app.application.runtime.results import message_data

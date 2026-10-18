@@ -22,7 +22,7 @@ from opentelemetry.trace import Status, StatusCode
 
 from app.application.agents.orchestrator import SubmitIntentInput
 from app.domain.queue.ports.task_queue import IntentTask
-from app.infrastructure.context import ShoppingContext, ShoppingContextSnapshot
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEvent, TradeEventBus
 from app.infrastructure import tracing
 from app.infrastructure.tracing import (
