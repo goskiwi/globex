@@ -32,8 +32,7 @@ class ContextService:
         result = await self.store.context_view(session, buyer)
         result.pop("working", None)
         result["strategy"] = "langgraph_checkpoint"
-        checkpointer = self.orchestrator._sessions._main_factory._checkpointer
-        checkpoint = await checkpointer.aget_tuple({"configurable": {"thread_id": session}})
+        checkpoint = await self.orchestrator.sessions.read_checkpoint(session)
         if checkpoint:
             values = checkpoint.checkpoint.get("channel_values", {})
             result["summary"] = render_summary(values['context_summary']) if values.get('context_summary') is not None else ''
@@ -95,13 +94,12 @@ class ContextService:
         renewal = asyncio.create_task(heartbeat())
         try:
             async with AsyncExitStack() as stack:
-                lease_factory = self.orchestrator._session_lease_factory
-                lease = await stack.enter_async_context(lease_factory(session_id)) if lease_factory else None
-                await self.orchestrator._sessions.invalidate(session_id)
+                lease = await stack.enter_async_context(self.orchestrator.session_lease(session_id))
+                await self.orchestrator.sessions.invalidate(session_id)
                 view = await self.store.context_view(session_id, buyer)
                 if view["revision"] != operation["expected_revision"]:
                     raise StaleSessionWrite("选购记录已更新，请重试整理")
-                graph_session = await self.orchestrator._sessions.get_or_create(session_id)
+                graph_session = await self.orchestrator.sessions.get_or_create(session_id)
                 state = await graph_session.graph.aget_state(graph_session.config)
                 if state.interrupts:
                     raise StaleSessionWrite("尚有待审批工具")
@@ -115,19 +113,19 @@ class ContextService:
                     await graph_session.graph.aupdate_state(graph_session.config, updates)
                 if lease and not lease.is_valid():
                     raise StaleSessionWrite("整理执行权已失效")
-                if not await self.orchestrator._sessions.persist(session_id):
+                if not await self.orchestrator.sessions.persist(session_id):
                     raise StaleSessionWrite("会话保存未完成")
                 await self.store.finish_context_operation(identifier, buyer, status, {
                     "statistics": statistics,
                     "message": "当前无需整理" if status == "noop" else "上下文已整理，原始运行记录保留",
                 })
         except asyncio.CancelledError:
-            await self.orchestrator._sessions.invalidate(session_id)
+            await self.orchestrator.sessions.invalidate(session_id)
             await asyncio.shield(self.store.finish_context_operation(
                 identifier, buyer, "interrupted", {"message": "整理已中断，原记录保留"}
             ))
         except Exception as error:
-            await self.orchestrator._sessions.invalidate(session_id)
+            await self.orchestrator.sessions.invalidate(session_id)
             await self.store.finish_context_operation(identifier, buyer, "failed", {
                 "message": "本次整理未完成，原记录保留；可稍后重试",
                 "error_code": type(error).__name__,

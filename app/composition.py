@@ -122,6 +122,8 @@ class Container:
     context_service: Any = None
     graph_checkpointer_context: Any = None
     session_management: Any = None
+    buyer_workspace: Any = None
+    shopping_form_store: Any = None
 
     async def startup(self) -> None:
         """建表 / 建向量库 / 建知识库。任一失败只告警，对应能力降级但服务可用。"""
@@ -318,6 +320,9 @@ async def build_container() -> Container:
             shopping_form_store=ShoppingFormStore(settings.data_dir / "shopping_forms.db"),
         )
         sessions = SessionRegistry(main_factory, session_store, enforce_owner=settings.session_owner_binding, prompt_registry=prompt_registry)
+        from app.application.usecases.buyer_workspace import BuyerWorkspace
+        workspace = BuyerWorkspace(main_factory.buyer_skill_store, preference_store, main_factory.capability_registry,
+            lambda: {tool.name for tool in [*search_factory.build_tools(), *trade_factory.build_tools()]})
         orchestrator = MainAgentOrchestrator(
             sessions, bus, conversation_store=conversation_store,
             output_guard_enabled=settings.output_guard_enabled,
@@ -326,6 +331,7 @@ async def build_container() -> Container:
             session_lease_factory=task_queue.session_lease if task_queue is not None else None,
             evidence_store=search_factory.evidence_store,
             trade_state_provider=confirmations.agent_state,
+            buyer_workspace=workspace,
         )
     
         from app.application.agents.context_service import ContextService
@@ -333,6 +339,8 @@ async def build_container() -> Container:
         journal=AGUIJournal(settings.data_dir / "ag_ui_runs.db")
         return Container(
             settings=settings,
+            buyer_workspace=workspace,
+            shopping_form_store=main_factory.shopping_form_store,
             model_client=model_client,
             bus=bus,
             orchestrator=orchestrator,

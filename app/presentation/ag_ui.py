@@ -100,9 +100,7 @@ def register_ag_ui_routes(
         await require_buyer(request, buyer_id)
         try:
             orchestrator = get_orchestrator()
-            if getattr(getattr(getattr(orchestrator, "_sessions", None), "_main_factory", None), "buyer_skill_store", None) is not None:
-                return await orchestrator.available_skills(buyer_id)
-            return await orchestrator.available_skills()
+            return await orchestrator.available_skills(buyer_id)
         except CapabilityVersionChanged as err:
             raise HTTPException(status_code=409, detail="选购方案刚刚更新，请刷新列表后重试。") from err
         except Exception as err:

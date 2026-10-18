@@ -15,7 +15,7 @@ class SessionManagement:
             async def cleanup():
                 # 先终止旧执行权，即使跨库清理失败也不能让旧任务复活；可重试同一清理。
                 await self.session_store.retire_conversation(session_id,buyer_id)
-                await self.orchestrator._sessions.invalidate(session_id)
+                await self.orchestrator.sessions.invalidate(session_id)
                 await self.checkpointer.adelete_thread(session_id)
                 await self.evidence.delete_session(buyer_id,session_id)
                 await self.forms.delete_session(buyer_id,session_id)

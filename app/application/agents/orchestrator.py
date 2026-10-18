@@ -98,8 +98,10 @@ class MainAgentOrchestrator:
         session_lease_factory: Callable[..., Any] | None = None,
         trade_state_provider: Callable[[str, str], Any] | None = None,
         evidence_store: Any = None,
+        buyer_workspace=None,
     ) -> None:
         self._sessions = sessions
+        self.buyer_workspace = buyer_workspace
         self._bus = bus
         self._conversation_store = conversation_store
         self._output_guard_enabled = output_guard_enabled
@@ -114,25 +116,23 @@ class MainAgentOrchestrator:
         )
 
     async def available_skills(self, buyer_id: str | None = None) -> dict:
-        factory = self._sessions._main_factory
-        registry = factory.capability_registry
-        if registry is None:
+        if self.buyer_workspace is None:
             raise RuntimeError("选购方案服务尚未配置")
-        available = {tool.name for tool in [*factory._search_factory.build_tools(), *factory._trade_factory.build_tools()]}
+        return await self.buyer_workspace.available_skills(buyer_id)
 
-        def read():
-            digest = registry.version_fingerprint()
-            metadata = registry.metadata(available_tools=available, expected_digest=digest)
-            fields = ("id", "version", "title", "description", "scope", "content_hash", "expires_at")
-            return {"capability_digest": digest, "skills": [{key: item[key] for key in fields} for item in metadata]}
+    @property
+    def sessions(self):
+        return self._sessions
 
-        result = await asyncio.to_thread(read)
-        if buyer_id and factory.buyer_skill_store is not None:
-            result["skills"] = [
-                *await asyncio.to_thread(factory.buyer_skill_store.list, buyer_id),
-                *result["skills"],
-            ]
-        return result
+    @asynccontextmanager
+    async def session_lease(self, session_id, *, wait=True):
+        """所有会话操作复用既有跨进程租约；单进程模式返回空租约。"""
+        async with AsyncExitStack() as stack:
+            lease = None
+            if self._session_lease_factory is not None:
+                options = {} if wait else {"wait_timeout": 0}
+                lease = await stack.enter_async_context(self._session_lease_factory(session_id, **options))
+            yield lease
 
     def _guard_final_text(self, session_id: str, text: str) -> str:
         if not self._output_guard_enabled or not text:
@@ -175,9 +175,7 @@ class MainAgentOrchestrator:
     async def session_operation(self, session_id):
         """会话管理与执行共享同一进程锁及原Redis租约。"""
         try:
-            async with self.session_coordinator.hold(session_id, wait=False), AsyncExitStack() as stack:
-                if self._session_lease_factory is not None:
-                    await stack.enter_async_context(self._session_lease_factory(session_id, wait_timeout=0))
+            async with self.session_coordinator.hold(session_id, wait=False), self.session_lease(session_id, wait=False):
                 yield
         except SessionBusy as error:
             from app.infrastructure.ag_ui_journal import JournalConflict

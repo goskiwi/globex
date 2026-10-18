@@ -235,6 +235,10 @@ class SessionRegistry:
         self._claims[shopping_session_id] = claim
         return self._agents[shopping_session_id]
 
+    async def read_checkpoint(self, session_id: str):
+        """读取持久图状态，不创建执行权或向维护服务暴露 Agent 工厂。"""
+        return await self._main_factory._checkpointer.aget_tuple({"configurable": {"thread_id": session_id}})
+
     async def invalidate(self, shopping_session_id: str) -> None:
         self._agents.pop(shopping_session_id, None)
         self._claims.pop(shopping_session_id, None)

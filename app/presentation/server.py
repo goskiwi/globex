@@ -122,9 +122,9 @@ def build_app() -> FastAPI:
     from app.presentation.context_workspace import register_context_routes
     register_context_routes(api, lambda: container().context_service)
     register_confirmation_routes(api, lambda: container().confirmations)
-    register_buyer_workspace_routes(api, lambda: container().orchestrator)
+    register_buyer_workspace_routes(api, lambda: container().buyer_workspace)
     from app.presentation.shopping_forms import register_shopping_form_routes
-    register_shopping_form_routes(api, lambda: container().orchestrator._sessions._main_factory.shopping_form_store)
+    register_shopping_form_routes(api, lambda: container().shopping_form_store)
     from app.presentation.favorites import register_favorite_routes
     from app.infrastructure.buyer_favorites import BuyerFavoriteStore
     register_favorite_routes(api, lambda: BuyerFavoriteStore(container().settings.data_dir / "buyer_favorites.db"))

@@ -35,10 +35,10 @@ class PreferenceDelete(BaseModel):
     statement: str = Field(min_length=1,max_length=500)
 
 
-def register_buyer_workspace_routes(api, get_orchestrator):
+def register_buyer_workspace_routes(api, get_workspace):
     def stores():
-        o=get_orchestrator()
-        return o._sessions._main_factory.buyer_skill_store, o._sessions._main_factory._preference_store
+        workspace = get_workspace()
+        return workspace.skills, workspace.preferences
 
     @api.get("/commerce/my-skills")
     async def skills(request: Request,buyer_id: str=Query(min_length=1)):

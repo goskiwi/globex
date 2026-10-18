@@ -37,11 +37,13 @@ def fixture(tmp_path):
     registry=CapabilityRegistry(tmp_path/"global.db")
     factory=SimpleNamespace(buyer_skill_store=skill_store,capability_registry=registry,_preference_store=preferences,
         _search_factory=SimpleNamespace(build_tools=lambda: []),_trade_factory=SimpleNamespace(build_tools=lambda: []))
-    o=MainAgentOrchestrator(SimpleNamespace(_main_factory=factory),TradeEventBus())
+    from app.application.usecases.buyer_workspace import BuyerWorkspace
+    workspace = BuyerWorkspace(skill_store, preferences, registry, lambda: set())
+    o=MainAgentOrchestrator(SimpleNamespace(_main_factory=factory),TradeEventBus(), buyer_workspace=workspace)
     api=FastAPI()
     policy=IdentityPolicy(mode="hmac",secret="workspace-test-signing-secret-123456789")
     api.state.identity_policy=policy
-    register_buyer_workspace_routes(api,lambda:o)
+    register_buyer_workspace_routes(api,lambda:workspace)
     register_ag_ui_routes(api,lambda:o,get_runtime=unused_runtime)
     return api,o,skill_store,preferences,registry,policy
 
