@@ -158,25 +158,24 @@ class ConfirmationService:
     async def agent_state(self, buyer_id: str, session_id: str) -> dict:
         """向模型提供精简的权威交易状态，不重复注入收货地址或确认校验值。"""
         self._identity(buyer_id, session_id)
-        confirmations = await self._trade_store.list_confirmations(buyer_id=buyer_id, session_id=session_id)
-        pending = await self.pending(buyer_id, session_id)
-        order_ids = list(dict.fromkeys(
-            item["result"]["order_id"] for item in confirmations if item.get("result")
-        ))
-        orders = [await self._trade_store.get_order(order_id, buyer_id=buyer_id) for order_id in order_ids]
+        snapshot = await self._trade_store.session_trade_state(buyer_id=buyer_id, session_id=session_id)
         return {
             "pending_confirmations": [{
                 "action": item["action"], "expired": item["expired"],
                 "items": [{"product_id": line["product_id"], "sku_id": line["sku_id"], "quantity": line["quantity"]}
                           for line in item["payload"]["items"]],
                 "order_id": item["payload"].get("order_id"),
-            } for item in pending],
+            } for item in snapshot["pending_confirmations"]],
             "orders": [{key: order.get(key) for key in (
                 "order_id", "status", "currency", "total_amount_major", "lines", "cancel_reason",
-            )} for order in orders],
+            )} for order in snapshot["orders"]],
         }
 
     async def pending(self, buyer_id: str, session_id: str) -> list[dict]:
         """业务决策读取有效操作；list 仅提供最近记录展示。"""
         self._identity(buyer_id, session_id)
         return await self._trade_store.pending_confirmations(buyer_id=buyer_id, session_id=session_id)
+
+    async def restore(self, buyer_id: str, session_id: str) -> dict:
+        self._identity(buyer_id, session_id)
+        return {"confirmations": await self._trade_store.restore_confirmations(buyer_id=buyer_id, session_id=session_id)}

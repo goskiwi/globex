@@ -184,6 +184,14 @@ class SqlTradeStore(TradeStore):
                 query = query.where(SkuInventoryRow.sku_id.in_(sku_ids))
             return {sku: stock for sku, stock in (await db.execute(query)).all()}
 
+    @asynccontextmanager
+    async def _read_snapshot(self):
+        # SQLite 的隐式事务不会为 SELECT 保持跨语句快照，必须显式 BEGIN。
+        # WAL 读事务不占写锁，买家审批可以正常提交。
+        async with self._sessions() as db:
+            await db.execute(text("BEGIN"))
+            yield db
+
     async def prepare_confirmation(
         self, *, operation_id: str, buyer_id: str, session_id: str,
         action: Literal["create", "cancel"], payload: dict, expires_at: datetime,
@@ -262,6 +270,39 @@ class SqlTradeStore(TradeStore):
             ).order_by(TradeConfirmationRow.created_at, TradeConfirmationRow.confirmation_id))
             # 统一通过 _confirmation 的时区解析判断有效期，不依赖字符串排序。
             return [value for row in rows if not (value := self._confirmation(row))["expired"]]
+
+    async def session_trade_state(self, *, buyer_id: str, session_id: str) -> dict:
+        _string(buyer_id, "buyer_id", 64)
+        _string(session_id, "session_id", 64)
+        async with self._read_snapshot() as db:
+            rows = list(await db.scalars(select(TradeConfirmationRow).where(
+                TradeConfirmationRow.buyer_id == buyer_id, TradeConfirmationRow.session_id == session_id,
+                TradeConfirmationRow.status.in_(("pending", "approved")),
+            ).order_by(TradeConfirmationRow.created_at, TradeConfirmationRow.confirmation_id)))
+            pending = [value for row in rows if row.status == "pending"
+                       and not (value := self._confirmation(row))["expired"]]
+            order_ids = dict.fromkeys(row.result["order_id"] for row in rows if row.result)
+            orders = []
+            for order_id in order_ids:
+                order, lines = await self._owned_order(db, order_id, buyer_id)
+                orders.append(self._order_snapshot(order, lines))
+            return {"pending_confirmations": pending, "orders": orders}
+
+    async def restore_confirmations(self, *, buyer_id: str, session_id: str, history_limit: int = 20) -> list[dict]:
+        _string(buyer_id, "buyer_id", 64)
+        _string(session_id, "session_id", 64)
+        history_limit = min(_integer(history_limit, "history_limit", 1), 20)
+        async with self._read_snapshot() as db:
+            query = select(TradeConfirmationRow).where(
+                TradeConfirmationRow.buyer_id == buyer_id, TradeConfirmationRow.session_id == session_id)
+            pending = list(await db.scalars(query.where(TradeConfirmationRow.status == "pending").order_by(
+                TradeConfirmationRow.created_at, TradeConfirmationRow.confirmation_id)))
+            active = {row.confirmation_id: value for row in pending
+                      if not (value := self._confirmation(row))["expired"]}
+            recent = list(await db.scalars(query.where(TradeConfirmationRow.confirmation_id.not_in(active)).order_by(
+                TradeConfirmationRow.created_at.desc(), TradeConfirmationRow.confirmation_id.desc()).limit(history_limit)))
+            values = [self._confirmation(row) for row in recent] + list(active.values())
+            return sorted(values, key=lambda value: (value["created_at"], value["confirmation_id"]), reverse=True)
 
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,

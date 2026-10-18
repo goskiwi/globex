@@ -187,3 +187,19 @@ async def test_optional_conversation_record_failure_does_not_replay_successful_e
     result = await orchestrator.handle_intent(parse_intent(body))
     assert result.error is None and result.status == "completed"
     assert agent.calls == 1
+
+
+async def test_live_confirmation_events_keep_old_active_card_beyond_history_limit(confirmation_env):
+    env = confirmation_env
+    events = []
+    adapter = AGUIRunAdapter(RunAgentInput.model_validate(request_data()), events.append)
+    pending = (await prepare(env))["confirmation"]
+    emit_confirmation(adapter, pending)
+    for _ in range(20):
+        current = (await prepare(env))["confirmation"]
+        rejected = await env.service.resolve(current["confirmation_id"], "buyer-test", "session-test",
+                                              current["snapshot_hash"], False)
+        emit_confirmation(adapter, rejected["confirmation"], "confirmation.resolved")
+    assert len(adapter.state["confirmations"]) == 21
+    assert any(c["confirmation_id"] == pending["confirmation_id"] and c["status"] == "pending"
+               for c in adapter.state["confirmations"])

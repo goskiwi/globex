@@ -63,7 +63,7 @@ def register_confirmation_routes(api: FastAPI, service: Callable[[], Confirmatio
         buyer_id = await require_buyer(request, buyer_id)
         await require_session(request, buyer_id, session_id)
         try:
-            return await service().list(buyer_id, session_id)
+            return await service().restore(buyer_id, session_id)
         except ValueError as err:
             raise confirmation_error(err) from err
 

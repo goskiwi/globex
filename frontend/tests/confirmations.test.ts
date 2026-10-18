@@ -285,3 +285,19 @@ it("刷新恢复当前会话，并从服务端读取确认；收货快照不写�
   });
   expect(fresh.getSnapshot().sessionId).not.toBe(first.getSnapshot().sessionId);
 });
+
+it("keeps every actionable confirmation while limiting resolved history", () => {
+  const pending = Array.from({ length: 25 }, (_, index) => ({
+    ...card, confirmation_id: `pending-${index}`, operation_id: `operation-${index}`,
+  }));
+  const rejected: TradeConfirmation[] = Array.from({ length: 25 }, (_, index) => ({
+    ...card, confirmation_id: `rejected-${index}`, operation_id: `rejected-operation-${index}`,
+    status: "rejected", result: null,
+  }));
+  const merged = mergeConfirmations(pending, rejected);
+  expect(merged.filter(item => item.status === "pending")).toHaveLength(25);
+  expect(merged.filter(item => item.status === "rejected")).toHaveLength(20);
+  const resolved = mergeConfirmations(merged, [{ ...pending[0], status: "rejected" }]);
+  expect(resolved.filter(item => item.status === "pending")).toHaveLength(24);
+  expect(resolved.filter(item => item.status === "rejected")).toHaveLength(20);
+});

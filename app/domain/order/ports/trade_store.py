@@ -45,6 +45,14 @@ class TradeStore(ABC):
         """查询全部有效待确认操作，不受历史展示条数影响。"""
 
     @abstractmethod
+    async def session_trade_state(self, *, buyer_id: str, session_id: str) -> dict:
+        """同一读快照中的有效确认及会话订单，不使用历史展示截断。"""
+
+    @abstractmethod
+    async def restore_confirmations(self, *, buyer_id: str, session_id: str, history_limit: int = 20) -> list[dict]:
+        """恢复全部有效待确认单与最近历史；有效操作不占历史配额。"""
+
+    @abstractmethod
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,
         snapshot_hash: str, approved: bool,

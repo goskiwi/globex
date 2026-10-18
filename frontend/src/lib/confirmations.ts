@@ -105,11 +105,16 @@ export function mergeConfirmations(
       .filter((item) => item.result?.status === "CANCELLED")
       .map((item) => item.result!.order_id),
   );
+  const now = Date.now();
+  const active = new Set(all.filter(item => item.status === "pending" && !item.expired
+    && Date.parse(item.expires_at) > now).map(item => item.confirmation_id));
+  const history = new Set(all.filter(item => !active.has(item.confirmation_id)).slice(-20)
+    .map(item => item.confirmation_id));
   return all
+    .filter(item => active.has(item.confirmation_id) || history.has(item.confirmation_id))
     .map((item) =>
       item.result && cancelled.has(item.result.order_id)
         ? { ...item, result: { ...item.result, status: "CANCELLED" as const } }
         : item,
-    )
-    .slice(-20);
+    );
 }

@@ -139,7 +139,7 @@ class AGUIRuntime:
         adapter.start()
         try:
             if self.confirmations is not None:
-                saved = await self.confirmations.list(intent.buyer_id, intent.shopping_session_id)
+                saved = await self.confirmations.restore(intent.buyer_id, intent.shopping_session_id)
                 adapter.state["confirmations"] = saved["confirmations"]
                 adapter.snapshot()
             with observe_run_events(adapter.on_trade_event):
