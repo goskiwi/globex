@@ -98,6 +98,14 @@ class AGUIJournal:
                     await db.rollback()
                 raise
 
+    @asynccontextmanager
+    async def _read_snapshot(self):
+        """恢复只占用短写事务；完整历史组装使用一致的只读快照。"""
+        await self.recover_expired()
+        async with self._db() as db:
+            await db.execute("BEGIN")
+            yield db
+
     @staticmethod
     async def _one(db, sql, params=()):
         async with db.execute(sql, params) as cursor:
@@ -273,13 +281,11 @@ class AGUIJournal:
             await self._recover(db, time.time())
 
     async def run(self, run_id, buyer_id, session_id=None):
-        async with self._db(True) as db:
-            await self._recover(db, time.time())
+        async with self._read_snapshot() as db:
             return self._run(self._owned(await self._one(db, "SELECT * FROM agui_runs WHERE run_id=?", (run_id,)), buyer_id, session_id))
 
     async def events(self, run_id, buyer_id, after=0, limit=200):
-        async with self._db(True) as db:
-            await self._recover(db, time.time())
+        async with self._read_snapshot() as db:
             row = self._owned(await self._one(db, "SELECT * FROM agui_runs WHERE run_id=?", (run_id,)), buyer_id)
             if after < 0 or after > row["last_seq"]:
                 raise JournalConflict("事件游标超出该运行范围")
@@ -310,8 +316,7 @@ class AGUIJournal:
             await self._append(db, row, events)
 
     async def sessions(self, buyer_id):
-        async with self._db(True) as db:
-            await self._recover(db, time.time())
+        async with self._read_snapshot() as db:
             # 这里只返回轻量目录，不能静默隐藏第 101 个及更早的会话。
             async with db.execute("SELECT session_id,title,updated_at,last_run_id FROM agui_sessions WHERE buyer_id=? ORDER BY updated_at DESC", (buyer_id,)) as cursor:
                 return [{"id": row["session_id"], "title": row["title"], "updatedAt": int(row["updated_at"] * 1000), "runId": row["last_run_id"], "source": "server"} for row in await cursor.fetchall()]
@@ -346,8 +351,7 @@ class AGUIJournal:
         return {"deleted":True,"id":session_id}
 
     async def session(self, session_id, buyer_id):
-        async with self._db(True) as db:
-            await self._recover(db, time.time())
+        async with self._read_snapshot() as db:
             row = self._owned(await self._one(db, "SELECT * FROM agui_sessions WHERE session_id=?", (session_id,)), buyer_id)
             run = self._run(await self._one(db, "SELECT * FROM agui_runs WHERE run_id=?", (row["last_run_id"],)))
             # sessions.messages_json 是下一轮使用的滑动窗口，不是页面完整历史。

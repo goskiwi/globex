@@ -354,3 +354,27 @@ async def test_followup_preserves_delivery_without_reviving_old_approvals(tmp_pa
     assert all(set(item) <= {'id', 'type', 'timestamp'} for item in restored['events'])
     with pytest.raises(JournalForbidden):
         await journal.session('s1', 'another-buyer')
+
+
+async def test_history_snapshot_does_not_hold_write_lock_for_other_sessions(tmp_path, monkeypatch):
+    journal = AGUIJournal(tmp_path / "history-concurrency.db")
+    await journal.reserve(body(), "b1", "owner")
+    reading, release = asyncio.Event(), asyncio.Event()
+    original = journal._latest_delivery
+
+    async def paused(db, session, buyer):
+        reading.set()
+        await release.wait()
+        return await original(db, session, buyer)
+
+    monkeypatch.setattr(journal, "_latest_delivery", paused)
+    reader = asyncio.create_task(journal.session("s1", "b1"))
+    try:
+        await asyncio.wait_for(reading.wait(), 2)
+        # 新会话不需要恢复其他会话的商品交付，因此跳过暂停函数。
+        monkeypatch.setattr(journal, "_latest_delivery", original)
+        run, created = await asyncio.wait_for(journal.reserve(body("r2", "s2"), "b1", "other"), 2)
+        assert created and run["threadId"] == "s2"
+    finally:
+        release.set()
+        await reader
