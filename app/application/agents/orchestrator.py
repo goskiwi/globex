@@ -107,15 +107,7 @@ class MainAgentOrchestrator:
             metrics = begin_request()
             status = "failed"
             try:
-                try:
-                    result = await self._handle_intent(intent, persistence_guard)
-                except RunPersistenceError:
-                    logger.exception("执行收尾失败，不自动重放业务操作")
-                    message = "本轮操作可能已生效，但执行记录保存未完成；请先核查订单、确认单和会话状态，不要直接重复操作。"
-                    result = SubmitIntentOutput(intent.shopping_session_id, message, message,
-                        "PERSISTENCE_FAILED", status="failed", stop_reason="persistence_error")
-                self._bus.publish(intent.shopping_session_id, "final.result", {
-                    "text": result.final_text, "status": result.status, "stop_reason": result.stop_reason})
+                result = await self._handle_intent(intent, persistence_guard)
                 status = result.status
                 return result
             except asyncio.CancelledError:
@@ -138,19 +130,14 @@ class MainAgentOrchestrator:
     async def _handle_intent(self, intent, persistence_guard) -> SubmitIntentOutput:
         session_id = intent.shopping_session_id
         context_token = ShoppingContext.set(ShoppingContextSnapshot(
-            shopping_session_id=session_id,
-            buyer_id=intent.buyer_id,
-            locale=intent.locale,
-            currency=intent.currency,
-            source_message_id=intent.message_id,
-            source_run_id=intent.run_id,
+            shopping_session_id=session_id, buyer_id=intent.buyer_id,
+            locale=intent.locale, currency=intent.currency,
+            source_message_id=intent.message_id, source_run_id=intent.run_id,
         ))
         init_budget(self._token_budget_total)
         started_at = time.monotonic()
         trace = self._bus.subscribe(session_id) if self._conversation_store else None
-        final_text = ""
-        cancelled = False
-        delivered = None
+        finalizer = RunFinalizer(self._sessions, self._bus, self._conversation_store, self._evidence_store)
         recommendation = None
 
         def collect_delivery(event):
@@ -158,6 +145,40 @@ class MainAgentOrchestrator:
             if event.shopping_session_id == session_id and event.type in {"recommendation.result", "comparison.result"}:
                 recommendation = event.payload
 
+        try:
+            with observe_run_events(collect_delivery):
+                try:
+                    result = await self._execute_intent(intent)
+                except asyncio.CancelledError:
+                    text = "[cancelled] 本轮执行已中断"
+                    saved = await finalizer.finish(intent, text, None, persistence_guard, cancelled=True)
+                    if saved:
+                        await finalizer.record_conversation(intent, text,
+                            int((time.monotonic() - started_at) * 1000), trace, cancelled=True)
+                    raise
+            delivered = recommendation if result.product_delivery_complete else None
+            try:
+                saved = await finalizer.finish(intent, result.final_text, delivered, persistence_guard)
+            except RunPersistenceError as error:
+                logger.exception("执行收尾失败，不自动重放业务操作")
+                saved = error.session_saved
+                message = "本轮操作可能已生效，但执行记录保存未完成；请先核查订单、确认单和会话状态，不要直接重复操作。"
+                result = SubmitIntentOutput(session_id, message, message,
+                    "PERSISTENCE_FAILED", status="failed", stop_reason="persistence_error")
+            # 必要保存完成后发布终态，但执行身份和审计订阅仍然有效。
+            self._bus.publish(session_id, "final.result", {
+                "text": result.final_text, "status": result.status, "stop_reason": result.stop_reason})
+            if saved:
+                await finalizer.record_conversation(intent, result.final_text,
+                    int((time.monotonic() - started_at) * 1000), trace)
+            return result
+        finally:
+            if trace is not None:
+                self._bus.unsubscribe(session_id, trace)
+            ShoppingContext.reset(context_token)
+
+    async def _execute_intent(self, intent) -> SubmitIntentOutput:
+        session_id = intent.shopping_session_id
         try:
             session = await self._sessions.get_or_create(session_id)
             snapshot = await session.graph.aget_state(session.config)
@@ -186,8 +207,7 @@ class MainAgentOrchestrator:
                 if set(decisions_by_id) != pending_ids:
                     raise ValueError("确认与当前待处理操作不一致，请刷新会话")
                 resume = next(iter(decisions_by_id.values())) if len(pending) == 1 else decisions_by_id
-                with observe_run_events(collect_delivery):
-                    execution = await self._invoke_graph(session_id, session, Command(resume=resume))
+                execution = await self._invoke_graph(session_id, session, Command(resume=resume))
                 final_text = execution.text
                 remaining = await session.graph.aget_state(session.config)
                 if remaining.interrupts:
@@ -198,7 +218,6 @@ class MainAgentOrchestrator:
                     final_text = "还有长期记忆变更待确认，请继续核对下方操作。"
                     execution = ExecutionResult(final_text, "needs_input")
                 final_text = self._guard_final_text(session_id, final_text)
-                delivered = recommendation if execution.product_delivery_complete else None
                 return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
                                           product_delivery_complete=execution.product_delivery_complete)
             if pending:
@@ -233,9 +252,8 @@ class MainAgentOrchestrator:
                     ), name="candidate_state"))
 
             await self._remove_stale_runtime_hints(session, messages)
-            with observe_run_events(collect_delivery):
-                execution = await self._reply(session_id, session, inputs)
-                final_text = execution.text
+            execution = await self._reply(session_id, session, inputs)
+            final_text = execution.text
             final_text = self._guard_final_text(session_id, final_text)
             state_after = await session.graph.aget_state(session.config)
             if state_after.interrupts:
@@ -245,7 +263,6 @@ class MainAgentOrchestrator:
                     observer(event)
                 final_text = "这次长期记忆变更还未执行，请在下方确认或拒绝。"
                 execution = ExecutionResult(final_text, "needs_input")
-            delivered = recommendation if execution.product_delivery_complete else None
             return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
                                       product_delivery_complete=execution.product_delivery_complete)
         except ContextCapacityError:
@@ -256,7 +273,6 @@ class MainAgentOrchestrator:
             text = "选购环境已更新，旧记录仍保留。请在新会话中继续本次需求。"
             return SubmitIntentOutput(session_id, text, text, "SESSION_VERSION_CHANGED", status="failed", stop_reason="session_version_changed")
         except asyncio.CancelledError:
-            cancelled = True
             final_text = "[cancelled] 本轮执行已中断"
             self._bus.publish(session_id, "error", {"message": "本轮执行已中断", "cancelled": True})
             raise
@@ -265,15 +281,6 @@ class MainAgentOrchestrator:
             message = "本轮服务暂时无法完成，请稍后重试；涉及写入请先核查状态。"
             self._bus.publish(session_id, "error", {"message": message})
             return SubmitIntentOutput(session_id, f"[error] {message}", message, status="failed", stop_reason="execution_error")
-        finally:
-            try:
-                finalizer = RunFinalizer(self._sessions, self._bus, self._conversation_store, self._evidence_store)
-                await finalizer.finish(intent, final_text, delivered,
-                    int((time.monotonic() - started_at) * 1000), trace, persistence_guard, cancelled=cancelled)
-            finally:
-                if trace is not None:
-                    self._bus.unsubscribe(session_id, trace)
-                ShoppingContext.reset(context_token)
 
     async def _remove_stale_runtime_hints(self, session, messages: list[BaseMessage]) -> None:
         stale = [message for message in messages if getattr(message, "name", None) in {

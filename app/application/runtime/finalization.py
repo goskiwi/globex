@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 
 class RunPersistenceError(RuntimeError):
     """业务可能已经执行，但必要的会话或证据保存未完成。"""
+    def __init__(self, message, *, session_saved=False):
+        super().__init__(message)
+        self.session_saved = session_saved
 
 
 class RunFinalizer:
@@ -16,39 +19,43 @@ class RunFinalizer:
         self._sessions, self._bus = sessions, bus
         self._conversation_store, self._evidence_store = conversation_store, evidence_store
 
-    async def finish(self, intent, text, delivered, latency_ms, trace, persistence_guard, *, cancelled=False):
+    async def finish(self, intent, text, delivered, persistence_guard, *, cancelled=False) -> bool:
         session_id = intent.shopping_session_id
+        saved = False
         try:
             if persistence_guard is not None and not persistence_guard():
                 await self._sessions.invalidate(session_id)
-                return
+                return False
             persisted = await self._sessions.persist(session_id)
             if persisted is False:
-                return
-            record = self.record_conversation(intent, text, latency_ms, trace)
-            if cancelled:
-                task = asyncio.create_task(record)
-                try:
-                    await asyncio.shield(task)
-                except asyncio.CancelledError:
-                    await task
-                    raise
-            else:
-                await record
+                return False
+            saved = True
             if self._evidence_store is not None:
                 if delivered is not None:
                     await self._evidence_store.save(intent.buyer_id, session_id, "display_batch", delivered)
                 await self._evidence_store.save(intent.buyer_id, session_id, "conversation", {
                     "buyer": intent.raw_query, "agent": text,
                 })
+            return True
         except Exception as error:
             if cancelled:
                 # 保存故障不能覆盖取消信号，也不能把中断改成可自动重试的故障。
                 logger.warning("中断收尾保存失败：%s", type(error).__name__)
-                return
-            raise RunPersistenceError("执行后的必要记录保存失败") from error
+                return saved
+            raise RunPersistenceError("执行后的必要记录保存失败", session_saved=saved) from error
 
-    async def record_conversation(self, intent, final_text: str, latency_ms: int, trace) -> None:
+    async def record_conversation(self, intent, final_text, latency_ms, trace, *, cancelled=False):
+        record = self._record_conversation(intent, final_text, latency_ms, trace)
+        if not cancelled:
+            return await record
+        task = asyncio.create_task(record)
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
+
+    async def _record_conversation(self, intent, final_text: str, latency_ms: int, trace) -> None:
         if self._conversation_store is None:
             return
         events: list[ConversationEventRecord] = []

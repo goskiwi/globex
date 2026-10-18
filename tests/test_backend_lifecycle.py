@@ -12,6 +12,48 @@ from tests.test_confirmation_service import prepare, approve
 from tests.trade_test_helpers import confirmation_env  # noqa: F401
 
 
+@pytest.mark.parametrize("evidence_failure", [False, True])
+async def test_final_event_keeps_version_and_is_audited_after_required_saves(tmp_path, evidence_failure):
+    from dataclasses import replace
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from app.application.runtime.execution import ExecutionResult
+    from app.application.runtime.request_scope import ShoppingContext
+    from app.application.usecases.intents import SubmitIntentInput
+    from app.infrastructure.eventbus import observe_run_events
+    from app.infrastructure.persistence.sql.repositories import create_engine, bootstrap_schema, SqlConversationStore
+    from app.infrastructure.persistence.sql.tables import ConversationEventRow
+
+    engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'audit.db'}")
+    await bootstrap_schema(engine)
+    orchestrator, _, _ = make_orchestrator()
+    orchestrator._conversation_store = SqlConversationStore(engine)
+    if evidence_failure:
+        orchestrator._evidence_store = SimpleNamespace(search=AsyncMock(return_value=[]),
+            save=AsyncMock(side_effect=OSError("synthetic evidence failure")))
+    async def reply(*args):
+        ShoppingContext.set(replace(ShoppingContext.current(), prompt_version="synthetic-version",
+                                    capability_digest="synthetic-capability"))
+        return ExecutionResult("synthetic answer", "completed")
+    orchestrator._reply = reply
+    events = []
+    try:
+        with observe_run_events(events.append):
+            result = await orchestrator.handle_intent(SubmitIntentInput("s", "buyer", "zh-CN", "CNY", "synthetic request"))
+        final = next(e for e in events if e.type == "final.result")
+        assert final.correlation["prompt_version"] == "synthetic-version"
+        assert final.correlation["capability_digest"] == "synthetic-capability"
+        assert result.status == ("failed" if evidence_failure else "completed")
+        async with async_sessionmaker(engine)() as db:
+            rows = list(await db.scalars(select(ConversationEventRow).where(ConversationEventRow.type == "final.result")))
+            assert len(rows) == 1
+            assert rows[0].payload["status"] == result.status
+            assert rows[0].payload["text"] == result.final_text
+        assert ShoppingContext.current() is None
+    finally:
+        await engine.dispose()
+
+
 async def test_persistence_failure_reaches_agui_without_success_terminal():
     orchestrator, agent, sessions = make_orchestrator()
     sessions.persist = AsyncMock(side_effect=OSError("synthetic save failure"))
