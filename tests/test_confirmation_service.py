@@ -250,3 +250,19 @@ async def test_agent_state_restores_current_order_status_without_shipping_or_con
     serialized = json.dumps(state, ensure_ascii=False)
     for sensitive in ("shipping_address", address().address_line, address().phone, "snapshot_hash", "confirmation_id"):
         assert sensitive not in serialized
+
+
+async def test_pending_operations_are_not_hidden_by_recent_history(confirmation_env):
+    env = confirmation_env
+    oldest = await prepare(env)
+    for _ in range(20):
+        env.now[0] += timedelta(seconds=1)
+        await approve(env, await prepare(env), approved=False)
+    assert len((await env.service.list("buyer-1", "session-1"))["confirmations"]) == 20
+    pending = await env.service.pending("buyer-1", "session-1")
+    assert [c["confirmation_id"] for c in pending] == [oldest["confirmation"]["confirmation_id"]]
+    assert len((await env.service.agent_state("buyer-1", "session-1"))["pending_confirmations"]) == 1
+    assert await env.service.pending("other", "session-1") == []
+    assert await env.service.pending("buyer-1", "other") == []
+    env.now[0] += timedelta(seconds=301)
+    assert await env.service.pending("buyer-1", "session-1") == []

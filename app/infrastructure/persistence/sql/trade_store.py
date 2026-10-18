@@ -251,6 +251,18 @@ class SqlTradeStore(TradeStore):
             ).order_by(TradeConfirmationRow.created_at.desc(), TradeConfirmationRow.confirmation_id.desc()).limit(limit))
             return [self._confirmation(row) for row in rows]
 
+    async def pending_confirmations(self, *, buyer_id: str, session_id: str) -> list[dict]:
+        _string(buyer_id, "buyer_id", 64)
+        _string(session_id, "session_id", 64)
+        async with self._sessions() as db:
+            rows = await db.scalars(select(TradeConfirmationRow).where(
+                TradeConfirmationRow.buyer_id == buyer_id,
+                TradeConfirmationRow.session_id == session_id,
+                TradeConfirmationRow.status == "pending",
+            ).order_by(TradeConfirmationRow.created_at, TradeConfirmationRow.confirmation_id))
+            # 统一通过 _confirmation 的时区解析判断有效期，不依赖字符串排序。
+            return [value for row in rows if not (value := self._confirmation(row))["expired"]]
+
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,
         snapshot_hash: str, approved: bool,

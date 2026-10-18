@@ -159,6 +159,7 @@ class ConfirmationService:
         """向模型提供精简的权威交易状态，不重复注入收货地址或确认校验值。"""
         self._identity(buyer_id, session_id)
         confirmations = await self._trade_store.list_confirmations(buyer_id=buyer_id, session_id=session_id)
+        pending = await self.pending(buyer_id, session_id)
         order_ids = list(dict.fromkeys(
             item["result"]["order_id"] for item in confirmations if item.get("result")
         ))
@@ -169,8 +170,13 @@ class ConfirmationService:
                 "items": [{"product_id": line["product_id"], "sku_id": line["sku_id"], "quantity": line["quantity"]}
                           for line in item["payload"]["items"]],
                 "order_id": item["payload"].get("order_id"),
-            } for item in confirmations if item["status"] == "pending" and not item["expired"]],
+            } for item in pending],
             "orders": [{key: order.get(key) for key in (
                 "order_id", "status", "currency", "total_amount_major", "lines", "cancel_reason",
             )} for order in orders],
         }
+
+    async def pending(self, buyer_id: str, session_id: str) -> list[dict]:
+        """业务决策读取有效操作；list 仅提供最近记录展示。"""
+        self._identity(buyer_id, session_id)
+        return await self._trade_store.pending_confirmations(buyer_id=buyer_id, session_id=session_id)

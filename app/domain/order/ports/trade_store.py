@@ -41,6 +41,10 @@ class TradeStore(ABC):
     ) -> list[dict]: ...
 
     @abstractmethod
+    async def pending_confirmations(self, *, buyer_id: str, session_id: str) -> list[dict]:
+        """查询全部有效待确认操作，不受历史展示条数影响。"""
+
+    @abstractmethod
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,
         snapshot_hash: str, approved: bool,

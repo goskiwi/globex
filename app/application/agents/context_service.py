@@ -61,8 +61,7 @@ class ContextService:
         await lock.acquire()
         try:
             if self.confirmations is not None:
-                saved = await self.confirmations.list(buyer, session)
-                if any(item.get("status") == "pending" and not item.get("expired") for item in saved.get("confirmations", [])):
+                if await self.confirmations.pending(buyer, session):
                     raise StaleSessionWrite("请先完成或拒绝待确认操作")
             operation, created = await self.store.create_context_operation(session, buyer, request_id, expected_revision)
             if not created:
