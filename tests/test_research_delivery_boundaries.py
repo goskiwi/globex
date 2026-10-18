@@ -169,6 +169,89 @@ async def test_large_selected_facts_use_source_refs_without_truncation():
     assert json.dumps(decision, ensure_ascii=False) == before
 
 
+def research_receipt(identifier, *, description='目录明确记载防水卷口'):
+    """合成研究含两种数量/币种报价，不能因压缩混用。"""
+    facts = {'result_ref': 'ctx_' + identifier, 'historical': False, 'observed_at': '2026-10-18',
+        'product': {'product_id': identifier, 'title': identifier + ' 正确商品名', 'brand': '真实品牌',
+                    'weight_kg': .38, 'description': description,
+                    'dimensions_cm': {'length': 50}, 'rating_summary': {'average': 4.6, 'review_count': 217}},
+        'sku': {'sku_id': identifier + '-S1', 'spec': '雾灰', 'stock': 8, 'price_major': 129, 'currency': 'CNY'},
+        'quotes': [{'ship_to': 'CN', 'currency': currency, 'historical': False, 'observed_at': '2026-10-18',
+                    'result_ref': 'ctx_' + identifier,
+                    'line': {'product_id': identifier, 'sku_id': identifier + '-S1',
+                             'quantity': quantity, 'total_amount_minor': amount, 'currency': currency}}
+                   for quantity, currency, amount in [(1, 'CNY', 15400), (2, 'USD', 3800)]]}
+    return {'agent': 'search_agent', 'status': 'completed', 'summary': '该品类研究完成',
+        'scope': {'task_id': identifier, 'goal': '通勤研究', 'effective_search': {'ship_to': 'CN'},
+                  'parent_conditions': {'unused': '原始条件' * 100}},
+        'candidates': [{'product_id': identifier, 'sku_id': identifier + '-S1', 'reason': '符合已知用途',
+                        'facts': facts}], 'unknowns': ['未标注电脑仓'],
+        'evidence_refs': ['ctx_' + identifier], 'observed_products': ['仅观察未选中' * 200],
+        'transaction_state': 'none', 'stop_reason': None}
+
+
+async def test_current_research_keeps_facts_under_pressure_and_old_turn_can_archive(tmp_path):
+    from app.application.runtime.results import project_data, message_data
+    from tests.native_context_helpers import apply
+    receipts = [research_receipt('P1003'), research_receipt('P1018')]
+    messages = [HumanMessage(id='buyer-turn', name='buyer', content='两份研究，暂不最终推荐'),
+        AIMessage(id='dispatch', content='', tool_calls=[
+            {'id': str(i), 'name': 'task_dispatch', 'args': {}} for i in range(2)])]
+    for i, receipt in enumerate(receipts):
+        messages.append(project_data(ToolMessage(id=f'r{i}', tool_call_id=str(i), name='task_dispatch',
+                                                content=''), receipt))
+    state = {'messages': messages, 'read_tool_messages': ['r0', 'r1']}
+    middleware = policy(tmp_path, product_tokens=1)
+    middleware.model = None
+    update = await middleware.compact_checkpoint(state, force=True)
+    current = apply(state, update)
+    for i, original in enumerate(receipts):
+        receipt = next(m for m in current['messages'] if m.id == f'r{i}')
+        shown = message_data(receipt)
+        assert not shown.get('archived')
+        assert shown['candidates'] == original['candidates']
+        assert shown['unknowns'] == ['未标注电脑仓']
+        assert shown['transaction_state'] == 'none'
+        saved = await middleware.store.get('buyer', 'handoff', shown['result_ref'])
+        assert saved['data'] == original
+        assert receipt.artifact['data'] == original
+    assert not any('compact_view' in r for r in receipts), '原始证据不得被原地修改'
+    # 新需求开始后，旧研究可按原规则回收，不永久保护全部历史。
+    current['messages'].append(HumanMessage(id='new-turn', name='buyer', content='新任务，查水杯'))
+    archived = await middleware.compact_checkpoint(current, force=True)
+    assert all(message_data(m).get('archived') for m in archived['messages'])
+    assert len(archived['messages']) == 2
+
+
+async def test_first_large_handoff_retains_identity_sku_and_quote_conditions():
+    from app.application.runtime.tool_view import bounded_tool_view
+    original = research_receipt('P1003', description='必须回查的长目录段落' * 10000)
+    before = json.dumps(original, ensure_ascii=False)
+    view = await bounded_tool_view(original, None, None, kind='handoff', token_limit=2000)
+    facts = view['candidates'][0]['facts']
+    assert facts['product']['title'] == 'P1003 正确商品名'
+    assert facts['product']['brand'] == '真实品牌' and facts['product']['weight_kg'] == .38
+    assert facts['product']['rating_summary']['review_count'] == 217
+    assert facts['sku'] == original['candidates'][0]['facts']['sku']
+    assert facts['quotes'] == original['candidates'][0]['facts']['quotes']
+    assert facts['offloaded'] and facts['omitted_product_fields'] == ['description']
+    assert 'description' not in facts['product']
+    assert view['unknowns'] == ['未标注电脑仓']
+    assert json.dumps(original, ensure_ascii=False) == before
+
+
+async def test_protected_research_still_obeys_complete_request_capacity(tmp_path):
+    from app.application.runtime.errors import ContextCapacityError
+    from app.application.runtime.results import project_data
+    receipt = research_receipt('P1003', description='当前待交付研究证据' * 100000)
+    message = project_data(ToolMessage(id='large', tool_call_id='call', name='task_dispatch', content=''), receipt)
+    middleware = policy(tmp_path, product_tokens=1)
+    middleware.model = None
+    with pytest.raises(ContextCapacityError):
+        await middleware.compact_checkpoint({'messages': [
+            HumanMessage(name='buyer', content='当前研究'), message], 'read_tool_messages': ['large']})
+
+
 @pytest.mark.parametrize('completed', [False, True])
 def test_partial_run_only_publishes_a_completed_delivery(completed):
     from tests.test_product_delivery import adapter, emit

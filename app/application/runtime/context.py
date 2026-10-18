@@ -18,7 +18,7 @@ from app.infrastructure.context_usage import context_call_kind, record_context_d
 from opentelemetry import trace
 from app.application.runtime.projections import share_identical_products, EVIDENCE_RULES, project_skill_history
 from app.application.runtime.working_state import project_working_state
-from app.application.runtime.tool_view import tool_view_budget
+from app.application.runtime.tool_view import tool_view_budget, research_result_view
 from app.application.runtime.context_summary import (
     ContextSummary, SUMMARY_TOKEN_LIMIT, source_entries, summary_instruction, build_summary, render_summary,
 )
@@ -224,6 +224,24 @@ class RequestContextMiddleware(AgentMiddleware):
         current = initial
         pressure=force or eager or total>trigger or bool(oversized) or before > target
         for index, message, payload in candidates:
+            # 本轮研究尚由 Main 消费，不能把 candidates 当成普通长正文只留归档指针。
+            # 只保护紧凑视图；总体窗口校验和旧轮次回收仍按原规则执行。
+            active_research = (message.name == 'task_dispatch' and index >= latest_turn
+                               and isinstance(payload.get('candidates'), list))
+            if active_research:
+                protected.add(message.id)
+                if pressure and message.id in read and not payload.get('compact_view'):
+                    replacement = research_result_view(payload)
+                    if token_estimate(replacement) < token_estimate(payload):
+                        reference = payload.get('result_ref') or await self.store.save(
+                            context.buyer_id, context.shopping_session_id, 'handoff', payload)
+                        replacement['result_ref'] = reference
+                        changed = project_data(message, replacement)
+                        updates.append(changed)
+                        messages[index] = changed
+                        total -= max(0, token_estimate(payload) - token_estimate(replacement))
+                        current = await frame.render(messages)
+                continue
             if (message.id in protected or message.id not in read
                     or not pressure or (not force and not eager and total <= low_target and message.id not in oversized
                                         and current.counts["total_tokens"] <= target)):

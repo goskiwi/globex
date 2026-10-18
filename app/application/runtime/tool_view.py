@@ -7,6 +7,41 @@ from app.infrastructure.context_products import business_view, product_page, tok
 tool_view_budget: ContextVar[int | None] = ContextVar('tool_view_budget', default=None)
 
 
+def research_result_view(data, *, minimal=False):
+    """待交付研究保留候选事实；观察全集和明细仍由原始证据承载。"""
+    view = business_view(data)
+    scope = view.get('scope')
+    if isinstance(scope, dict):
+        view['scope'] = {key: value for key, value in scope.items()
+                         if key not in {'parent_conditions', 'definition'}}
+    for key in ('observed_products', 'observed_skus', 'historical_evidence_refs'):
+        view.pop(key, None)
+    refs = set()
+    for candidate in view.get('candidates', []):
+        facts = candidate.get('facts', {})
+        if facts.get('result_ref'):
+            refs.add(facts['result_ref'])
+        for quote in facts.get('quotes', []):
+            if quote.get('result_ref'):
+                refs.add(quote['result_ref'])
+            # 标题已由 product 唯一提供，不在每份报价中重抄。
+            if isinstance(quote.get('line'), dict):
+                quote['line'].pop('title', None)
+        if minimal and facts.get('result_ref'):
+            product = facts.get('product', {})
+            omitted = [key for key in ('description', 'highlights') if key in product]
+            if omitted:
+                facts['product'] = {key: value for key, value in product.items() if key not in omitted}
+                facts['offloaded'] = True
+                facts['omitted_product_fields'] = omitted
+    if refs and 'evidence_refs' in view:
+        view['evidence_refs'] = sorted(refs)
+    view['compact_view'] = True
+    view['notice'] = ('候选事实和任务状态保留；未展开的观察全集及商品字段按引用回查。'
+                      '缺资料表示未知，不能从简短理由推导未核验属性；报价仍按其SKU、目的地、数量、币种和观察时间使用。')
+    return view
+
+
 async def bounded_tool_view(data, store, context, *, kind, token_limit=12000):
     """保留完整证据，以商品页或引用代替过大正文；预算包含完整包装。"""
     assigned = tool_view_budget.get()
@@ -15,12 +50,10 @@ async def bounded_tool_view(data, store, context, *, kind, token_limit=12000):
     if token_estimate(view) <= limit:
         return view
     if kind == 'handoff':
-        for candidate in view.get('candidates', []):
-            facts = candidate.get('facts', {})
-            if facts.get('result_ref'):
-                candidate['facts'] = {'result_ref': facts['result_ref'], 'historical': facts['historical'],
-                    'observed_at': facts.get('observed_at'), 'offloaded': True,
-                    'notice': '完整事实按本引用、商品或SKU回查；未展开资料不能猜测。'}
+        view = research_result_view(data)
+        if token_estimate(view) <= limit:
+            return view
+        view = research_result_view(data, minimal=True)
         if token_estimate(view) <= limit:
             return view
     if store is None or context is None:
