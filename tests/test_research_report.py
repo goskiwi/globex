@@ -39,10 +39,8 @@ def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
     assert landed['minimum_minor'] == 31618 and landed['maximum_minor'] == 32400
     text = _report(result)
     assert '2款商品、2个明确规格' in text and '3款' not in text and '头戴式' not in text
-    assert '最低 291.18 CNY（P40018-S1）' in text
-    assert '最低 316.18 CNY（P40018-S1）' in text
-    assert '不含运税' in text and '配送至CN' in text
-    assert '待核验问题：是否有电脑仓？' in text
+    assert result['items'][0]['open_questions'] == ['是否有电脑仓？']
+    assert '商品原文' not in text and '取舍建议' not in text
     assert data == before, '事实投影不能改写原始回执'
 
 
@@ -55,9 +53,10 @@ def test_assessment_is_presented_separately_without_replacing_facts_or_price_com
     assert result['items'][0]['assessment'] == candidate['assessment']
     assert result['items'][0]['facts'] == before
     text = _report(result)
-    assert '取舍建议：' + candidate['assessment'] in text
-    assert '商品原文：支持蓝牙和降噪，未提供佩戴形式' in text
-    assert '商品单价 299 CNY' in text and '最低 291.18 CNY（P40018-S1）' in text
+    assert result['items'][0]['evidence'][0]['value'] == '支持蓝牙和降噪，未提供佩戴形式'
+    assert result['items'][0]['facts']['sku']['price_major'] == 299
+    assert result['price_comparisons'][0]['minimum_minor'] == 29118
+    assert candidate['assessment'] not in text, '取舍由组件完整展示，正文不重复'
     assert '2款商品、2个明确规格' in text
 
 
@@ -113,7 +112,7 @@ def test_product_only_or_historical_candidates_do_not_borrow_current_sku_prices(
         candidate['facts']['sku'] = None
     result = project_research_report(data, RATES)
     assert result['price_comparisons'] == []
-    assert ('历史资料：' in _report(result)) is historical
+    assert result['items'][1]['facts']['historical'] is historical
 
 
 def test_tied_prices_keep_all_lowest_candidates_and_selected_facts_are_literal():

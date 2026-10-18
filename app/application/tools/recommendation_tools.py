@@ -18,14 +18,14 @@ class Pick(BaseModel):
     product_id: str = Field(min_length=1)
     sku_id: str = Field(min_length=1)
     quantity: StrictInt = Field(gt=0, title="购买数量")
-    reason: str = Field(min_length=1, max_length=240, description="这款为什么适合本次需要：用一到两句自然的话，把已知商品特点与使用场景联系起来，必要时说一个关键取舍。不是参数清单，不复述具体金额、库存或执行过程。备选突出与首选不同的选择理由；比较级须核对本次集合，未说明的功能不能说没有")
+    reason: str = Field(min_length=1, max_length=240, description="这款为什么适合本次需要：把已知商品特点与使用场景联系起来，充分解释影响本次选择的依据，必要时说一个关键取舍。不是参数清单，不复述具体金额、库存或执行过程。备选突出与首选不同的选择理由；比较级须核对本次集合，未说明的功能不能说没有")
     tradeoffs: list[str] = Field(default_factory=list, max_length=3, description="只填写商品资料明确支持、且会改变本次选择的局限或关键资料缺口，无明确局限填[]，不用给每款凑缺点。每条只说一个取舍；不能仅凭类型或材质推断软硬、舒适、质量、压缩能力或具体使用效果，未知不等于没有。资料缺口说明尚不能确认的能力，不能改写成肯定缺点。不要写与需要无关的缺失属性、价格明细或执行过程")
 
 
 class DecisionInput(BaseModel):
     """两种交付共用选择语义；不把用户需求映射成固定品类属性。"""
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    guidance: str = Field(min_length=1, max_length=1200, description="对买家说的整体选购建议，随本次商品选择一起交付。普通选购用三到五句自然的话说明为什么首选、备选分别适合什么优先项；组合说明搭配思路。只解释本次交付的商品和规格，用title或清楚的名称简称，不用内部编号。不写具体报价、库存数量、未交付规格或候选，价格和规格由卡片说明；不逐款抄卡片理由，不复述内部过程或用‘请看卡片’占位。判断只依据明确商品资料，不从类型或材质猜测本款的软硬、舒适、质量、压缩能力或具体使用效果")
+    guidance: str = Field(min_length=1, max_length=1200, description="对买家说的整体选购建议，随本次商品选择一起交付。根据问题复杂度讲清为什么首选、备选分别适合什么优先项和关键局限；组合说明搭配思路。不统一限制句数，不为缩短而省略选择依据。只解释本次交付的商品和规格，用title或清楚的名称简称，不用内部编号。不写具体报价、库存数量、未交付规格或候选，价格和规格由卡片说明；不逐款抄卡片理由，不复述内部过程或用‘请看卡片’占位。判断只依据明确商品资料，不从类型或材质猜测本款的软硬、舒适、质量、压缩能力或具体使用效果")
     preferred_sku_id: str | None = Field(description="明确首选的 SKU，必须属于本次集合；证据不足无法选择时填 null，理由说明缺口；组合购买填 null。这不是买家选购或交易授权")
     dimensions: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=6,
         description="本次根据用户用途与偏好实际比较的关注点，如收纳、背负；开放文本，不是属性名或评分公式。不适用时填 []，不凑维度")

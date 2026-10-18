@@ -62,7 +62,7 @@ async def test_agui_run_restores_persistent_pending_and_decided_cards_ignoring_c
     await prepare(env, session="other-session")
     await prepare(env, buyer="other-buyer")
     expected = (await env.service.list("buyer-test", "session-test"))["confirmations"]
-    orchestrator = SimpleNamespace(handle_intent=AsyncMock(return_value=SimpleNamespace(status="completed", stop_reason=None, error=None, final_text="已恢复会话", product_delivery_complete=False)))
+    orchestrator = SimpleNamespace(handle_intent=AsyncMock(return_value=SimpleNamespace(status="completed", stop_reason=None, error=None, final_text="已恢复会话", product_delivery_complete=False, research_delivery_complete=False)))
     body = RunAgentInput.model_validate(request_data(state={"confirmations": [{"confirmation_id": "client-forged", "status": "approved"}]}))
     frames = [frame async for frame in run_frames(orchestrator, body, parse_intent(body), env.service)]
     events = decode_frames(frames)
@@ -79,7 +79,7 @@ async def test_agui_real_service_prepare_publishes_pending_card_without_creating
     class PreparingOrchestrator:
         async def handle_intent(self, intent, **_kwargs):
             await prepare(env, intent.buyer_id, intent.shopping_session_id)
-            return SimpleNamespace(status="completed", stop_reason=None, error=None, final_text="请确认订单明细", product_delivery_complete=False)
+            return SimpleNamespace(status="completed", stop_reason=None, error=None, final_text="请确认订单明细", product_delivery_complete=False, research_delivery_complete=False)
 
     body = RunAgentInput.model_validate(request_data())
     frames = [frame async for frame in run_frames(PreparingOrchestrator(), body, parse_intent(body), env.service)]

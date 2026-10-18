@@ -115,6 +115,8 @@ def build_app() -> FastAPI:
     # AG-UI 首版在本进程直跑；旧 intents 接口继续使用原有 Redis 队列语义。
     from app.presentation.auth import register_auth_routes
     register_auth_routes(api, lambda: container().settings)
+    from app.presentation.product_media import register_product_media_routes
+    register_product_media_routes(api)
     from app.presentation.session_management import register_session_management_routes
     register_session_management_routes(api,lambda:container().session_management)
     register_ag_ui_routes(api, lambda: container().orchestrator, lambda: container().confirmations,

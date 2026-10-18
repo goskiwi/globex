@@ -20,6 +20,7 @@ class ExecutionResult:
     status: Literal["completed", "partial", "needs_input", "failed"]
     stop_reason: str | None = None
     product_delivery_complete: bool = False
+    research_delivery_complete: bool = False
 
 
 class ExecutionState(AgentState):

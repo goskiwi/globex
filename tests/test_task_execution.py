@@ -50,10 +50,16 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         assert result.status == ('partial' if partial else 'completed')
         assert not result.product_delivery_complete
         assert '背包研究' in result.final_text and '水杯研究' in result.final_text
-        assert 'Wanderlite' in result.final_text and 'P1003-S1' in result.final_text and 'P1008-S1' in result.final_text
-        assert '129 CNY' in result.final_text and '0.38 kg' in result.final_text
-        assert '待核验问题：是否有电脑仓？' in result.final_text
-        assert result.final_text.count('取舍建议：适合优先考虑便携性的需求，实际适配仍需核验。') == 2
+        assert result.research_delivery_complete
+        payload = next(m.artifact['data'] for m in reversed(state['messages'])
+                       if isinstance(m, ToolMessage) and m.name == 'present_research')
+        candidates = [c for report in payload['reports'] for c in report['items']]
+        assert [c['sku_id'] for c in candidates] == ['P1003-S1','P1008-S1']
+        assert candidates[0]['facts']['sku']['price_major'] == 129
+        assert candidates[0]['facts']['product']['weight_kg'] == .38
+        assert candidates[0]['assessment'] == '适合优先考虑便携性的需求，实际适配仍需核验。'
+        assert candidates[0]['open_questions'] == ['是否有电脑仓？']
+        assert 'description' not in result.final_text and '商品原文' not in result.final_text
         assert state['task_plan']['tasks']['bag']['reported']
         assert not state['task_plan']['tasks']['bag'].get('delivered')
         assert not await c.orchestrator._evidence_store.search('buyer', 's', kind='display_batch')
@@ -81,8 +87,8 @@ async def test_research_report_requires_existing_current_task(source):
     result = await tool(['P1003'], SimpleNamespace(state={'messages': messages, 'task_plan': {'tasks': tasks}}))
     if source == 'current':
         assert result.ok and result.data['status'] == 'completed'
-        assert 'P1003 正确商品名' in result.data['guidance']
-        assert '11958.33 JPY' in result.data['guidance'], '价格不能按默认六位有效数字显示而失去小数'
+        assert result.data['reports'][0]['items'][0]['facts']['product']['title'] == 'P1003 正确商品名'
+        assert result.data['reports'][0]['items'][0]['facts']['sku']['price_major'] == 11958.33, '结构化价格不能失去原币小数'
     else:
         assert not result.ok and result.error_code == 'business_rejected'
 

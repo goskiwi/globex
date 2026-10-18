@@ -33,7 +33,7 @@ class Candidate(BaseModel):
     product_id: str = Field(min_length=1)
     sku_id: str | None = Field(default=None, min_length=1, description="已读 SKU；未指定规格时省略或用 null，不能传空字符串")
     assessment: str = Field(min_length=1, max_length=240,
-        description='用一到两句说明为什么选这款、适合本次哪种优先项及必要取舍，依据已读资料，不复述价格、数量、库存或价格排名。建议与已核验事实分开展示；未知功能、适配或实际体验如实保留不确定性，不凭轻重量承诺久背舒适')
+        description='简明说明为什么选这款、适合本次哪种优先项及必要取舍，依据已读资料，不复述价格、数量、库存或价格排名。建议与已核验事实分开展示；未知功能、适配或实际体验如实保留不确定性，不凭轻重量承诺久背舒适')
     evidence_fields: list[Literal['description','highlights','dimensions_cm','material_tags','rating_summary','ships_to']] = Field(
         min_length=1, max_length=6, description='选择支撑本次取舍的已读商品字段，系统展示其原值；这里只选字段，取舍说明写assessment')
     open_questions: list[str] = Field(default_factory=list, max_length=6,

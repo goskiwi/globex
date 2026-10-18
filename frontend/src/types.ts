@@ -139,6 +139,7 @@ export interface ProductView {
 }
 
 export interface CommerceSnapshot {
+  researchReports: ResearchDelivery[];
   productViews: ProductView[];
   comparison: Comparison | null;
   recommendation: Recommendation | null;
@@ -239,4 +240,46 @@ export interface SkillUsage {
   title?: string;
   contentHash?: string;
   status: "reading" | "used" | "error";
+}
+
+export interface ResearchCandidate {
+  product_id: string;
+  sku_id: string | null;
+  assessment: string;
+  open_questions: string[];
+  unmet_constraints: string[];
+  facts: {
+    product: Partial<ProductCard>;
+    sku: ProductCard['skus'][number] | null;
+    historical: boolean;
+    observed_at?: string;
+    result_ref?: string;
+    quotes: {ship_to: string; currency: string; historical: boolean; line: PriceLine}[];
+  };
+  evidence: {field: string; label: string; value: unknown}[];
+}
+export interface ResearchReport {
+  task_id: string;
+  goal: string;
+  status: 'completed' | 'partial' | 'needs_input' | 'failed';
+  product_count: number;
+  sku_count: number;
+  items: ResearchCandidate[];
+  price_comparisons: {
+    kind: 'unit_price' | 'landed_price'; quantity: number; currency: string; ship_to?: string;
+    compared_sku_count: number; minimum_minor: number; maximum_minor: number; spread_minor: number;
+    lowest: {product_id: string; sku_id: string; title: string; amount_minor: number}[];
+    highest: {product_id: string; sku_id: string; title: string; amount_minor: number}[];
+  }[];
+  unmet_constraints: string[];
+  questions: string[];
+  issues: string[];
+}
+export interface ResearchDelivery {
+  runId: string;
+  guidance: string;
+  reports: ResearchReport[];
+  status: 'completed' | 'partial';
+  task_ids: string[];
+  completed_task_ids: string[];
 }

@@ -91,4 +91,5 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
     research_partial = result.get('research_delivery_status') == 'partial'
     return ExecutionResult(text, "needs_input" if result.get("delivery_needs_input") else
                            "failed" if reason == "provider_refusal" else "partial" if reason or plan_incomplete or research_partial else "completed", reason,
-                           bool(result.get("product_delivery_complete")))
+                           bool(result.get("product_delivery_complete")),
+                           result.get("research_delivery_status") in {"completed", "partial"})

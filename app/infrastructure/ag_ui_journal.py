@@ -359,7 +359,7 @@ class AGUIJournal:
             current_delivery = await self._latest_delivery(db, session_id, buyer_id)
             active_delivery = {'recommendation':None, 'comparison':None, 'deliveredRunId':None, **current_delivery}
             run["state"].update(active_delivery)
-            messages, deliveries, product_views, processes = {}, {}, {}, []
+            messages, deliveries, product_views, research_reports, processes = {}, {}, {}, {}, []
             async with db.execute(
                 "SELECT run_id,status,projection_json,updated_at FROM agui_runs "
                 "WHERE session_id=? AND buyer_id=? ORDER BY created_at,rowid",
@@ -382,6 +382,9 @@ class AGUIJournal:
                     for view in state.get("productViews", []):
                         if view.get("runId") == saved["run_id"] and view.get("purpose") == "product_view":
                             product_views[view["runId"]] = view
+                    for report in state.get("researchReports", []):
+                        if report.get("runId") == saved["run_id"]:
+                            research_reports[report["runId"]] = report
                     products = (state.get("comparison") or state.get("recommendation") or {}).get("hits", [])
                     if products and (saved["status"] == "completed" or state.get("deliveredRunId")):
                         origin = state.get("deliveredRunId") or saved["run_id"]
@@ -402,5 +405,5 @@ class AGUIJournal:
                 events = [{"id": f"{item['run_id']}:{item['seq']}", "type": item["type"],
                            "timestamp": item["timestamp"]} for item in await cursor.fetchall()]
             return {"id": session_id, "title": row["title"], "messages": list(messages.values()),
-                    "productHistory": product_history, "productViews": list(product_views.values()), "processes": processes, "events": events[::-1],
+                    "productHistory": product_history, "productViews": list(product_views.values()), "researchReports": list(research_reports.values()), "processes": processes, "events": events[::-1],
                     "state": {**json.loads(row["state_json"]), **active_delivery}, "run": run, "updatedAt": int(row["updated_at"] * 1000)}

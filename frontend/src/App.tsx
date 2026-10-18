@@ -10,6 +10,8 @@ import Markdown from "./components/Markdown";
 import EventTimeline from "./components/EventTimeline";
 import ProductCards, { ProductImage } from "./components/ProductCards";
 import ProductHistory from "./components/ProductHistory";
+import ResearchReports from "./components/ResearchReports";
+import {CatalogMediaProvider} from "./components/CatalogMedia";
 import ProductDetail from "./components/ProductDetail";
 import ConfirmationCards from "./components/ConfirmationCards";
 import OrderIntentForm from "./components/OrderIntentForm";
@@ -306,7 +308,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
   }
 
   return (
-    <>
+    <CatalogMediaProvider request={agent.workspaceRequest}>
       {updateAvailable&&<div className="frontend-update" role="status">页面有更新；当前输入和操作会保留，空闲后自动加载新版。</div>}
       <aside className="sidebar" aria-label="主导航">
         <button
@@ -472,6 +474,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
                           .map(view=><section key={view.runId} className="product-views" aria-label="商品详情">
                             <ProductCards mode="view" products={view.hits} onDetail={setDetail}/>
                           </section>)}
+                        {agent.researchReports.filter(report=>message.id===`${report.runId}:final:answer`).map(report=><ResearchReports key={report.runId} delivery={report}/>)}
                         <ProductHistory batches={agent.productHistory?.filter(batch => message.id === `${batch.runId}:final:answer`)}/>
                       </div>
                     ),
@@ -722,6 +725,6 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
       <div className={`toast ${toast ? "visible" : ""}`} role="status">
         {toast}
       </div>
-    </>
+    </CatalogMediaProvider>
   );
 }

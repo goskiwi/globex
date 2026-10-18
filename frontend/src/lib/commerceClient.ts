@@ -18,8 +18,11 @@ import { recoveringFetch } from "./recoveringFetch";
 import { readPublishedSkills, readSkillUsages } from "./skills";
 import {readProcess,readProcesses,upsertProcess} from './execution';
 
+import {readResearchReports} from './research';
+
 const MAX_SESSIONS = 12;
 interface SavedSession {
+  researchReports: CommerceSnapshot['researchReports'];
   processes: RunProcess[];
   productViews: CommerceSnapshot['productViews'];
   comparison: import("../types").Comparison | null;
@@ -283,6 +286,7 @@ function displayMessages(
 function emptySnapshot(sessionId = newId()): CommerceSnapshot {
   return {
     productViews: [],
+    researchReports: [],
     shoppingForms: [],
     shoppingFilters: {},
     sessionId,
@@ -387,6 +391,7 @@ export class CommerceClient {
                 title: entry.title,
                 updatedAt: entry.updatedAt,
                 productViews: readProductViews(entry.productViews),
+                researchReports: readResearchReports(entry.researchReports),
                 processes: readProcesses(entry.processes),
                 messages: readMessages(entry.messages),
                 deliveredRunId: typeof entry.deliveredRunId === 'string' ? entry.deliveredRunId : null,
@@ -406,6 +411,7 @@ export class CommerceClient {
           ...emptySnapshot(saved.id),
           messages: saved.messages,
           productViews: saved.productViews,
+          researchReports: saved.researchReports,
           processes: saved.processes,
           deliveredRunId: saved.deliveredRunId, productHistory: saved.productHistory, recommendation: saved.recommendation, comparison: saved.comparison,
           recoverableRunId: saved.runId ?? null,
@@ -450,6 +456,7 @@ export class CommerceClient {
       updatedAt: Date.now(),
       messages: this.snapshot.messages.slice(-100),
       productViews: this.snapshot.productViews,
+      researchReports: this.snapshot.researchReports,
       processes: this.snapshot.processes,
       deliveredRunId: this.snapshot.deliveredRunId, productHistory: this.snapshot.productHistory, recommendation: this.snapshot.recommendation, comparison: this.snapshot.comparison,
       runId: this.snapshot.recoverableRunId,
@@ -720,10 +727,12 @@ export class CommerceClient {
   };
 
   private applyDelivery(state: Record<string, unknown>, runId: string): Partial<CommerceSnapshot> {
+    const researchAdditions = readResearchReports(state.researchReports);
+    const researchReports = [...this.snapshot.researchReports.filter(report => !researchAdditions.some(next => next.runId === report.runId)), ...researchAdditions];
     const additions = readProductViews(state.productViews);
     const productViews = [...this.snapshot.productViews.filter(view => !additions.some(next => next.runId === view.runId)), ...additions];
     const recommendation=readRecommendation(state.recommendation), comparison=readComparison(state.comparison);
-    if (!recommendation && !comparison) return {productViews};
+    if (!recommendation && !comparison) return {productViews,researchReports};
     const origin=typeof state.deliveredRunId==="string" ? state.deliveredRunId : runId;
     let productHistory=(this.snapshot.productHistory ?? []).filter(b=>b.runId!==origin);
     const previous=this.snapshot.comparison?.hits ?? this.snapshot.recommendation?.hits ?? [];
@@ -732,7 +741,7 @@ export class CommerceClient {
       productHistory=[...productHistory.filter(b=>b.runId!==previousRun),
         {runId:previousRun,updatedAt:this.sessions.find(s=>s.id===this.snapshot.sessionId)?.updatedAt ?? Date.now(),products:previous}];
     }
-    return {recommendation,comparison,deliveredRunId:origin,productHistory,productViews};
+    return {recommendation,comparison,deliveredRunId:origin,productHistory,productViews,researchReports};
   }
 
   private applyServerRun(run: Record<string, unknown>) {
@@ -766,6 +775,7 @@ export class CommerceClient {
         ...(Array.isArray(data.messages) ? {messages: readMessages(data.messages)} : {}),
         productHistory: readProductHistory(data.productHistory),
         productViews: readProductViews(data.productViews),
+        researchReports: readResearchReports(data.researchReports),
         processes:readProcesses(data.processes),
         events: Array.isArray(data.events) ? data.events.filter(isRecord).flatMap(item =>
           typeof item.id === "string" && typeof item.type === "string"
@@ -1095,6 +1105,7 @@ export class CommerceClient {
       ...emptySnapshot(id),
       messages: session?.messages ?? [],
       productViews: session?.productViews ?? [],
+      researchReports: session?.researchReports ?? [],
       processes: session?.processes ?? [],
       deliveredRunId: session?.deliveredRunId ?? null, productHistory: session?.productHistory ?? [], recommendation: session?.recommendation ?? null, comparison: session?.comparison ?? null,
       recoverableRunId: session?.runId ?? null,

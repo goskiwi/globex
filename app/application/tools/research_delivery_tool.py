@@ -6,8 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.usecases.research_report import project_research_report, research_summary
 from app.domain.catalog.exchange_rate import ExchangeRateTable
-from app.domain.catalog.money import Money
-import json
 
 
 class ResearchDeliveryInput(BaseModel):
@@ -17,52 +15,13 @@ class ResearchDeliveryInput(BaseModel):
 
 
 def _report(data):
+    """正文说明本次交付范围；候选取舍和已读资料由研究组件完整展示。"""
     lines = ['### ' + data['goal'], research_summary(data['status'], data['items'])]
-    for candidate in data['items']:
-        facts = candidate['facts']
-        product, sku = facts.get('product', {}), facts.get('sku') or {}
-        title = product.get('title') or candidate['product_id']
-        identity = candidate.get('sku_id') or candidate['product_id']
-        lines.append(f"- **{title}**（{identity}）")
-        if facts.get('historical'):
-            lines.append('  历史资料：以下价格、库存和属性来自历史读取，尚未重新核验。')
-        observed = []
-        if sku.get('spec'):
-            observed.append('规格：' + sku['spec'])
-        if sku.get('price_major') is not None and sku.get('currency'):
-            price = str(sku['price_major']).removesuffix('.0')
-            observed.append(f"商品单价 {price} {sku['currency']}")
-        if product.get('weight_kg') is not None:
-            observed.append(f"重量 {product['weight_kg']} kg")
-        if observed:
-            lines.append('  已读事实：' + '；'.join(observed) + '。')
-        lines.append('  取舍建议：' + candidate['assessment'])
-        for evidence in candidate['evidence']:
-            value = evidence['value']
-            if not isinstance(value, str):
-                value = json.dumps(value, ensure_ascii=False)
-            lines.append('  ' + evidence['label'] + '：' + value)
-        if candidate.get('open_questions'):
-            lines.append('  待核验问题：' + '；'.join(candidate['open_questions']))
-        if candidate.get('unmet_constraints'):
-            lines.append('  未满足要求：' + '；'.join(candidate['unmet_constraints']))
-    for comparison in data['price_comparisons']:
-        currency = comparison['currency']
-        money = lambda key: str(Money.of(comparison[key], currency))
-        lowest = '、'.join(row['sku_id'] for row in comparison['lowest'])
-        highest = '、'.join(row['sku_id'] for row in comparison['highest'])
-        basis = ('单件商品价，按当前业务汇率折算，不含运税' if comparison['kind'] == 'unit_price'
-                 else f"到手报价，每个规格{comparison['quantity']}件、配送至{comparison['ship_to']}")
-        lines.append(f"本报告{comparison['compared_sku_count']}个规格的同口径价格比较（{basis}）："
-                     f"最低 {money('minimum_minor')}（{lowest}）；最高 {money('maximum_minor')}（{highest}）；"
-                     f"差额 {money('spread_minor')}。")
-    for key, label in (('unmet_constraints', '未满足要求'), ('questions', '需要补充'),
-                       ('issues', '未完成事项')):
+    for key, label in (('unmet_constraints', '未满足要求'), ('questions', '需要补充'), ('issues', '未完成事项')):
         if data.get(key):
             lines.append(label + '：' + '；'.join(data[key]))
     if data.get('transaction_state') == 'awaiting_confirmation':
         lines.append('已有确认单等待页面批准，尚未执行交易。')
-    lines.append('以上为本次已读研究资料，后续购买仍需核验价格、库存和具体规格。')
     return '\n\n'.join(lines)
 
 

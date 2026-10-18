@@ -17,7 +17,7 @@ it('同款一张可点击商品卡，不把平台规格表塞进卡片，也不�
   const groups=groupProductRecords(products);expect(groups).toHaveLength(1);expect(groups[0].records).toEqual(products);
   const html=renderToStaticMarkup(<ProductCards mode="view" products={products} onDetail={()=>{}}/>);
   expect(html.match(/<article/g)).toHaveLength(1);
-  expect(html).not.toContain('product-visual');expect(html).toContain('product-topline');expect(html).toContain('查看详情');expect(html).toContain('选这款');
+  expect(html).toContain('product-visual');expect(html).toContain('product-topline');expect(html).toContain('查看详情');expect(html).toContain('选这款');
   expect(html).toContain('Amazon');expect(html).toContain('eBay');expect(html).toContain('213.99');
   expect(html).not.toContain('198.00');expect(html).not.toContain('<details');expect(html).not.toContain('<table');
   expect(html).not.toContain('平台记录');

@@ -1,0 +1,22 @@
+.research-reports { margin:16px 0 28px 42px;min-width:0; }
+.research-caption,.research-count { color:var(--muted);font-size:12px;line-height:1.7; }
+.research-category { margin:22px 0 30px; }
+.research-heading { display:flex;align-items:baseline;gap:16px;justify-content:space-between; }
+.research-heading h3 { margin:0;font-size:17px;line-height:1.65;font-weight:600; }
+.research-heading>span { flex-shrink:0;color:var(--muted);font-size:12px; }
+.research-count { margin:6px 0 14px; }
+.research-reports summary { cursor:pointer;font-size:12px;color:var(--muted);padding:9px 0; }
+.research-reports details p,.research-reports details li,.research-source p { font-size:13px;line-height:1.8;overflow-wrap:anywhere; }
+.research-reports details p { margin:8px 0; }
+.research-reports details ul { padding-left:20px;margin:6px 0 10px; }
+.research-prices { margin-top:12px; }
+.research-prices dl { font-size:13px;line-height:1.7; }
+.research-prices dl>div { display:flex;gap:18px;margin:8px 0; }
+.research-prices dt { flex-shrink:0;color:var(--muted); }
+.research-prices dd { margin:0;overflow-wrap:anywhere; }
+.research-reports .product-body { display:flex;flex-direction:column;flex:1; }
+.research-reports .product-footer { margin-top:auto; }
+@media(max-width:640px) {
+  .research-reports { margin-left:0; }
+  .research-heading { align-items:flex-start;gap:10px; }
+}

@@ -34,11 +34,13 @@ class AGUIRunAdapter:
         self.request = request
         self.emit = emit
         self._pending_delivery = None
+        self._pending_research = None
         self.state: dict[str, Any] = {
             "recommendation": None,
             "comparison": None,
             "deliveredRunId": None,
             "productViews": [],
+            "researchReports": [],
             "shoppingForms": [],
             "shoppingFilters": {},
             "confirmations": [],
@@ -148,6 +150,8 @@ class AGUIRunAdapter:
                 content=content,
                 role="tool",
             ))
+            if success and name == "present_research":
+                self._pending_research = copy.deepcopy(event.data)
             arguments = self._tool_arguments.pop(event.tool_call_id,{})
             if success and name=='update_shopping_state' and isinstance(event.data,dict) and isinstance(event.data.get('filters'),dict):
                 self.state['shoppingFilters']=copy.deepcopy(event.data['filters'])
@@ -262,7 +266,7 @@ class AGUIRunAdapter:
         self._tool_open.clear()
         self._tool_arguments.clear()
 
-    def finish(self, final_text: str, status: str, stop_reason: str | None, *, product_delivery_complete: bool = False) -> None:
+    def finish(self, final_text: str, status: str, stop_reason: str | None, *, product_delivery_complete: bool = False, research_delivery_complete: bool = False) -> None:
         if self._completed:
             return
         self._completed = True
@@ -286,6 +290,9 @@ class AGUIRunAdapter:
                 name = next(name for name, value in DELIVERY_TOOLS.items() if value==kind)
                 title = {'recommendation':'交付最终推荐','comparison':'交付比较结果','product_view':'展示商品详情'}[kind]
                 self._progress(identifier,title,'completed',delivery_summary(name,payload,delivered=True))
+        if status in {"completed", "partial"} and research_delivery_complete and not self.state["toolApprovals"] and self._pending_research is not None:
+            self.state["researchReports"] = [{**self._pending_research, "runId": self.request.run_id}]
+        self._pending_research = None
         self._pending_delivery = None
         self.state["status"] = "awaiting_confirmation" if self.state["toolApprovals"] else status
         self.state["executionStatus"] = status

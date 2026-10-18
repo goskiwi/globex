@@ -23,3 +23,4 @@ class SubmitIntentOutput:
     status: str = "completed"
     stop_reason: str | None = None
     product_delivery_complete: bool = False
+    research_delivery_complete: bool = False

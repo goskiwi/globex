@@ -3,7 +3,7 @@ import {expect, it} from "vitest";
 import ProductCards, {money} from "../src/components/ProductCards";
 import type {ProductCard} from "../src/types";
 
-it("推荐卡突出对应数量的到手价，不展示账单小字、SKU、额外提示或评分", () => {
+it("推荐卡保留原项目图片区和评分，金额仍对应具体数量与SKU", () => {
   const product: ProductCard = {
     product_id:"P1001", title:"旅行套装", brand:"test", category:"旅行装备", origin_country:"CN",
     price_major:189, currency:"CNY", highlights:[], score:0, default_sku_id:"P1001-S1", quantity:2,
@@ -27,15 +27,15 @@ it("推荐卡突出对应数量的到手价，不展示账单小字、SKU、额�
   expect(html).toContain("需要权衡：只有一种颜色");
   expect(html).not.toContain("评分为快照");
   expect(html).not.toContain("未下单");
-  expect(html).not.toContain("327");
-  expect(html).not.toContain("样例");
+  expect(html).toContain("327");
+  expect(html).toContain("样例");
   expect(html).not.toContain("<ul");
   expect(product.tradeoffs).toHaveLength(3);
   expect(product.rating_summary?.review_count).toBe(327);
-  expect(html).toContain('alt="旅行套装"');
-  expect(html).not.toContain("示意图");
-  expect(html).not.toContain("实拍");
-  expect(html).not.toContain("非实物照片");
+  expect(html).toContain('alt="AI 生成示意图，非商品实拍"');
+  expect(html).toContain("示意图");
+  expect(html).toContain("非商品实拍");
+  expect(html).toContain("非实物照片");
 });
 
 it("没有匹配的规格报价时只显示商品价，不把别的规格到手价当作当前金额",()=>{

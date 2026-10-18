@@ -60,7 +60,7 @@ class ControlledOrchestrator:
             raise
         event_observer(SimpleNamespace(type="TEXT_BLOCK_END", block_id="text-1"))
         return SimpleNamespace(status="completed", stop_reason=None, final_text="已找到适合周末旅行的背包", error=None,
-                               product_delivery_complete=True)
+                               product_delivery_complete=True, research_delivery_complete=False)
 
 
 async def wait_status(journal, run_id, status):
