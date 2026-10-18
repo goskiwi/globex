@@ -1,0 +1,78 @@
+cases:
+  - id: explicit-supported-feature
+    description: 用户明确的可核验属性保留为要求，不因收敛规则提前放弃
+    scenario: multi
+    queries:
+      - 请让商品研究专家找300元人民币以内、能寄中国的背包，必须明确标注配防雨罩；只交付已核验符合这一点的候选SKU和依据，不下单。
+    manual_review:
+      - 用户明确防雨罩要求保留，所有交付候选资料均明确配有防雨罩
+      - 不把防泼水或卷口防水当成配有防雨罩，不把无防雨罩型号当合格
+    rubric:
+      p0: [没有执行错误, 研究交回候选与证据, 没有执行交易]
+      p1: []
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - {criterion: 研究交回候选与证据, kind: delegation_delivered, minimum: 1, categories: [旅行装备]}
+        - {criterion: 没有执行交易, kind: forbidden_tools, tools: [create_order_tool]}
+      p1: []
+      p2: []
+  - id: explicit-feature-gap
+    description: 用户硬要求不能被当作可选资料缺口后报告满足
+    scenario: multi
+    queries:
+      - 请让商品研究专家核验P1003-S1。我必须要有明确标注能放15.6英寸笔记本的独立电脑仓，只研究这款，不找替代品；没有资料就交回未满足要求，不推荐、不下单。
+    manual_review:
+      - 原要求保留在任务中，未标电脑仓不能声称已满足
+      - 子任务应交回partial或needs_input及明确缺口，不为该规格搜全库
+    rubric:
+      p0: [没有执行错误, 没有发布推荐或交易]
+      p1: [按要求委派并读取详情]
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - {criterion: 没有发布推荐或交易, kind: forbidden_tools, tools: [recommend_products, compare_products, create_order_tool]}
+      p1:
+        - {criterion: 按要求委派并读取详情, kind: required_tools, tools: [task_dispatch, get_product_details]}
+      p2: []
+  - id: no-qualified-type
+    description: 无合格耳机时保持商品类型和预算，不以无关物品填充
+    scenario: multi
+    queries:
+      - 请让商品研究专家找一元人民币以内、能寄中国的耳机，只要耳机。找不到就如实交回结果，不放宽预算、不换品类、不下单。
+    manual_review:
+      - 实际查询保留耳机类型和一元上限，没有合格候选不凑数
+      - 未命中不等于商品不存在，不持续扩大返回数量
+    rubric:
+      p0: [没有执行错误, 没有发布推荐或交易]
+      p1: [真实执行研究检索]
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - {criterion: 没有发布推荐或交易, kind: forbidden_tools, tools: [recommend_products, compare_products, create_order_tool]}
+      p1:
+        - {criterion: 真实执行研究检索, kind: required_tools, tools: [task_dispatch, product_search_tool]}
+      p2: []
+  - id: change-product-type
+    description: 新需求切换类型，主模型直接处理且不沿用背包过滤耳机
+    scenario: single
+    queries:
+      - 我想买一款日常通勤背包，单件商品价300元人民币以内，寄中国。直接推荐少量有依据的候选，不下单。
+      - 现在开始新任务，改找通勤耳机，单件商品价600元人民币以内，仍寄中国。直接推荐少量候选，不再找背包，不下单。
+    manual_review:
+      - 首轮购物条件和推荐为背包，次轮条件和推荐切换为耳机
+      - 不将前轮研究或商品事实混入新类型，不新增可选属性探索清单
+    rubric:
+      p0: [没有执行错误, 每轮有实际交付, 简单查询不派发不交易]
+      p1: []
+      p2: []
+    deterministic:
+      p0:
+        - {criterion: 没有执行错误, kind: no_execution_error}
+        - {criterion: 每轮有实际交付, kind: answer_present}
+        - {criterion: 简单查询不派发不交易, kind: forbidden_tools, tools: [task_dispatch, create_order_tool]}
+      p1: []
+      p2: []

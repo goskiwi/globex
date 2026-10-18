@@ -20,8 +20,7 @@ class DelegatedTask(BaseModel):
     filters: Filters | None = Field(default=None, description="仅本品类与当前条件不同的字段；未提供字段继承当前状态，不写回主状态。多品类预算分别填写，禁止把全局总预算当每品类预算。")
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     goal: str = Field(min_length=1, description="本次子任务需要解决的问题")
-    requirements: list[str] | None = Field(default=None, description="filters 无法表达的用户明确要求；未填则继承当前购物状态。保留否定和条件含义，研究者自己想检查的属性写 research_dimensions")
-    research_dimensions: list[str] = Field(default_factory=list, description="研究时希望了解的属性，如背负/续航；不是用户硬要求，缺资料记 unknowns，不据此判任务未完成")
+    requirements: list[str] | None = Field(default=None, description="filters 无法表达的用户明确要求；未填则继承当前购物状态。保留否定和条件含义，不加入研究者凭品类常识想到的属性")
     preferences: list[str] | None = Field(default=None, description="买家明确表达的本品类软偏好；不填则继承，不得把品类常识当用户要求")
     known_facts: list[str] = Field(default_factory=list, description="当前原文之外的必要背景，如此前提供的地址；不重复 filters、候选商品事实或已选数量")
     skill_refs: list[SkillReference] = Field(default_factory=list, max_length=8,
@@ -41,11 +40,11 @@ class AgentSubmission(BaseModel):
     """子图通过原生提交工具交付，金额与交易状态由业务工具提供。"""
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     status: Literal["completed", "partial", "needs_input", "failed"] = Field(
-        description="相对本次委派目标判断；completed 不得有未完成项，准备确认单完成不等于交易执行")
+        description="相对本次委派目标判断；completed 不得有未完成项。检索成功但没有符合明确条件的候选时用partial，candidates=[]并列未满足条件，不是服务failed。准备确认单完成不等于交易执行")
     summary: str = Field(min_length=1, description="简述本次委派完成了什么；不重复候选详情，不重抄金额库存；只用一句话说明本次交付")
     candidates: list[Candidate] = Field(default_factory=list, max_length=MAX_DECISION_ITEMS,
-        description="已经筛选的候选，不是全部检索命中；未完成筛选时填 []，用 issues 说明缺口")
-    unmet_constraints: list[str] = Field(default_factory=list, description="本次明确要求但未满足的条件；不要列用户未要求的属性")
+        description="已经筛选的候选，不是全部检索命中；无合格候选时填[]，不把filtered_out中的商品拿来凑候选。未完成筛选时也填[]，用issues说明缺口")
+    unmet_constraints: list[str] = Field(default_factory=list, description="本次明确要求但未满足的条件，包括预算/类型/配送条件下没有合格候选；不要列用户未要求的属性")
     questions: list[str] = Field(default_factory=list, description="完成本次任务必须向用户追问的问题；completed 时为空")
     unknowns: list[str] = Field(default_factory=list, description="研究维度的资料缺口，不等同用户要求未满足；completed 可以有 unknowns，禁止凭常识补成已核验事实")
     issues: list[str] = Field(default_factory=list, description="阻碍本次任务完成的错误；completed 时为空，一般局限放候选 reason")
@@ -103,9 +102,12 @@ reason 不重复具体金额、重量、评分或评价数，程序会附规范�
 “最强/最舒适/综合最优”等判断须有本次候选集合的明确可比证据；胸带、材质或外形不能单独证明舒适度、防护或实际隔音效果。
 交付 facts.product 只有商品级资料，facts.sku 是该 SKU 原币单价/库存，facts.quotes 按数量/目的地/币种分开；缺报价不能借用其他 SKU 的价格。
 completed 不得有未完成项；partial 必须列出缺口；needs_input 必须给 questions；failed 必须给 issues。
-只把用户明确要求但未满足的内容列入 unmet_constraints；研究维度缺资料写 unknowns，仍可 completed。
+检索成功但没有符合明确条件的候选时，提交partial、candidates=[]，在unmet_constraints说明哪项要求未满足。
+空结果不是服务failed；不要为凑候选读取和提交filtered_out中的超预算或缺货商品。用户要求展示不合格对照时另作明确说明。
+只把用户明确要求但未满足的内容列入 unmet_constraints；候选资料中的可选属性缺失写 unknowns，仍可 completed。
 unknowns 不等于需要用户补充，不能仅因目录没写属性就反复追问用户；不把品类常识升级成用户要求。
-已有符合明确要求的候选且能说明取舍时就提交；可选属性在已读资料中未标注，写unknowns后结束该维度，不为补齐它继续换词或跨品类搜索。
+按明确目标找候选，再查少数候选详情，最后用已有资料作取舍并提交。不要先列电脑仓、衬垫厚度等全套属性探索清单。
+已有符合明确要求的候选且能说明取舍时就提交；可选属性在详情中未标注，写unknowns，不为补齐它继续换词或跨品类搜索。
 先复用已读结果；已归档的具体资料按引用回查，不为重新取得同一事实重复检索。只有明确的新要求、候选不足或新的相关证据才补查。
 候选必须来自本子任务实际读取的结果；上级引用需要通过查询工具读取后才能作为依据。
 收到 handoff_feedback 时只纠正提交，不重新执行业务工具。

@@ -140,14 +140,19 @@ async def test_delegation_keeps_prior_conditions_and_current_source_without_subs
         'messages':[HumanMessage(content='继续研究，条件不变',name='b')]},tool_call_id='task')
     tool=build_task_dispatch_tool(factory,factory,TradeEventBus())
     try:
-        result=await tool('search_agent',{'goal':'研究','requirements':['不要防水款'],
-            'research_dimensions':['电脑隔层']},runtime=runtime)
+        result=await tool('search_agent',{'goal':'研究','requirements':['不要防水款']},runtime=runtime)
         assert result.ok
         assert factory.seen[0]['parent_context']['effective_search']['unverified_requirements']==['不要防水款']
         assert factory.seen[0]['parent_context']['latest_user_request']=='继续研究，条件不变'
-        assert factory.seen[0]['delegated_task']['research_dimensions']==['电脑隔层']
+        assert 'research_dimensions' not in factory.seen[0]['delegated_task']
     finally:
         ShoppingContext.reset(token)
+
+
+def test_delegation_rejects_removed_research_dimensions_without_alias():
+    from app.application.agents.handoff import DelegatedTask
+    with pytest.raises(ValidationError):
+        DelegatedTask(goal='找通勤背包', research_dimensions=['电脑隔层'])
 
 
 @pytest.mark.parametrize('sku', ['', ' ', '\t\n'])

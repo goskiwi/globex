@@ -26,7 +26,7 @@ class SearchQuery(BaseModel):
         "anyOf": [{"required":[field], "properties":{field:{"type":"string", "minLength":1}}}
                   for field in ("normalized_query", "product_id", "sku_id")]})
     normalized_query: str = Field(default="", description="检索词；精确 ID 查询时可以省略")
-    category: Category | None = Field(default=None, description="目录一级分类，不填则不限制分类")
+    category: Category | None = Field(default=None, description="仅用户明确限定的目录一级分类；商品类型已生效时无需猜测大类，不填则跨分类检索")
     top_k: int = Field(default=5, ge=1, le=50, strict=True, description="候选数量，1 到 50")
     product_id: str | None = Field(default=None, pattern=r"^P\d{4,}$", description="精确商品 ID")
     sku_id: str | None = Field(default=None, pattern=r"^P\d{4,}-S\d+$", description="精确 SKU；与商品 ID 同传时须属于同一商品")
