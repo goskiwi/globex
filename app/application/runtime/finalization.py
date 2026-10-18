@@ -16,17 +16,17 @@ class RunFinalizer:
         self._sessions, self._bus = sessions, bus
         self._conversation_store, self._evidence_store = conversation_store, evidence_store
 
-    async def finish(self, intent, text, delivered, latency_ms, trace, persistence_guard):
+    async def finish(self, intent, text, delivered, latency_ms, trace, persistence_guard, *, cancelled=False):
         session_id = intent.shopping_session_id
-        if persistence_guard is not None and not persistence_guard():
-            await self._sessions.invalidate(session_id)
-            return
         try:
+            if persistence_guard is not None and not persistence_guard():
+                await self._sessions.invalidate(session_id)
+                return
             persisted = await self._sessions.persist(session_id)
             if persisted is False:
                 return
             record = self.record_conversation(intent, text, latency_ms, trace)
-            if text.startswith("[cancelled]"):
+            if cancelled:
                 task = asyncio.create_task(record)
                 try:
                     await asyncio.shield(task)
@@ -42,7 +42,7 @@ class RunFinalizer:
                     "buyer": intent.raw_query, "agent": text,
                 })
         except Exception as error:
-            if text.startswith("[cancelled]"):
+            if cancelled:
                 # 保存故障不能覆盖取消信号，也不能把中断改成可自动重试的故障。
                 logger.warning("中断收尾保存失败：%s", type(error).__name__)
                 return

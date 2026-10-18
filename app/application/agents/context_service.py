@@ -46,6 +46,10 @@ class ContextService:
                     result["working_notice"] = "旧购物状态不支持继续执行，请新建会话；历史对话保留。"
         return result
 
+    async def _require_no_pending(self, session, buyer):
+        if self.confirmations is not None and await self.confirmations.pending(buyer, session):
+            raise StaleSessionWrite("请先完成或拒绝待确认操作")
+
     async def start(self, session, buyer, request_id, expected_revision):
         identifier = hashlib.sha256(json.dumps([session, buyer, request_id]).encode()).hexdigest()
         try:
@@ -60,9 +64,7 @@ class ContextService:
         except SessionBusy as error:
             raise StaleSessionWrite(str(error)) from error
         try:
-            if self.confirmations is not None:
-                if await self.confirmations.pending(buyer, session):
-                    raise StaleSessionWrite("请先完成或拒绝待确认操作")
+            await self._require_no_pending(session, buyer)
             operation, created = await self.store.create_context_operation(session, buyer, request_id, expected_revision)
             if not created:
                 permit.release()
@@ -95,6 +97,8 @@ class ContextService:
         try:
             async with AsyncExitStack() as stack:
                 lease = await stack.enter_async_context(self.orchestrator.session_lease(session_id))
+                # 等待跨实例租约期间账本可能变化，在实际整理之前重新读取。
+                await self._require_no_pending(session_id, buyer)
                 await self.orchestrator.sessions.invalidate(session_id)
                 view = await self.store.context_view(session_id, buyer)
                 if view["revision"] != operation["expected_revision"]:

@@ -63,7 +63,7 @@ async def test_http_id_version_and_history_isolation(tmp_path):
     import httpx
     from tests.test_buyer_workspace import fixture,headers
     api,o,*_,policy=fixture(tmp_path)
-    o._sessions._main_factory._preference_store=make(tmp_path)
+    o.buyer_workspace.preferences=make(tmp_path)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api),base_url='http://test') as client:
         path='/commerce/preferences?buyer_id=alice'
         created=await client.post(path,headers=headers(policy),json={'kind':'like','statement':'喜欢裙子'})

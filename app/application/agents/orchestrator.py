@@ -32,7 +32,6 @@ from app.application.runtime.graph_execution import execute_graph
 logger = logging.getLogger(__name__)
 
 
-
 class MainAgentOrchestrator:
     def __init__(
         self,
@@ -97,9 +96,8 @@ class MainAgentOrchestrator:
         fresh_session: bool = False,
         persistence_guard: Callable[[], bool] | None = None,
     ) -> SubmitIntentOutput:
-        async with self.session_coordinator.hold(intent.shopping_session_id), AsyncExitStack() as stack:
-            if self._session_lease_factory is not None:
-                lease = await stack.enter_async_context(self._session_lease_factory(intent.shopping_session_id))
+        async with self.session_coordinator.hold(intent.shopping_session_id), self.session_lease(intent.shopping_session_id) as lease:
+            if lease is not None:
                 caller_guard = persistence_guard
                 persistence_guard = lambda: lease.is_valid() and (caller_guard is None or caller_guard())
                 fresh_session = True
@@ -151,6 +149,7 @@ class MainAgentOrchestrator:
         started_at = time.monotonic()
         trace = self._bus.subscribe(session_id) if self._conversation_store else None
         final_text = ""
+        cancelled = False
         delivered = None
         recommendation = None
 
@@ -257,6 +256,7 @@ class MainAgentOrchestrator:
             text = "选购环境已更新，旧记录仍保留。请在新会话中继续本次需求。"
             return SubmitIntentOutput(session_id, text, text, "SESSION_VERSION_CHANGED", status="failed", stop_reason="session_version_changed")
         except asyncio.CancelledError:
+            cancelled = True
             final_text = "[cancelled] 本轮执行已中断"
             self._bus.publish(session_id, "error", {"message": "本轮执行已中断", "cancelled": True})
             raise
@@ -269,7 +269,7 @@ class MainAgentOrchestrator:
             try:
                 finalizer = RunFinalizer(self._sessions, self._bus, self._conversation_store, self._evidence_store)
                 await finalizer.finish(intent, final_text, delivered,
-                    int((time.monotonic() - started_at) * 1000), trace, persistence_guard)
+                    int((time.monotonic() - started_at) * 1000), trace, persistence_guard, cancelled=cancelled)
             finally:
                 if trace is not None:
                     self._bus.unsubscribe(session_id, trace)
