@@ -1,5 +1,6 @@
 """现有图状态中的研究计划：定义来自买家需求，进度与候选来源来自工具回执。"""
 from dataclasses import replace
+from copy import deepcopy
 from typing_extensions import NotRequired
 import json
 from langchain.agents import AgentState
@@ -15,7 +16,7 @@ from app.application.runtime.research_plan import (
     ResearchPlan, project_plan, dependent_steps, record_research, apply_delivery,
 )
 
-DELIVERIES = {'recommend_products', 'compare_products'}
+DELIVERIES = {'recommend_products', 'compare_products', 'present_research'}
 
 
 
@@ -45,12 +46,15 @@ class TaskPlanMiddleware(AgentMiddleware):
             plan['last_batch'] = last.id
         plan = project_plan(work, policy, plan)
         # 无计划且只做直接查询时，不额外制造计划步骤。
-        hint = {'steps': plan['steps'], 'research': {key: {k:v for k,v in value.items() if k != 'scope'}
-                                                     for key,value in plan['tasks'].items()}}
+        hint = {'steps': plan['steps'], 'research': {key: {
+            'goal': value['scope']['goal'],
+            **{k: value[k] for k in ('status', 'qualified_skus', 'required_gaps', 'gaps', 'stale', 'delivered', 'reported') if k in value}}
+            for key, value in plan['tasks'].items()}}
         result = {'task_plan': plan}
         if plan['steps'] or plan['tasks'] or any(m.name == 'task_plan' for m in state['messages']):
             result['messages'] = [SystemMessage(id='current-task-plan', name='task_plan',
                 content='当前任务进度由实际证据产生；verified表示候选已核验，不代表整体交付。\n'
+                        '仅交付研究时用 present_research 一次引用各 task_id；研究报告不等于发布购物卡。\n'
                         + json.dumps(hint, ensure_ascii=False))]
         return result
 
@@ -76,6 +80,14 @@ class TaskPlanMiddleware(AgentMiddleware):
         token = ShoppingContext.set(replace(context, task_plan=plan))
         try:
             output = await handler(request)
+            if request.tool_call['name'] == 'present_research':
+                for receipt in tool_receipts(output):
+                    data = (receipt.artifact or {}).get('data', {})
+                    if receipt.status == 'success' and isinstance(data, dict):
+                        updated = deepcopy(plan)
+                        for key in data['completed_task_ids']:
+                            updated['tasks'][key]['reported'] = True
+                        return Command(update={'messages': [receipt], 'task_plan': updated})
             if request.tool_call['name'] in DELIVERIES:
                 for receipt in tool_receipts(output):
                     data = (receipt.artifact or {}).get('data', {})

@@ -105,6 +105,9 @@ main_agent:
        返回 status=partial 时先说明未满足的用户要求，不说“全部满足”；needs_input 时向买家提出 questions；failed 时不得当成功使用。
        completed 只表示本次研究成果已交付，不代表商品所有属性都已核验；unknowns 是资料缺口，最终答复单独列出，不改写成确定事实。
        研究总结区分“已核验事实”“取舍判断”“资料缺口”，不要用一句“全部完成”覆盖 partial 或 unknowns。
+       用户本轮只要各品类研究、不需要最终推荐或购物组合时，使用 present_research(task_ids) 一次交付所有所需研究。
+       task_ids 来自各回执 scope.task_id；程序从已读成果填充报告，成功后结束，不再生成比较卡或自由文字重写商品事实。
+       recommend_products / compare_products 只用于用户需要最终商品选择的轮次，研究完成不要求发布购物卡。
        stop_reason 由运行时提供，表示预算、步数或时间限制，不是提交格式错误，不要要求子代理反复修正格式。
        受限停止时的候选只是已读商品，不代表满足全部要求；保留其他子任务已完成成果，不重跑整个任务。
        completed 只表示委派目标完成，不表示交易执行；transaction_state=awaiting_confirmation

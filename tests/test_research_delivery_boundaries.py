@@ -252,6 +252,24 @@ async def test_protected_research_still_obeys_complete_request_capacity(tmp_path
             HumanMessage(name='buyer', content='当前研究'), message], 'read_tool_messages': ['large']})
 
 
+@pytest.mark.parametrize('count', [6, 14])
+async def test_current_finalist_details_stay_available_with_existing_candidate_limit(tmp_path, count):
+    from app.application.tools.recommendation_tools import MAX_DECISION_ITEMS
+    state = history(count)
+    state['messages'] = [m.model_copy(update={'name': 'get_product_details'}) if isinstance(m, ToolMessage) else m
+                         for m in state['messages'] if not isinstance(m, HumanMessage)]
+    state['messages'].insert(0, HumanMessage(id='current', name='buyer', content='核对本轮候选详情'))
+    middleware = policy(tmp_path, product_tokens=1)
+    middleware.model = None
+    update = await middleware.compact_checkpoint(state)
+    assert len(update['messages']) == max(0, count - MAX_DECISION_ITEMS)
+    for message in update['messages']:
+        assert json.loads(message.content)['archived']
+    state['messages'].append(HumanMessage(id='next', name='buyer', content='新的查询'))
+    old = await middleware.compact_checkpoint(state)
+    assert len(old['messages']) == count - 2, '旧轮次恢复原有回收规则，不永久保护详情'
+
+
 @pytest.mark.parametrize('completed', [False, True])
 def test_partial_run_only_publishes_a_completed_delivery(completed):
     from tests.test_product_delivery import adapter, emit

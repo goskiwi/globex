@@ -26,6 +26,65 @@ async def ask(c, text, **kwargs):
     return result,(await s.graph.aget_state(s.config)).values
 
 
+@pytest.mark.parametrize('partial', [False, True])
+async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_path, monkeypatch, partial):
+    child_models = iter([ScriptedModel(responses=[
+        call('get_product_details', {'product_id': product}),
+        submission(status='partial' if partial and product == 'P1008' else 'completed',
+            issues=['未核验用户额外要求'] if partial and product == 'P1008' else [],
+            unknowns=['没有电脑仓参数'], candidates=[{'product_id': product, 'sku_id': product + '-S1',
+            'reason': '明确资料支持的取舍'}])]) for product in ('P1003', 'P1008')])
+    steps = [{'id': key, 'goal': goal} for key, goal in [('bag', '背包研究'), ('cup', '水杯研究')]]
+    model = ScriptedModel(responses=[
+        call('update_shopping_state', {'update': {'plan': steps}}),
+        AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'args': {
+            'subagent_type': 'search_agent', 'task': {'goal': step['goal'], 'step_id': step['id']}},
+            'id': step['id']} for step in steps]),
+        call('present_research', {'task_ids': ['bag', 'cup']}),
+        AIMessage(content='下一轮无需重新交付研究。')])
+    c = await _container(tmp_path, monkeypatch, model)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: next(child_models))
+    try:
+        result, state = await ask(c, '分别请专家研究背包和水杯，本轮只要两份研究，不发布最终购物卡')
+        assert model.cursor == 3, '研究交付后不能再调用模型收尾'
+        assert result.status == ('partial' if partial else 'completed')
+        assert not result.product_delivery_complete
+        assert '背包研究' in result.final_text and '水杯研究' in result.final_text
+        assert 'Wanderlite' in result.final_text and 'P1003-S1' in result.final_text and 'P1008-S1' in result.final_text
+        assert '129 CNY' in result.final_text and '0.38 kg' in result.final_text
+        assert '没有电脑仓参数' in result.final_text
+        assert state['task_plan']['tasks']['bag']['reported']
+        assert not state['task_plan']['tasks']['bag'].get('delivered')
+        assert not await c.orchestrator._evidence_store.search('buyer', 's', kind='display_batch')
+        if not partial:
+            followup, _ = await ask(c, '谢谢，暂时不选购')
+            assert followup.status == 'completed'
+            assert model.cursor == 4, '新轮次不能被旧交付提前结束'
+    finally:
+        await c.shutdown()
+
+
+@pytest.mark.parametrize('source', ['missing', 'stale', 'current'])
+async def test_research_report_requires_existing_current_task(source):
+    from types import SimpleNamespace
+    from app.application.tools.research_delivery_tool import build_research_delivery_tool
+    from tests.test_research_delivery_boundaries import research_receipt
+    tool = build_research_delivery_tool()
+    report = research_receipt('P1003')
+    report['candidates'][0]['facts']['sku'].update(price_major=11958.33, currency='JPY')
+    messages = [ToolMessage(content='', name='task_dispatch', tool_call_id='failed',
+                            artifact={'data': {'status': 'failed', 'scope': None}}),
+                ToolMessage(content='', name='task_dispatch', tool_call_id='valid', artifact={'data': report})]
+    tasks = {} if source == 'missing' else {'P1003': {'stale': source == 'stale'}}
+    result = await tool(['P1003'], SimpleNamespace(state={'messages': messages, 'task_plan': {'tasks': tasks}}))
+    if source == 'current':
+        assert result.ok and result.data['status'] == 'completed'
+        assert 'P1003 正确商品名' in result.data['guidance']
+        assert '11958.33 JPY' in result.data['guidance'], '价格不能按默认六位有效数字显示而失去小数'
+    else:
+        assert not result.ok and result.error_code == 'business_rejected'
+
+
 def pick(sku='P1003-S1',task_id='bag'):
     return {'product_id':'P1003','sku_id':sku,'quantity':1,'reason':'旅行收纳','task_id':task_id}
 

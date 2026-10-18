@@ -205,6 +205,18 @@ class RequestContextMiddleware(AgentMiddleware):
                 candidates.append((index, message, payload))
         protected = {m.id for _, m, p in [c for c in candidates if 'hits' in c[2]][-2:]}
         protected.update(m.id for m in messages if isinstance(m, ToolMessage) and m.id not in read)
+        # 详情读取代表本轮正在核对的候选；普通两批保护会让稍早的详情被回收后再读。
+        # 沿用既有候选交付上限保留最近的不同观察，同身份的旧重复及旧轮次仍可归档。
+        from app.application.tools.recommendation_tools import MAX_DECISION_ITEMS
+        detail_identities = set()
+        for index, message, payload in reversed(candidates):
+            if index < latest_turn or message.name != 'get_product_details':
+                continue
+            identities = {result_identity(hit, payload.get('query_conditions', {}))
+                          for hit in payload.get('hits', [])}
+            if identities and not identities.issubset(detail_identities) and len(detail_identities | identities) <= MAX_DECISION_ITEMS:
+                protected.add(message.id)
+                detail_identities.update(identities)
         newest={}
         for _,message,payload in reversed(candidates):
             for hit in payload.get('hits',[]):

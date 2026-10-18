@@ -84,7 +84,11 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
     if not text.strip():
         return ExecutionResult("本轮未形成有效答复，请重试或缩小任务范围。", "failed", reason or "empty_delivery")
     plan_steps = result.get('task_plan', {}).get('steps', [])
-    plan_incomplete = any(step['status'] != 'delivered' for step in plan_steps)
+    reported = set(result.get('research_delivered_tasks', []))
+    reported.update(key for key, value in result.get('task_plan', {}).get('tasks', {}).items()
+                    if value.get('reported') and not value.get('stale'))
+    plan_incomplete = any(step['status'] != 'delivered' and step['id'] not in reported for step in plan_steps)
+    research_partial = result.get('research_delivery_status') == 'partial'
     return ExecutionResult(text, "needs_input" if result.get("delivery_needs_input") else
-                           "failed" if reason == "provider_refusal" else "partial" if reason or plan_incomplete else "completed", reason,
+                           "failed" if reason == "provider_refusal" else "partial" if reason or plan_incomplete or research_partial else "completed", reason,
                            bool(result.get("product_delivery_complete")))

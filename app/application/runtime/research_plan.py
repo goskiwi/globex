@@ -26,6 +26,7 @@ class ResearchTask(TypedDict):
     gaps: list[str]
     stale: NotRequired[bool]
     delivered: NotRequired[bool]
+    reported: NotRequired[bool]
 
 
 class ResearchPlan(TypedDict, total=False):

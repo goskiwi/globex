@@ -9,15 +9,18 @@ from app.application.runtime.results import message_data
 class DeliveryState(AgentState):
     product_delivery_complete: NotRequired[bool]
     delivery_needs_input: NotRequired[bool]
+    research_delivered_tasks: NotRequired[list[str]]
+    research_delivery_status: NotRequired[str | None]
 
 
 class FinalDeliveryMiddleware(AgentMiddleware):
     state_schema = DeliveryState
 
     async def abefore_agent(self, state, runtime):
-        return {"product_delivery_complete": False, "delivery_needs_input": False}
+        return {"product_delivery_complete": False, "delivery_needs_input": False,
+                "research_delivered_tasks": [], "research_delivery_status": None}
     async def awrap_tool_call(self, request, handler):
-        names = {"recommend_products", "compare_products", "show_product_details", "show_shopping_form"}
+        names = {"recommend_products", "compare_products", "show_product_details", "show_shopping_form", "present_research"}
         if request.tool_call["name"] in names:
             last = next((m for m in reversed(request.state["messages"]) if isinstance(m, AIMessage)), None)
             if last and sum(c["name"] in names for c in last.tool_calls) > 1:
@@ -40,6 +43,13 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         if not isinstance(call, AIMessage) or {c["id"] for c in call.tool_calls} != {m.tool_call_id for m in receipts}:
             return None
         for receipt in receipts:
+            if receipt.name == 'present_research':
+                payload = message_data(receipt)
+                if not isinstance(payload, dict) or not payload.get('guidance') or not payload.get('task_ids'):
+                    raise ValueError('研究交付缺少报告或任务来源')
+                return {'messages': [AIMessage(content=payload['guidance'])],
+                        'research_delivered_tasks': payload['completed_task_ids'],
+                        'research_delivery_status': payload['status'], 'jump_to': 'end'}
             if receipt.name == "show_shopping_form":
                 payload = message_data(receipt)
                 if not isinstance(payload, dict) or payload.get("status") != "awaiting_input" or not payload.get("form_id"):

@@ -101,6 +101,8 @@ class MainAgentFactory:
             self._search_factory.evidence_store, self._bus), args_schema=RecommendationInput))
         tools.append(as_langchain_tool(build_comparison_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=ComparisonInput))
+        from app.application.tools.research_delivery_tool import build_research_delivery_tool
+        tools.append(as_langchain_tool(build_research_delivery_tool()))
         tools.append(build_shopping_state_tool(self._search_factory.evidence_store))
         functions = [
             build_task_dispatch_tool(
@@ -160,7 +162,7 @@ class MainAgentFactory:
                 GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, main=True,
                                     budget_lite_model=self._settings.llm_fallback_model,
-                                    delivery_tools=("recommend_products", "compare_products", "show_product_details", "show_shopping_form")),
+                                    delivery_tools=("recommend_products", "compare_products", "show_product_details", "show_shopping_form", "present_research")),
                 FinalDeliveryMiddleware(),
                 *([skill_source] if skill_source is not None else []),
                 PreferenceStateMiddleware(self._preference_store, self._preference_selector,
