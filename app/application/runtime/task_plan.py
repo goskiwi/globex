@@ -1,5 +1,4 @@
 """现有图状态中的研究计划：定义来自买家需求，进度与候选来源来自工具回执。"""
-from copy import deepcopy
 from dataclasses import replace
 from typing_extensions import NotRequired
 import json
@@ -12,82 +11,17 @@ from app.domain.buyer.preference import BuyerPreference
 from app.infrastructure.context import ShoppingContext
 from app.application.runtime.results import tool_receipts
 
+from app.application.runtime.research_plan import (
+    ResearchPlan, project_plan, dependent_steps, record_research, apply_delivery,
+)
+
 DELIVERIES = {'recommend_products', 'compare_products'}
 
 
-def condition_identity(policy):
-    return {k: policy.get(k) for k in ('parameters', 'unverified_requirements', 'excluded_products', 'excluded_skus')}
-
-
-def dependent_steps(steps, changed):
-    """计划已按依赖排序；返回直接及间接下游，不改变独立分支。"""
-    affected = set(changed)
-    for step in steps:
-        if affected.intersection(step.depends_on):
-            affected.add(step.id)
-    return affected - set(changed)
-
-
-def project_plan(work, policy, saved):
-    tasks = deepcopy(saved.get('tasks', {}))
-    definitions = {s.id: s.model_dump() for s in work.plan}
-    for value in tasks.values():
-        scope = value['scope']
-        value['stale'] = (value.get('stale', False) or scope['parent_conditions'] != condition_identity(policy)
-                          or (scope.get('step_id') is not None
-                              and definitions.get(scope['step_id']) != scope.get('definition')))
-    steps = []
-    statuses = {}
-    for step in work.plan:
-        value = tasks.get(step.id)
-        if value and any(statuses[key] not in {'verified', 'delivered'} for key in step.depends_on):
-            value['stale'] = True
-        status = ('pending' if not value or value['stale'] else
-                  'delivered' if value.get('delivered') else
-                  'verified' if value['status'] == 'completed' and value.get('qualified_skus') and not value.get('required_gaps') else 'blocked')
-        steps.append({**step.model_dump(), 'status': status,
-                      'gaps': (value.get('gaps', []) if value and not value['stale'] else []),
-                      'evidence_refs': (value.get('evidence_refs', []) if value and not value['stale'] else [])})
-        statuses[step.id] = status
-    return {'steps': steps, 'tasks': tasks, 'last_batch': saved.get('last_batch')}
-
-
-def resolve_candidate_scope(context, pick, *, require_qualified=True):
-    plan = context.task_plan
-    tasks = {k: v for k, v in plan.get('tasks', {}).items() if not v.get('stale')}
-    related = [key for key, value in tasks.items() if pick.product_id in value.get('observed_products', [])]
-    if pick.task_id is None:
-        if related or plan.get('steps'):
-            raise ValueError('研究候选必须填写对应 task_id，不能丢弃子任务或计划条件')
-        return None
-    value = tasks.get(pick.task_id)
-    if value is None:
-        raise ValueError('任务来源不存在或条件已变化，请重新核验该任务')
-    if pick.sku_id not in value.get('observed_skus', {}).get(pick.product_id, []):
-        raise ValueError('指定任务没有读取这个商品规格，不能借用其他商品的证据')
-    if require_qualified and pick.sku_id not in value.get('qualified_skus', []):
-        raise ValueError('该规格尚未在指定任务中核验为合格候选')
-    return value['scope']['effective_search']
-
-
-def plan_delivery(context, picks, cards):
-    requested = {p.task_id for p in picks if p.task_id is not None}
-    tasks = context.task_plan.get('tasks', {})
-    issues = {c['default_sku_id']: c['constraint_issues'] for c in cards}
-    delivered = {key for key in requested if tasks[key]['status'] == 'completed' and not tasks[key].get('required_gaps')
-                 and all(not issues[p.sku_id] for p in picks if p.task_id == key)}
-    steps = deepcopy(context.task_plan.get('steps', []))
-    for step in steps:
-        if step['id'] in delivered and step['status'] in {'verified', 'delivered'}:
-            step['status'] = 'delivered'
-    missing = list(dict.fromkeys([s['goal'] for s in steps if s['status'] != 'delivered']
-        + [tasks[key]['scope']['goal'] for key in requested - delivered]))
-    return {'status': 'partial' if missing else 'completed', 'steps': steps,
-            'delivered_tasks': sorted(delivered), 'unmet_goals': missing}
 
 
 class TaskPlanState(AgentState):
-    task_plan: NotRequired[dict]
+    task_plan: NotRequired[ResearchPlan]
 
 
 class TaskPlanMiddleware(AgentMiddleware):
@@ -107,19 +41,7 @@ class TaskPlanMiddleware(AgentMiddleware):
                 data = (receipt.artifact or {}).get('data')
                 if not isinstance(data, dict) or not data.get('scope'):
                     continue
-                scope = data['scope']
-                # 前置研究每次重新执行，都要求其下游重新核验；不能让旧结果自动复活。
-                for key in dependent_steps(work.plan, {scope['task_id']}):
-                    if key in plan['tasks']:
-                        plan['tasks'][key]['stale'] = True
-                plan['tasks'][scope['task_id']] = {'scope': scope, 'status': data['status'],
-                    'qualified_skus': data.get('qualified_skus', []),
-                    'observed_products': data.get('observed_products', []),
-                    'observed_skus': data.get('observed_skus', {}),
-                    'evidence_refs': data.get('evidence_refs', []),
-                    'required_gaps': [*data.get('unmet_constraints', []), *scope['effective_search'].get('unverified_requirements', [])],
-                    'gaps': [*data.get('unmet_constraints', []), *data.get('questions', []),
-                             *data.get('issues', []), *data.get('unknowns', [])]}
+                record_research(plan, work, data)
             plan['last_batch'] = last.id
         plan = project_plan(work, policy, plan)
         # 无计划且只做直接查询时，不额外制造计划步骤。
@@ -158,11 +80,7 @@ class TaskPlanMiddleware(AgentMiddleware):
                 for receipt in tool_receipts(output):
                     data = (receipt.artifact or {}).get('data', {})
                     if receipt.status == 'success' and isinstance(data, dict) and data.get('plan_outcome'):
-                        updated = deepcopy(plan)
-                        for key in data['plan_outcome']['delivered_tasks']:
-                            updated['tasks'][key]['delivered'] = True
-                        updated['steps'] = data['plan_outcome']['steps']
-                        updated['status'] = data['plan_outcome']['status']
+                        updated = apply_delivery(plan, data['plan_outcome'])
                         if isinstance(output, Command):
                             return Command(update={**output.update, 'task_plan': updated})
                         return Command(update={'messages': [output], 'task_plan': updated})

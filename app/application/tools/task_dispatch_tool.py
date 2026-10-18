@@ -85,7 +85,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 if context is None:
                     raise ValueError("派发缺少当前买家上下文")
                 scoped = ShoppingWork.model_validate(parent.pop("shopping_work"))
-                from app.application.runtime.task_plan import condition_identity
+                from app.application.runtime.research_plan import condition_identity
                 parent_conditions = condition_identity(compile_search(scoped, context.preference_facts, context.currency))
                 definition = None
                 filters = task.filters

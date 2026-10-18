@@ -178,8 +178,8 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
     ship_to = params.get("ship_to")
     cards, quotes = [], []
     for pick in picks:
-        from app.application.runtime.task_plan import resolve_candidate_scope
-        task_policy = resolve_candidate_scope(context, pick, require_qualified=require_qualified)
+        from app.application.runtime.research_plan import resolve_candidate_scope
+        task_policy = resolve_candidate_scope(context.task_plan, pick, require_qualified=require_qualified)
         product = await catalog.pricing.product_repo.find_by_id(pick.product_id)
         sku = product.find_sku(pick.sku_id) if product else None
         if sku is None or sku.stock < pick.quantity:
@@ -224,8 +224,8 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
 
 
 def _attach_plan_outcome(result, context, picks):
-    from app.application.runtime.task_plan import plan_delivery
-    outcome = plan_delivery(context, picks, result["hits"])
+    from app.application.runtime.research_plan import plan_delivery
+    outcome = plan_delivery(context.task_plan, picks, result["hits"])
     result['plan_outcome'] = outcome
     if outcome['unmet_goals']:
         result['guidance'] += '\n尚未完成：' + '；'.join(outcome['unmet_goals']) + '。本次仅交付已有结果。'
@@ -234,10 +234,10 @@ def _attach_plan_outcome(result, context, picks):
 async def _check_task_bundle_budgets(catalog, context, picks, mode):
     if mode != 'bundle':
         return
-    from app.application.runtime.task_plan import resolve_candidate_scope
+    from app.application.runtime.research_plan import resolve_candidate_scope
     for task_id in {p.task_id for p in picks if p.task_id is not None}:
         group = [p for p in picks if p.task_id == task_id]
-        params = resolve_candidate_scope(context, group[0])['parameters']
+        params = resolve_candidate_scope(context.task_plan, group[0])['parameters']
         budget = params.get('landed_budget_major')
         if budget is not None:
             quote = await catalog.pricing.quote([QuoteItem(p.product_id, p.sku_id, p.quantity) for p in group],
