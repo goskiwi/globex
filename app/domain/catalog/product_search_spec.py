@@ -7,7 +7,7 @@ normalized_query 用于召回，槽位（category / price_band / ship_to / local
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from app.domain.catalog.taxonomy import Category, CATEGORIES, MATERIAL_TAGS
+from app.domain.catalog.taxonomy import Category, CATEGORIES, MATERIAL_TAGS, ProductType, PRODUCT_TYPES
 from typing import Optional
 import math
 import re
@@ -33,10 +33,13 @@ class ProductSearchSpec:
     excluded_product_ids: tuple[str, ...] = ()
     excluded_sku_ids: tuple[str, ...] = ()
     excluded_materials_by_category: dict[str, list[str]] = field(default_factory=dict)
+    product_type: ProductType | None = None
 
     def __post_init__(self) -> None:
         if self.category is not None and self.category not in CATEGORIES:
             raise ValueError(f"category 必须为目录分类之一：{', '.join(CATEGORIES)}")
+        if self.product_type is not None and self.product_type not in PRODUCT_TYPES:
+            raise ValueError("product_type 必须使用目录商品类型，不接受别名或从用途猜测类型")
         if any(tag not in MATERIAL_TAGS for tag in (*self.excluded_material_tags, *self.required_material_tags)):
             raise ValueError(f"材质条件必须为目录标签之一：{', '.join(MATERIAL_TAGS)}；不能扩大或猜测未知材质")
         if any(c not in CATEGORIES or any(t not in MATERIAL_TAGS for t in tags) for c,tags in self.excluded_materials_by_category.items()):

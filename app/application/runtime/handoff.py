@@ -49,7 +49,7 @@ class TaskEvidence:
         return result
 
     def _products(self, cards, result_ref=None, historical=False, observed_at=None):
-        product_fields = {"product_id", "title", "brand", "category", "origin_country",
+        product_fields = {"product_id", "title", "brand", "category", "product_type", "origin_country",
             "description", "highlights", "material_tags", "weight_kg", "dimensions_cm", "package_dimensions_cm",
             "rating_summary", "rating_is_live", "ships_to", "updated_at",
             "source_platform", "canonical_product_id", "data_provenance"}

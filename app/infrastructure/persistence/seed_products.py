@@ -27,6 +27,7 @@ def _product_from_record(record: dict) -> Product:
         category=record["category"],
         origin_country=record["origin_country"],
         description=record["description"],
+        product_type=record["product_type"],
         highlights=[ProductHighlight(item["label"], item.get("detail", "")) for item in record.get("highlights", [])],
         ships_to=list(record.get("ships_to", [])),
         skus=[

@@ -52,7 +52,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         """按当前已生效条件筛选推荐候选，不是查看商品详情的入口。
         查看某款的完整资料、库存或当前价格用get_product_details；本工具精确ID查询仍筛选条件。
         只填写检索词、目录分类、返回数量或精确 ID；normalized_query/product_id/sku_id 至少提供一个。
-        预算、币种、目的地和材质限制由当前购物状态或委派条件自动提供，不接受重复输入。
+        商品类型、预算、币种、目的地和材质限制由当前购物状态或委派条件自动提供，不接受重复输入。
         被筛掉的商品不代表不能查看，使用filtered_out中的ID读取详情；不得为查看修改预算。
         缺少/错误的条件交回 Main 更新状态；搜索不能偷偷放宽。存在目的地时返回单件到手价，
         多件总价使用 quote_products。到手总预算在报价/最终推荐阶段校验，不等同于商品单价上限。
@@ -96,6 +96,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
             "required_material_tags": required_material_tags or [],
             "product_id": product_id,
             "sku_id": sku_id,
+            "product_type": policy.get('product_type'),
         }
         bus.publish(session_id, "tool.invoke", {"tool": "product_search_tool", "args": args})
         if ship_to and ship_to not in TariffSchedule(ExchangeRateTable()).supported_destinations():
@@ -114,6 +115,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
                 required_material_tags=required_material_tags or [],
                 product_id=product_id,
                 sku_id=sku_id,
+                product_type=policy.get('product_type'),
                 excluded_materials_by_category=(effective or {}).get("parameters", {}).get("excluded_materials_by_category", {}),
                 excluded_product_ids=tuple(effective.get("excluded_products", [])) if effective else (),
                 excluded_sku_ids=tuple(effective.get("excluded_skus", [])) if effective else (),
@@ -130,7 +132,9 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         result["observed_at"] = datetime.now(timezone.utc).isoformat()
         if evidence_store is not None and snapshot_ctx is not None:
             result["result_ref"] = await evidence_store.save(snapshot_ctx.buyer_id, session_id, "products", result)
-        result["requirement_notice"] = "单价、目的地和材质条件已用于检索；到手总预算须在报价/最终推荐阶段核验。未核验要求与软偏好不得宣称全部满足。"
+        result["requirement_notice"] = ("商品类型、单价、目的地和材质条件已用于检索；到手总预算须在报价/最终推荐阶段核验。"
+            "候选是最接近的文本匹配，以目录类型和真实资料核对是否相关。已有相关候选后查候选详情，不为补齐可选属性不断换词搜全库；"
+            "详情仍未标注的属性记为未知，不等于没有。候选不相关、不足或无法满足用户明确要求时再补搜。未核验要求与软偏好不得宣称全部满足。")
         view = await bounded_tool_view(result, evidence_store, snapshot_ctx, kind='products')
         return ToolResult(data=result, model_data=view, state=ToolResultState.SUCCESS)
 

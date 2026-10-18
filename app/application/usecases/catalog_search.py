@@ -321,6 +321,7 @@ class CatalogSearchUseCase:
             "product_id": product.product_id,
             "title": product.title,
             "category": product.category,
+            "product_type": product.product_type,
             "reason": next(iter(first_reasons)) if len(first_reasons) == 1 else "no_eligible_sku",
             "skus": rows,
         }

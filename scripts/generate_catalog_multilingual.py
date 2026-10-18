@@ -55,7 +55,7 @@ def build_records() -> list[dict]:
     for platform_index, (platform, languages) in enumerate(PLATFORM_LANGUAGES.items()):
         for language, locale in languages.items():
             language_index = LANGUAGE_ORDER.index(language)
-            for family, (category, material, values, unit, weight) in enumerate(FAMILY_SPECS):
+            for family, (category, product_type, material, values, unit, weight) in enumerate(FAMILY_SPECS):
                 text = localized_family(language, family)
                 for tier, value in enumerate(values):
                     # 编号由固定平台/语种/型号决定，增加语种不会让已有 ID 漂移。
@@ -73,6 +73,7 @@ def build_records() -> list[dict]:
                         'product_id': pid,
                         'title': f'Lingua {text["name"]} — {detail} · {model}',
                         'brand': 'Lingua', 'category': category, 'origin_country': 'CN',
+                        'product_type': product_type,
                         'description': f'{text["purpose"]} {detail}. {text["material_label"]}: {text["material"]}. {text["model_label"]}: {model}.',
                         'highlights': [
                             {'label': text['feature'], 'detail': f'{value} {unit}'.strip()},

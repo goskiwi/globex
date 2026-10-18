@@ -16,6 +16,8 @@ def sku_constraint_issues(product: Product, sku: Sku, spec: ProductSearchSpec, r
         issues.append("out_of_stock")
     if spec.category and product.category != spec.category:
         issues.append("category_mismatch")
+    if spec.product_type and product.product_type != spec.product_type:
+        issues.append('product_type_unknown' if product.product_type is None else 'product_type_mismatch')
     if set(product.material_tags) & (set(spec.excluded_material_tags) | set(spec.excluded_materials_by_category.get(product.category, []))):
         issues.append("material_excluded")
     if set(spec.required_material_tags) - set(product.material_tags):

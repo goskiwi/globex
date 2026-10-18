@@ -1,7 +1,7 @@
 """当前检索条件和按 SKU 保存的选购项；不保存报价或交易授权。"""
 from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from app.application.memory.preference_selector import preference_constraints
-from app.domain.catalog.taxonomy import MaterialTag
+from app.domain.catalog.taxonomy import MaterialTag, ProductType
 
 
 class StrictModel(BaseModel):
@@ -9,6 +9,8 @@ class StrictModel(BaseModel):
 
 
 class Filters(StrictModel):
+    product_type: ProductType | None = Field(default=None,
+        description="用户明确寻找的商品类型，例如背包、耳机；与一级分类独立。多品类分别放在各计划步骤或委派条件，不能把背包设为全局条件后沿用到耳机。未知类型不猜；null清空")
     price_max_major: float | None = Field(default=None, ge=0, description="单件商品价上限，不含运税；到手总预算使用 landed_budget_major")
     landed_budget_major: float | None = Field(default=None, ge=0, description="本次选购的到手总预算，包含运税；组合按合计，备选按各选项比较")
     target_currency: str | None = None

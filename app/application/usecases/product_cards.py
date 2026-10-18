@@ -7,6 +7,7 @@ from app.domain.catalog.sku import Sku
 from app.domain.catalog.product_search_spec import ProductSearchSpec
 from app.application.usecases.pricing import PricingService
 from app.application.usecases.product_media import product_media
+from app.domain.catalog.taxonomy import ProductType
 
 @dataclass(frozen=True)
 class ProductCard:
@@ -27,6 +28,7 @@ class ProductCard:
     canonical_product_id: str
     material_tags: list[str]
     weight_kg: float | None
+    product_type: ProductType | None = None
     # 展示资料与具体默认 SKU 的价库存一起组装。
     description: str = ""
     rating_summary: dict[str, float | int] | None = None
@@ -49,6 +51,7 @@ class ProductCard:
             "title": self.title,
             "brand": self.brand,
             "category": self.category,
+            "product_type": self.product_type,
             "origin_country": self.origin_country,
             "price_major": self.price_major,
             "currency": self.currency,
@@ -100,6 +103,7 @@ def assemble_product_card(score: float, product: Product, spec: ProductSearchSpe
         title=product.title,
         brand=product.brand,
         category=product.category,
+        product_type=product.product_type,
         origin_country=product.origin_country,
         # 商品卡价格必须与预算过滤使用同一目标币种；原始报价单独保留，
         # SKU 详情继续维持平台原币种，方便后续下单时选择具体规格。

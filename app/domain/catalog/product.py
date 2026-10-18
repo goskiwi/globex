@@ -11,6 +11,7 @@ import math
 from typing import Optional
 
 from app.domain.catalog.sku import Sku
+from app.domain.catalog.taxonomy import ProductType, PRODUCT_TYPES
 
 
 @dataclass(frozen=True)
@@ -47,12 +48,15 @@ class Product:
     localized_category: str = ""
     localized_material: str = ""
     data_provenance: str = ""
+    product_type: ProductType | None = None
 
     def __post_init__(self) -> None:
         if not self.product_id:
             raise ValueError("Product.product_id required")
         if not self.skus:
             raise ValueError(f"Product 至少要有一个 Sku：{self.product_id}")
+        if self.product_type is not None and self.product_type not in PRODUCT_TYPES:
+            raise ValueError(f"未知商品类型：{self.product_type}")
         if self.weight_kg is not None and (not math.isfinite(self.weight_kg) or self.weight_kg <= 0):
             raise ValueError(f"Product.weight_kg 已知时必须为有限正数：{self.product_id}")
 
