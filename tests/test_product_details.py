@@ -63,7 +63,7 @@ async def test_complete_out_of_budget_and_out_of_stock_details_do_not_change_fil
 async def test_native_main_reads_both_platform_records_without_budget_change(tmp_path,monkeypatch):
     from tests.test_agent_handoff import ScriptedModel,call
     from tests.test_langgraph_runtime import _container
-    from app.application.agents.orchestrator import SubmitIntentInput
+    from app.application.usecases.intents import SubmitIntentInput
     from langchain_core.messages import AIMessage,ToolMessage
     reads=AIMessage(content='',tool_calls=[{'id':pid,'name':'get_product_details','args':{'product_id':pid}}
         for pid in ('P3020','P3021')])

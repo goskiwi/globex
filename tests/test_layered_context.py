@@ -125,7 +125,7 @@ async def test_manual_api_operation_and_owner_are_persistent(tmp_path,monkeypatc
     import httpx
     from fastapi import FastAPI
     from tests.test_langgraph_runtime import _container,ScriptedModel
-    from app.application.agents.orchestrator import SubmitIntentInput
+    from app.application.usecases.intents import SubmitIntentInput
     from app.presentation.context_workspace import register_context_routes
     from app.infrastructure.prompt_registry import PromptContractChanged
     container=await _container(tmp_path,monkeypatch,ScriptedModel())

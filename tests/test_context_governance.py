@@ -189,7 +189,7 @@ async def test_preference_read_failure_stops_state_preparation():
 
 async def test_explicit_comparison_order_survives_persistence_and_restart(tmp_path):
     from tests.test_ag_ui import make_orchestrator
-    from app.application.agents.orchestrator import SubmitIntentInput
+    from app.application.usecases.intents import SubmitIntentInput
     from app.domain.catalog.product_search_spec import ProductSearchSpec
     orchestrator, agent, _ = make_orchestrator()
     store = ContextEvidenceStore(tmp_path/'candidate.db')

@@ -3,7 +3,7 @@ import copy
 import pytest
 from ag_ui.core import RunAgentInput
 from app.application.agents.ag_ui_adapter import AGUIRunAdapter
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.eventbus import TradeEvent
 from tests.test_agent_handoff import ScriptedModel, call
 from tests.test_langgraph_runtime import _container

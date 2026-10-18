@@ -77,7 +77,7 @@ async def test_distiller_requires_source_evidence_and_does_not_store_instruction
 @pytest.mark.asyncio
 async def test_native_turn_injects_query_scoped_memory_and_removes_deleted_hint(tmp_path, monkeypatch):
     from tests.test_langgraph_runtime import _container, ScriptedModel
-    from app.application.agents.orchestrator import SubmitIntentInput
+    from app.application.usecases.intents import SubmitIntentInput
     store=make(tmp_path);await store.append(BuyerPreference('a','like','喜欢裙子'))
     await store.append(BuyerPreference('other','like','喜欢咖啡'))
     model=ScriptedModel()

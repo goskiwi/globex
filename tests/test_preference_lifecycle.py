@@ -2,7 +2,7 @@
 import json
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 from app.application.memory.preference_resolution import resolve_preferences
 from app.application.runtime.events import approval_event

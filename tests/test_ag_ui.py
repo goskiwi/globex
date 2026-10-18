@@ -23,7 +23,8 @@ from pydantic import PrivateAttr
 from app.application.runtime.tools import as_langchain_tool
 
 from app.application.agents.ag_ui_adapter import AGUIRunAdapter
-from app.application.agents.orchestrator import MainAgentOrchestrator, SubmitIntentInput
+from app.application.agents.orchestrator import MainAgentOrchestrator
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events

@@ -112,7 +112,7 @@ async def test_journal_restores_view_with_its_original_reply_after_followup(tmp_
 async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatch):
     from tests.test_agent_handoff import ScriptedModel,call
     from tests.test_langgraph_runtime import _container
-    from app.application.agents.orchestrator import SubmitIntentInput
+    from app.application.usecases.intents import SubmitIntentInput
     guidance='下面是 Roamix 单侧颈枕的资料，按平台分别展示。'
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
         call('get_product_details',{'product_id':'P3020'}),

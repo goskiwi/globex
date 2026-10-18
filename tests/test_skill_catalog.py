@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langchain_core.messages import RemoveMessage
 
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.runtime.skills import skill_directory
 from app.infrastructure.buyer_skills import BuyerSkillConflict
 from app.infrastructure.capability_registry import CapabilityRegistry, CapabilityVersionChanged

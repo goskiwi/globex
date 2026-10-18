@@ -6,7 +6,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage,HumanMessage,ToolMessage
 from tests.test_agent_handoff import ScriptedModel,call,submission
 from tests.test_langgraph_runtime import _container
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.runtime.events import approval_event
 from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.loops import LoopMiddleware

@@ -11,7 +11,8 @@ from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
 from app.application.usecases.confirmation_service import ConfirmationService
-from app.application.agents.orchestrator import MainAgentOrchestrator, SubmitIntentInput
+from app.application.agents.orchestrator import MainAgentOrchestrator
+from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.ag_ui_journal import JournalConflict, JournalForbidden, JournalNotFound
 from app.presentation.ag_ui_runtime import AGUIRuntime
 from app.presentation.identity import require_buyer, require_session

@@ -20,7 +20,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 from opentelemetry.sdk.trace.export import SpanExportResult
 from opentelemetry.trace import Status, StatusCode
 
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.domain.queue.ports.task_queue import IntentTask
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEvent, TradeEventBus

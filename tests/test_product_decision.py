@@ -102,7 +102,7 @@ async def test_internal_ids_in_buyer_copy_are_rejected_before_publish(confirmati
 async def test_native_agent_corrects_id_reference_before_delivery(tmp_path,monkeypatch):
     from tests.test_agent_handoff import ScriptedModel,call
     from tests.test_langgraph_runtime import _container
-    from app.application.agents.orchestrator import SubmitIntentInput
+    from app.application.usecases.intents import SubmitIntentInput
     from langchain_core.messages import ToolMessage
     choice={'product_id':'P1012','sku_id':'P1012-S1','quantity':1,
             'reason':'收起来体积小，适合随身带上飞机','tradeoffs':[]}

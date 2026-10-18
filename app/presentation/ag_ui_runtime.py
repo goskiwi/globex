@@ -11,7 +11,7 @@ import uuid
 from ag_ui.core import RunAgentInput
 
 from app.application.agents.ag_ui_adapter import AGUIRunAdapter
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.ag_ui_journal import AGUIJournal, JournalLeaseLost
 from app.infrastructure.eventbus import observe_run_events
 

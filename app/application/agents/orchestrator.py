@@ -8,7 +8,6 @@ import logging
 import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage, SystemMessage
@@ -25,35 +24,13 @@ from app.infrastructure.prompt_registry import PromptContractChanged
 from app.infrastructure.security.output_guard import audit_output
 from app.application.runtime.errors import ContextCapacityError
 from app.application.runtime.execution import ExecutionResult
+from app.application.usecases.intents import SubmitIntentInput, SubmitIntentOutput
 from app.application.runtime.sessions import SessionCoordinator, SessionBusy
 from app.application.runtime.finalization import RunFinalizer, RunPersistenceError
 from app.application.runtime.graph_execution import execute_graph
 
 logger = logging.getLogger(__name__)
 
-
-
-@dataclass(frozen=True)
-class SubmitIntentInput:
-    shopping_session_id: str
-    buyer_id: str
-    locale: str
-    currency: str
-    raw_query: str
-    confirmations: tuple[dict, ...] = ()
-    message_id: str = ""
-    run_id: str = ""
-
-
-@dataclass(frozen=True)
-class SubmitIntentOutput:
-    shopping_session_id: str
-    final_text: str
-    error: str | None = None
-    error_code: str | None = None
-    status: str = "completed"
-    stop_reason: str | None = None
-    product_delivery_complete: bool = False
 
 
 class MainAgentOrchestrator:

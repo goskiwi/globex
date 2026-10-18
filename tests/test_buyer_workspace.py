@@ -10,7 +10,9 @@ from app.application.runtime.results import ToolResultState
 from langchain_core.messages import HumanMessage, ToolMessage
 from langchain.agents.middleware import ModelRequest
 
-from app.application.agents.orchestrator import MainAgentOrchestrator, SubmitIntentInput
+from app.application.agents.orchestrator import MainAgentOrchestrator
+
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.agents.skill_access import read_skill
 from app.application.runtime.skills import SkillReferenceMiddleware
 from app.application.tools.capability_tools import build_capability_tools

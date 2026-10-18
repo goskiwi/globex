@@ -30,7 +30,8 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
     from langchain.agents import create_agent
     from langchain_core.messages import AIMessage, ToolMessage
     from app.application.agents.main_agent import SessionRegistry, GraphSession
-    from app.application.agents.orchestrator import MainAgentOrchestrator, SubmitIntentInput
+    from app.application.agents.orchestrator import MainAgentOrchestrator
+    from app.application.usecases.intents import SubmitIntentInput
     from app.application.runtime.skills import SkillReferenceMiddleware
     from app.application.runtime.context import RequestContextMiddleware
     from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver

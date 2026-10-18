@@ -5,7 +5,7 @@ import pytest
 from ag_ui.core import RunAgentInput
 
 from app.application.agents.ag_ui_adapter import AGUIRunAdapter
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.runtime.events import RequireUserConfirm, ApprovalCall, approval_event
 from app.infrastructure.ag_ui_journal import AGUIJournal, JournalConflict
 from tests.test_langgraph_runtime import _container, ScriptedModel, PreferenceStore

@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.composition import Container, build_container
 from app.domain.queue.ports.task_queue import IntentTask
 from app.presentation.connection import ConnectionManager
@@ -188,19 +188,17 @@ def build_app() -> FastAPI:
         return JSONResponse({"metrics": registry.snapshot(), "alerts": registry.alerts()},
                             headers={"Cache-Control": "no-store"})
 
+    async def intent_from_request(request: Request, body: SubmitIntentRequest) -> SubmitIntentInput:
+        session_id = body.shopping_session_id or f"session-{uuid.uuid4().hex[:8]}"
+        buyer_id = await require_buyer(request, body.buyer_id)
+        await require_session(request, buyer_id, session_id, create=True)
+        return SubmitIntentInput(session_id, buyer_id, body.locale, body.currency, body.raw_query)
+
     @api.post("/commerce/intents", response_model=SubmitIntentResponse)
     async def submit_intent(request: Request, body: SubmitIntentRequest) -> SubmitIntentResponse:
         c = container()
-        session_id = body.shopping_session_id or f"session-{uuid.uuid4().hex[:8]}"
-        body.buyer_id = await require_buyer(request, body.buyer_id)
-        await require_session(request, body.buyer_id, session_id, create=True)
-        intent = SubmitIntentInput(
-            shopping_session_id=session_id,
-            buyer_id=body.buyer_id,
-            locale=body.locale,
-            currency=body.currency,
-            raw_query=body.raw_query,
-        )
+        intent = await intent_from_request(request, body)
+        session_id = intent.shopping_session_id
         if c.task_queue is None:
             result = await c.orchestrator.handle_intent(intent)
             return SubmitIntentResponse(
@@ -217,16 +215,8 @@ def build_app() -> FastAPI:
     @api.post("/commerce/intents/async")
     async def submit_intent_async(request: Request, body: SubmitIntentRequest) -> dict:
         c = container()
-        session_id = body.shopping_session_id or f"session-{uuid.uuid4().hex[:8]}"
-        body.buyer_id = await require_buyer(request, body.buyer_id)
-        await require_session(request, body.buyer_id, session_id, create=True)
-        intent = SubmitIntentInput(
-            shopping_session_id=session_id,
-            buyer_id=body.buyer_id,
-            locale=body.locale,
-            currency=body.currency,
-            raw_query=body.raw_query,
-        )
+        intent = await intent_from_request(request, body)
+        session_id = intent.shopping_session_id
         if c.task_queue is None:
             raise HTTPException(status_code=503, detail="队列未启用，请使用 /commerce/intents")
         try:

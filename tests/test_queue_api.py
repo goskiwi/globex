@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.domain.queue.ports.task_queue import TaskStatus
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.queue.redis_stream_queue import RedisStreamTaskQueue, _STREAM

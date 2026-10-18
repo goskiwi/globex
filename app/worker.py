@@ -22,7 +22,7 @@ import signal
 import socket
 import uuid
 
-from app.application.agents.orchestrator import SubmitIntentInput
+from app.application.usecases.intents import SubmitIntentInput
 from app.application.runtime.execution import ExecutionResult
 from app.composition import build_container
 from app.domain.queue.ports.task_queue import IntentTask, NonRetryableTaskError

@@ -19,7 +19,8 @@ from app.domain.order.address import Address
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.runtime.context import RequestContextMiddleware
 from app.application.agents.main_agent import SessionRegistry
-from app.application.agents.orchestrator import MainAgentOrchestrator, SubmitIntentInput
+from app.application.agents.orchestrator import MainAgentOrchestrator
+from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
 from app.application.harness.loop_detector import LoopDetector
 from app.infrastructure.llm import create_chat_model, create_chat_client
