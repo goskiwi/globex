@@ -46,6 +46,31 @@ def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
     assert data == before, '事实投影不能改写原始回执'
 
 
+def test_assessment_is_presented_separately_without_replacing_facts_or_price_comparisons():
+    data = report_pair()
+    candidate = data['candidates'][0]
+    candidate['assessment'] = '适合优先减轻随身负担的人；背负舒适度尚未核验。'
+    before = deepcopy(candidate['facts'])
+    result = project_research_report(data, RATES)
+    assert result['items'][0]['assessment'] == candidate['assessment']
+    assert result['items'][0]['facts'] == before
+    text = _report(result)
+    assert '取舍建议：' + candidate['assessment'] in text
+    assert '商品原文：支持蓝牙和降噪，未提供佩戴形式' in text
+    assert '商品单价 299 CNY' in text and '最低 291.18 CNY（P40018-S1）' in text
+    assert '2款商品、2个明确规格' in text
+
+
+def test_submission_requires_current_assessment_without_filling_old_payload():
+    schema = convert_to_openai_tool(build_submission_tool())['function']['parameters']
+    assert 'assessment' in schema['properties']['candidates']['items']['required']
+    with pytest.raises(ValidationError) as failure:
+        AgentSubmission(status='completed', candidates=[{'product_id': 'P1022',
+                                                        'evidence_fields': ['description']}])
+    assert any(e['loc'] == ('candidates', 0, 'assessment') and e['type'] == 'missing'
+               for e in failure.value.errors())
+
+
 def test_counts_distinguish_canonical_products_and_explicit_skus():
     data = report_pair()
     first, second = data['candidates']
@@ -110,7 +135,7 @@ def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
     properties = schema['properties']['candidates']['items']['properties']
     assert 'reason' not in properties and 'evidence_fields' in properties
     payload = {'status': 'completed', 'candidates': [
-        {'product_id': 'P1022', 'evidence_fields': ['description']}]}
+        {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description']}]}
     if field == 'reason':
         payload['candidates'][0][field] = value
     else:
@@ -120,7 +145,7 @@ def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
 
 
 def test_fact_selection_cannot_inject_new_field_or_duplicate_candidate():
-    candidate = {'product_id': 'P1022', 'evidence_fields': ['wearing_style']}
+    candidate = {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['wearing_style']}
     with pytest.raises(ValidationError):
         AgentSubmission(status='completed', candidates=[candidate])
     candidate['evidence_fields'] = ['description']

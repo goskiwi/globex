@@ -29,7 +29,7 @@ def card():
 
 def deliver(evidence, sku='P1003-S2'):
     submission=AgentSubmission(status='completed',candidates=[
-        {'product_id':'P1003','sku_id':sku,'evidence_fields': ['description']}])
+        {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description']}])
     assert not evidence.validate(submission)
     return evidence.delivered(submission).candidates[0].facts
 
@@ -122,7 +122,7 @@ def test_optional_phone_is_plain_optional_text_without_format_conversion():
 
 def test_unknown_research_attributes_are_not_unmet_user_constraints():
     result=AgentSubmission(status='completed',candidates=[{'product_id':'P1003',
-        'evidence_fields':['description'], 'open_questions':['电脑隔层？']}])
+        'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields':['description'], 'open_questions':['电脑隔层？']}])
     assert result.status=='completed' and not result.unmet_constraints
     with pytest.raises(ValidationError):
         AgentSubmission(status='completed',unmet_constraints=['买家要求防水，未核验'])
@@ -160,7 +160,7 @@ def test_delegation_rejects_removed_research_dimensions_without_alias():
 def test_blank_sku_is_rejected_not_converted_to_product_only(sku):
     with pytest.raises(ValidationError):
         AgentSubmission(status='completed',candidates=[
-            {'product_id':'P1003','sku_id':sku,'evidence_fields': ['description']}])
+            {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'evidence_fields': ['description']}])
 
 
 def test_known_sku_and_product_only_candidates_have_real_facts():

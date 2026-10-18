@@ -36,6 +36,7 @@ def _report(data):
             observed.append(f"重量 {product['weight_kg']} kg")
         if observed:
             lines.append('  已读事实：' + '；'.join(observed) + '。')
+        lines.append('  取舍建议：' + candidate['assessment'])
         for evidence in candidate['evidence']:
             value = evidence['value']
             if not isinstance(value, str):
@@ -70,7 +71,7 @@ def build_research_delivery_tool(rates: ExchangeRateTable):
         """一次交付用户要求的各品类研究报告；只引用任务，不重写候选事实或长总结。
 
         用户本轮只要研究结果、暂不最终推荐或组合时使用。task_ids 来自 task_dispatch 的
-        scope.task_id，可在一次调用中包含多份研究。系统填充名称、SKU、已读事实、价格比较和待核验问题，
+        scope.task_id，可在一次调用中包含多份研究。系统填充事实和价格比较，分别展示专家的取舍建议与待核验问题，
         成功后直接结束本轮；不调用推荐/比较，不发布购物卡，不下单。
         """
         tasks = runtime.state.get('task_plan', {}).get('tasks', {})

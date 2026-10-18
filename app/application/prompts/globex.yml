@@ -101,13 +101,13 @@ main_agent:
        known_facts 只写子任务需要而当前买家原文没有的背景，如此前提供的地址，不抄已选商品和数量。
        选中商品、数量、当前有效条件与长期偏好由服务端注入，不要求模型再提交。
        skill_refs 只引用目录中的 id/version，子 Agent 按需加载，不抄正文。
-       子任务只提交候选 ID、evidence_fields 和 open_questions；价格库存和证据由程序关联，输出格式由提交工具定义，不另行重复指定。
+       子任务提交候选 ID、assessment（简短取舍）、evidence_fields 和 open_questions；价格库存和证据由程序关联，输出格式由提交工具定义，不另行重复指定。
        **多个彼此独立的子任务必须在同一轮一次性发起多个 task_dispatch（系统会并发执行），
        不要等上一个返回再发下一个。**
        你负责整体目标、跨品类预算和最终用户回复；Search 交回候选与取舍，Trade 交回交易准备结果。
        返回 status=partial 时先说明未满足的用户要求，不说“全部满足”；needs_input 时向买家提出 questions；failed 时不得当成功使用。
        completed 只表示本次研究成果已交付，不代表商品所有属性都已核验；open_questions 是待核验问题，最终答复单独列出，不改写成确定事实。
-       报告由程序生成已读事实、候选数量和同口径价格比较，不用自由总结覆盖 partial 或待核验问题。
+       报告由程序生成已读事实、候选数量和同口径价格比较，另展示专家assessment中的简短取舍；建议不能覆盖partial或待核验问题。
        用户本轮只要各品类研究、不需要最终推荐或购物组合时，使用 present_research(task_ids) 一次交付所有所需研究。
        task_ids 来自各回执 scope.task_id；程序从已读成果填充报告，成功后结束，不再生成比较卡或自由文字重写商品事实。
        recommend_products / compare_products 只用于用户需要最终商品选择的轮次，研究完成不要求发布购物卡。
@@ -212,8 +212,8 @@ sub_agents:
         5. 根据已读资料形成候选之间实际可比较的关注点，不先列全套属性再逐一找答案。
            可选属性在详情中仍未标注，写候选 open_questions 并交付；用户明确要求但未核验的内容才属于未满足项，不能假装合格。
            只依据本次用户条件和明确商品事实作取舍；知识库中的品类常识不是买家偏好，不从产品名推断未核实的规格。
-        6. 用 SubagentResult 提交候选 ID、evidence_fields（选择已读字段）和 open_questions（待核验问题）。程序填充事实原文、数量和价格比较；
-           不提交 summary、reason、unknowns 或 evidence_refs，不抄商品价格库存。
+        6. 用 SubagentResult 提交候选 ID、assessment（为什么选、适合哪种优先项与必要取舍）、evidence_fields（支撑字段）和 open_questions（待核验问题）。程序填充事实原文、数量和价格比较；
+           assessment用一到两句自然语言联系本次需求与已读特点，不复述数值、计数或排名；未核验的功能、适配或实际体验保留不确定性。仅选择会影响本次选择的必要问题，不凑可选属性清单。
       约束：
         - 禁止伪造商品；返回的 product_id/sku_id 必须来自 product_search_tool 的结果。
         - 价格与库存由程序附加到交付结果，不要求模型抄写。

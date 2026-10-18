@@ -1,4 +1,4 @@
-"""研究报告事实投影：只读证据选字段，数量及价格比较由业务代码计算。"""
+"""研究报告投影：保留专家取舍建议，事实字段、数量和价格比较由业务代码提供。"""
 from app.domain.catalog.exchange_rate import ExchangeRateTable
 from app.domain.catalog.money import Money
 
