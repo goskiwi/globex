@@ -27,7 +27,8 @@ export default function ProductDetail({ group, busy, onClose, onCompare, onAsk, 
   const overBudget = sku?.constraint_issues?.some(issue => ["over_price_cap", "over_landed_budget"].includes(issue));
 
   function selectPlatform(record: ProductCard) {
-    const next = record.skus.find(s => s.sku_id === record.default_sku_id && s.stock > 0)
+    const requestedSkuId=record.requested_sku_ids?.[0];
+    const next = record.skus.find(s => s.sku_id === (requestedSkuId ?? record.default_sku_id) && (requestedSkuId || s.stock > 0))
       ?? record.skus.find(s => s.stock > 0) ?? record.skus.find(s => s.sku_id === record.default_sku_id) ?? record.skus[0];
     setSelection({ productId: record.product_id, skuId: next?.sku_id ?? "" });
   }

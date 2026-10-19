@@ -157,3 +157,19 @@ it('同一平台查看两个规格：卡片、抽屉和确认准备保留首个�
     expect(onPrepare).toHaveBeenCalledWith(product[0],'P3020-S2','CNY');
   }finally{await act(async()=>root.unmount());host.remove();}
 });
+
+it('切换平台仍查看该平台明确指定的缺货规格，不自动替换成有货SKU',async()=>{
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+  const products=readProducts(records.map((record,i)=>({...record,default_sku_id:record.product_id+'-S1',
+    requested_sku_ids:[record.product_id+'-S1'],skus:record.skus.map((sku,j)=>({...sku,stock:i?(j===0?0:10):10}))})));
+  const onPrepare=vi.fn();
+  try{
+    await act(async()=>root.render(<ProductDetail group={groupProductRecords(products)[0]} busy={false} onClose={()=>{}} onPrepare={onPrepare} onCompare={()=>{}} onAsk={()=>{}}/>));
+    await act(async()=>host.querySelector<HTMLInputElement>('input[name="platform"][value="P3021"]')!.click());
+    expect(host.querySelector<HTMLInputElement>('input[name="product-sku"]:checked')!.value).toBe('P3021-S1');
+    const purchase=[...host.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='当前规格缺货')!;
+    expect(purchase.disabled).toBe(true);expect(onPrepare).not.toHaveBeenCalled();
+    expect(host.querySelectorAll('input[name="product-sku"]')).toHaveLength(2);
+  }finally{await act(async()=>root.unmount());host.remove();}
+});
