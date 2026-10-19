@@ -140,3 +140,55 @@ async def test_buyer_token_only_reaches_the_bound_api_not_judge_host():
             await api.post("http://other/chat/completions", json={})
     assert len(requests) == 1
     assert requests[0].headers["Authorization"] == "Bearer private-local-token"
+
+
+def _memory_action(approved=True):
+    return {'type':'resolve_tool_approval','after_turn':1,'action':'remember_preference_tool',
+            'approved':approved,'expected_payload':{'kind':'dislike','statement':'不要合成聚合物材质'}}
+
+
+@pytest.mark.parametrize('approved',[True,False])
+async def test_memory_action_uses_explicit_page_approval_and_verifies_persisted_result(approved):
+    import json
+    from scripts.eval.http_actions import execute_tool_approval_action
+    action=_memory_action(approved);state={'decided':False,'body':None};events=[]
+    def handle(request):
+        assert request.headers['Authorization']=='Bearer test-buyer-token'
+        if request.url.path=='/commerce/preferences':
+            return httpx.Response(200,json={'preferences':[{**action['expected_payload'],
+                'statement':'不喜欢合成聚合物材质的商品','evidence':action['expected_payload']['statement'],
+                'source_kind':'agent','source_ref':'session'}] if state['decided'] and approved else []})
+        if request.url.path=='/commerce/ag-ui/run':
+            body=json.loads(request.content);state['body']=body;state['decided']=True
+            assert body['resume']==[{'interruptId':'bound-memory-id','status':'resolved','payload':{'approved':approved}}]
+            return httpx.Response(200,text='data: {"type":"RUN_FINISHED"}\n\n')
+        return httpx.Response(200,json={'state':{'toolApprovals':[] if state['decided'] else [
+            {'id':'bound-memory-id','tool':'remember_preference_tool','arguments':json.dumps(action['expected_payload'])}]},
+            'run':{'runId':state['body']['runId'] if state['decided'] else 'original','result':{'text':'已处理'}}})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        text=await execute_tool_approval_action(BuyerAPIClient(client,'http://test','test-buyer-token'),'http://test','buyer','session',action,events)
+    assert text=='已处理' and state['decided']
+    assert events[-1]['payload']=={'approved':approved,'persisted':approved}
+
+
+@pytest.mark.parametrize('wrong',['tool','arguments','multiple','already_written'])
+async def test_memory_action_never_approves_a_different_or_already_executed_write(wrong):
+    import json
+    from scripts.eval.http_actions import execute_tool_approval_action
+    action=_memory_action();posts=[]
+    def handle(request):
+        if request.method=='POST':posts.append(request);return httpx.Response(500)
+        if request.url.path=='/commerce/preferences':return httpx.Response(200,json={'preferences':[action['expected_payload']]})
+        row={'id':'approval','tool':'remember_preference_tool','arguments':json.dumps(action['expected_payload'])}
+        if wrong=='tool':row['tool']='create_order_tool'
+        if wrong=='arguments':row['arguments']=json.dumps({'kind':'like','statement':'别的偏好'})
+        return httpx.Response(200,json={'state':{'toolApprovals':[row,row] if wrong=='multiple' else [row]}})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        with pytest.raises(ValueError):await execute_tool_approval_action(client,'http://test','buyer','session',action,[])
+    assert posts==[]
+
+
+@pytest.mark.parametrize('approved',['true',1,None,'确认'])
+def test_memory_action_requires_literal_boolean(approved):
+    with pytest.raises(ValueError,match='布尔'):
+        validate_http_actions({'queries':['记住我的偏好'],'actions':[_memory_action(approved)]})

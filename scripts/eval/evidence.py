@@ -214,22 +214,22 @@ def evaluate_trace_assertions(assertions: list[dict[str, Any]], events: list[dic
             continue
 
         if kind == "tool_error":
-            tool = assertion.get("tool")
+            tools = assertion.get("tools")
             contains = assertion.get("contains")
-            if not isinstance(tool, str) or not tool or not isinstance(contains, str) or not contains:
-                raise AssertionDefinitionError("tool_error 必须提供非空 tool 与 contains")
+            if not isinstance(tools, list) or not tools or not all(isinstance(t, str) and t for t in tools) or not isinstance(contains, str) or not contains:
+                raise AssertionDefinitionError("tool_error 必须提供非空 tools 与 contains")
             errors = [
                 str((event.get("payload") or {}).get("error"))
                 for event in events
                 if event.get("type") == "tool.result"
-                and (event.get("payload") or {}).get("tool") == tool
+                and (event.get("payload") or {}).get("tool") in tools
                 and (event.get("payload") or {}).get("error")
             ]
             passed = any(contains in error for error in errors)
             results.append(_passed(
                 criterion,
                 passed,
-                f"{tool} 错误 {errors}" if errors else f"未观察到 {tool} 的错误结果",
+                f"{tools} 错误 {errors}" if errors else f"未观察到 {tools} 的错误结果",
             ))
             continue
 

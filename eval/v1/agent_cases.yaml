@@ -2121,7 +2121,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #1'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的母婴宠物，并应用刚才的偏好。
   rubric:
     p0:
@@ -2149,6 +2149,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-057
   group_id: agent-memory_multiturn-dev-1
   template_family: agent-memory_multiturn-dev-1
@@ -2156,7 +2164,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #2'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 SG 的办公学习，并应用刚才的偏好。
   rubric:
     p0:
@@ -2184,6 +2192,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-058
   group_id: agent-memory_multiturn-dev-2
   template_family: agent-memory_multiturn-dev-2
@@ -2191,7 +2207,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #3'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 EU 的厨房餐饮，并应用刚才的偏好。
   rubric:
     p0:
@@ -2219,6 +2235,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-059
   group_id: agent-memory_multiturn-dev-0
   template_family: agent-memory_multiturn-dev-0
@@ -2226,7 +2250,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #4'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的美妆个护，并应用刚才的偏好。
   rubric:
     p0:
@@ -2254,6 +2278,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-060
   group_id: agent-memory_multiturn-dev-1
   template_family: agent-memory_multiturn-dev-1
@@ -2261,7 +2293,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #5'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 US 的户外运动，并应用刚才的偏好。
   rubric:
     p0:
@@ -2289,6 +2321,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-061
   group_id: agent-memory_multiturn-dev-2
   template_family: agent-memory_multiturn-dev-2
@@ -2296,7 +2336,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #6'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的家居生活，并应用刚才的偏好。
   rubric:
     p0:
@@ -2324,6 +2364,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-062
   group_id: agent-memory_multiturn-dev-0
   template_family: agent-memory_multiturn-dev-0
@@ -2331,7 +2379,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #7'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 JP 的数码配件，并应用刚才的偏好。
   rubric:
     p0:
@@ -2359,6 +2407,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-063
   group_id: agent-memory_multiturn-dev-1
   template_family: agent-memory_multiturn-dev-1
@@ -2366,7 +2422,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #8'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 US 的旅行装备，并应用刚才的偏好。
   rubric:
     p0:
@@ -2394,6 +2450,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-064
   group_id: agent-memory_multiturn-dev-2
   template_family: agent-memory_multiturn-dev-2
@@ -2401,7 +2465,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #9'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的母婴宠物，并应用刚才的偏好。
   rubric:
     p0:
@@ -2429,6 +2493,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-065
   group_id: agent-memory_multiturn-dev-0
   template_family: agent-memory_multiturn-dev-0
@@ -2436,7 +2508,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #10'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的办公学习，并应用刚才的偏好。
   rubric:
     p0:
@@ -2464,6 +2536,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-066
   group_id: agent-memory_multiturn-release-1
   template_family: agent-memory_multiturn-release-1
@@ -2471,7 +2551,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #11'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的家居生活，并应用刚才的偏好。
   rubric:
     p0:
@@ -2499,6 +2579,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-067
   group_id: agent-memory_multiturn-release-2
   template_family: agent-memory_multiturn-release-2
@@ -2506,7 +2594,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #12'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的旅行装备，并应用刚才的偏好。
   rubric:
     p0:
@@ -2534,6 +2622,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-068
   group_id: agent-memory_multiturn-release-0
   template_family: agent-memory_multiturn-release-0
@@ -2541,7 +2637,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #13'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的旅行装备，并应用刚才的偏好。
   rubric:
     p0:
@@ -2569,6 +2665,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-069
   group_id: agent-memory_multiturn-release-1
   template_family: agent-memory_multiturn-release-1
@@ -2576,7 +2680,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #14'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的旅行装备，并应用刚才的偏好。
   rubric:
     p0:
@@ -2604,6 +2708,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-070
   group_id: agent-memory_multiturn-release-2
   template_family: agent-memory_multiturn-release-2
@@ -2611,7 +2723,7 @@ cases:
   scenario: memory_multiturn
   description: '正式 Agent 评测：memory_multiturn #15'
   queries:
-  - 记住我不要合成聚合物材质。
+  - 记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。
   - 现在推荐一件可寄到 CN 的数码配件，并应用刚才的偏好。
   rubric:
     p0:
@@ -2639,6 +2751,14 @@ cases:
   expected:
     required_tools: []
     forbidden_tools: []
+  actions:
+  - type: resolve_tool_approval
+    after_turn: 1
+    action: remember_preference_tool
+    approved: true
+    expected_payload:
+      kind: dislike
+      statement: 不要合成聚合物材质
 - id: agent-071
   group_id: agent-tool_failure-dev-0
   template_family: agent-tool_failure-dev-0
@@ -2658,8 +2778,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2686,8 +2808,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2714,8 +2838,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2742,8 +2868,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2770,8 +2898,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2798,8 +2928,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2826,8 +2958,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2854,8 +2988,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2882,8 +3018,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval
@@ -2910,8 +3048,10 @@ cases:
     p1:
     - criterion: 程序断言：不支持目的国会返回可行动的工具错误
       kind: tool_error
-      tool: product_search_tool
-      contains: 暂不支持的目的国
+      contains: 不支持
+      tools:
+      - product_search_tool
+      - quote_products
   capabilities:
   - tool_failure
   - retrieval

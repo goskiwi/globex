@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 import asyncio
 import uuid
+import json
 
 import httpx
 
@@ -57,13 +58,19 @@ def validate_http_actions(case: dict) -> list[dict]:
     for action in actions:
         if not isinstance(action, dict) or set(action) != {"type", "after_turn", "action", "approved", "expected_payload"}:
             raise ValueError("确认动作必须且只能声明 type/after_turn/action/approved/expected_payload")
-        if action["type"] != "resolve_confirmation" or action["action"] not in {"create", "cancel"}:
-            raise ValueError("未知 HTTP 确认动作")
         if type(action["approved"]) is not bool:
             raise ValueError("HTTP 动作 approved 必须为字面布尔值，不能来自聊天字符串")
         if type(action["after_turn"]) is not int or not 1 <= action["after_turn"] <= len(case.get("queries", [])):
             raise ValueError("HTTP 动作 after_turn 必须指向真实对话轮次")
         expected = action["expected_payload"]
+        if action['type'] == 'resolve_tool_approval':
+            if (action['action'] != 'remember_preference_tool' or not isinstance(expected, dict)
+                    or set(expected) != {'kind', 'statement'} or expected['kind'] not in {'like', 'dislike'}
+                    or not isinstance(expected['statement'], str) or not expected['statement'].strip()):
+                raise ValueError('记忆批准必须绑定保存工具及完整偏好原文')
+            continue
+        if action["type"] != "resolve_confirmation" or action["action"] not in {"create", "cancel"}:
+            raise ValueError("未知 HTTP 确认动作")
         if not isinstance(expected, dict) or not {"items", "shipping_address", "currency", "total_amount_minor", "subtotal_minor", "freight_minor", "tariff_minor", "amount_scope", "order_kind"} <= set(expected):
             raise ValueError("HTTP 确认动作必须绑定商品、数量、价格币种、地址与意向范围")
         if expected["amount_scope"] != "landed" or expected["order_kind"] != "purchase_intent":
@@ -81,6 +88,46 @@ def validate_http_actions(case: dict) -> list[dict]:
         if not isinstance(expected["shipping_address"], dict) or not {"recipient_name", "country", "state", "city", "address_line", "postal_code", "phone"} <= set(expected["shipping_address"]):
             raise ValueError("动作必须声明完整收货地址")
     return actions
+
+
+async def execute_tool_approval_action(client, base_url, buyer_id, session_id, action, events):
+    """模拟当前页面对指定记忆操作的批准；不根据聊天内容或工具名称自动授权。"""
+    validate_http_actions({'queries': [''] * action['after_turn'], 'actions': [action]})
+    async def read(path):
+        response = await client.get(base_url + path, params={'buyer_id': buyer_id})
+        response.raise_for_status()
+        return response.json()
+    snapshot = await read('/commerce/ag-ui/sessions/' + session_id)
+    rows = snapshot['state'].get('toolApprovals', [])
+    matches = [r for r in rows if r.get('tool') == action['action'] and
+               (json.loads(r['arguments']) if isinstance(r.get('arguments'), str) else r.get('arguments')) == action['expected_payload']]
+    if len(rows) != 1 or len(matches) != 1 or not isinstance(matches[0].get('id'), str) or not matches[0]['id']:
+        raise ValueError('待批准工具或参数与显式记忆动作不匹配，不执行批准')
+    preferences = await read('/commerce/preferences')
+    if any(matches_expected(p, action['expected_payload']) for p in preferences['preferences']):
+        raise ValueError('批准前偏好已写入，不能算作确认保护通过')
+    selected = matches[0]
+    events.append({'type': 'eval.tool_approval.snapshot', 'payload': {'after_turn': action['after_turn'], 'approval': selected}})
+    request = {'threadId': session_id, 'runId': uuid.uuid4().hex, 'state': {}, 'tools': [], 'context': [],
+        'messages': [{'id': uuid.uuid4().hex, 'role': 'user', 'content': '批准这次长期记忆操作' if action['approved'] else '拒绝这次长期记忆操作'}],
+        'resume': [{'interruptId': selected['id'], 'status': 'resolved', 'payload': {'approved': action['approved']}}],
+        'forwardedProps': {'buyerId': buyer_id, 'locale': 'zh-CN', 'currency': 'CNY'}}
+    events.append({'type': 'eval.tool_approval.invoke', 'payload': request})
+    response = await client.post(base_url + '/commerce/ag-ui/run', json=request, timeout=120)
+    response.raise_for_status()
+    after = await read('/commerce/ag-ui/sessions/' + session_id)
+    if after['run']['runId'] != request['runId'] or after['state'].get('toolApprovals'):
+        raise ValueError('批准请求未完成或记忆操作仍待确认')
+    saved = await read('/commerce/preferences')
+    # 记忆服务可规范化陈述；用批准的来源和原文证据核对，后续商品断言再核对硬过滤。
+    present = any(p.get('kind') == action['expected_payload']['kind'] and p.get('source_kind') == 'agent'
+        and p.get('source_ref') == session_id and isinstance(p.get('evidence'), str) and p['evidence']
+        and p['evidence'] in action['expected_payload']['statement'] for p in saved['preferences'])
+    events.append({'type': 'eval.preferences.snapshot', 'payload': {'after_turn': action['after_turn'], 'preferences': saved['preferences']}})
+    if present != action['approved']:
+        raise ValueError('持久偏好与页面批准/拒绝结果不一致')
+    events.append({'type': 'eval.tool_approval.result', 'payload': {'approved': action['approved'], 'persisted': present}})
+    return after['run']['result']['text']
 
 
 def matches_expected(actual: Any, expected: Any) -> bool:

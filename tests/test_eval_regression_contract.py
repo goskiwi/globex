@@ -19,6 +19,15 @@ from scripts.eval_regression import (
 from app.application.prompts.loader import load_prompts
 
 
+def test_retrieval_strategy_measurement_distinguishes_algorithm_from_exact_id_reads():
+    from scripts.eval_regression import actual_trace_strategies
+    def rows(*strategies):
+        return [{'id':'case','trace_events':[{'type':'tool.result','payload':{'recall_strategy':s}} for s in strategies]}]
+    assert actual_trace_strategies(rows('exact_id_lookup','hybrid_rerank')) == actual_trace_strategies(rows('hybrid_rerank'))
+    assert actual_trace_strategies(rows('embedding_rerank')) != actual_trace_strategies(rows('hybrid_rerank'))
+    assert actual_trace_strategies(rows('hybrid_rerank','keyword_fallback')) != actual_trace_strategies(rows('hybrid_rerank'))
+
+
 def test_score_case_rejects_missing_p0_instead_of_treating_it_as_full_score():
     rubric = {"p0": ["不得编造"], "p1": [], "p2": []}
 

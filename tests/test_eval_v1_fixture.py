@@ -126,3 +126,19 @@ def test_product_gold_validator_rejects_a_hard_constraint_violation():
     assert any("material" in problem for problem in problems)
     assert any("stock" in problem for problem in problems)
     assert any("price" in problem for problem in problems)
+
+
+def test_generated_memory_cases_include_explicit_approval_before_followup():
+    from scripts.generate_eval_v1 import build_agent_cases
+    root=Path(__file__).resolve().parents[1]
+    records=[json.loads(line) for line in (root/'data/catalog-v1.jsonl').read_text().splitlines() if line]
+    generated=build_agent_cases(records)
+    stored=yaml.safe_load((root/'eval/v1/agent_cases.yaml').read_text())['cases']
+    for rows in [generated,stored]:
+        memory=[r for r in rows if r['scenario']=='memory_multiturn']
+        assert len(memory)==15
+        for row in memory:
+            assert row['actions']==[{'type':'resolve_tool_approval','after_turn':1,
+                'action':'remember_preference_tool','approved':True,
+                'expected_payload':{'kind':'dislike','statement':'不要合成聚合物材质'}}]
+        assert all(not r.get('actions') for r in rows if r['scenario'] not in {'order','memory_multiturn'})

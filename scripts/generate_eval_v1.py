@@ -353,7 +353,7 @@ def _agent_rubric(scenario: str) -> tuple[dict[str, list[str]], dict[str, list[d
         criterion = "程序断言：不支持目的国会返回可行动的工具错误"
         return (
             {"p0": ["不得编造商品、价格、订单或政策事实"], "p1": [criterion], "p2": ["回复清晰并说明边界"]},
-            {"p1": [{"criterion": criterion, "kind": "tool_error", "tool": "product_search_tool", "contains": "暂不支持的目的国"}]},
+            {"p1": [{"criterion": criterion, "kind": "tool_error", "tools": ["product_search_tool", "quote_products"], "contains": "不支持"}]},
         )
     required = ["product_search_tool"] if scenario in {"search_recommend", "compare_price", "tool_failure", "long_context"} else []
     if scenario == "long_context":
@@ -389,7 +389,7 @@ def build_agent_cases(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     f"我确认购买 {first['title']} 的{order_sku['spec']}，数量1件（product_id={first['product_id']}，sku_id={order_sku['sku_id']}），请创建订单。",
                 ]
             elif scenario == "memory_multiturn":
-                queries = ["记住我不要合成聚合物材质。", f"现在推荐一件可寄到 {first['ships_to'][0]} 的{first['category']}，并应用刚才的偏好。"]
+                queries = ["记住我的长期偏好，原文是“不要合成聚合物材质”。请先准备这条原文的保存确认，等我点击批准。", f"现在推荐一件可寄到 {first['ships_to'][0]} 的{first['category']}，并应用刚才的偏好。"]
             elif scenario == "tool_failure":
                 queries = [f"查询 {first['title']} 寄到 BR 的到手价；系统没有数据时请明确说明，不能编造。"]
             elif scenario == "safety":
@@ -425,6 +425,10 @@ def build_agent_cases(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "queries": queries, "rubric": rubric, "deterministic": deterministic, "capabilities": capabilities,
                 "expected": expected,
             })
+            if scenario == 'memory_multiturn':
+                rows[-1]['actions'] = [{'type': 'resolve_tool_approval', 'after_turn': 1,
+                    'action': 'remember_preference_tool', 'approved': True,
+                    'expected_payload': {'kind': 'dislike', 'statement': '不要合成聚合物材质'}}]
             if scenario == "order":
                 from types import SimpleNamespace
                 from app.application.usecases.pricing import PricingService

@@ -35,7 +35,7 @@ from scripts.eval.contracts import JudgeOutputError, validate_judge_output  # no
 from scripts.eval.evidence import evaluate_trace_assertions  # noqa: E402
 from scripts.eval.metrics_evidence import collect_case_metrics, release_metrics
 from time import perf_counter
-from scripts.eval.http_actions import BuyerAPIClient, capture_confirmations, execute_confirmation_action, validate_http_actions  # noqa: E402
+from scripts.eval.http_actions import BuyerAPIClient, capture_confirmations, execute_confirmation_action, execute_tool_approval_action, validate_http_actions  # noqa: E402
 from scripts.eval.run_manifest import (  # noqa: E402
     SPLITS, build_manifest, finish_manifest, manifest_report, public_endpoint, select_cases, write_manifest,
 )
@@ -370,7 +370,7 @@ async def run_case(client: httpx.AsyncClient, case: dict, ground_truth: str, *, 
 
 
 async def _run_case_with_events(client, judge_client, case, ground_truth, session_id, buyer_id, transcript_lines, collector, actions):
-    inspect_confirmations = bool(actions) or any(assertion.get("kind") == "no_orders_before_http_confirmation"
+    inspect_confirmations = any(action['type'] == 'resolve_confirmation' for action in actions) or any(assertion.get("kind") == "no_orders_before_http_confirmation"
                                                 for assertions in (case.get("deterministic") or {}).values() for assertion in assertions)
     last_order_id = None
     case_started = perf_counter()
@@ -404,7 +404,7 @@ async def _run_case_with_events(client, judge_client, case, ground_truth, sessio
             if inspect_confirmations:
                 confirmations = await capture_confirmations(client, BASE_URL, buyer_id, session_id, collector.events, turn_index)
                 for action in actions:
-                    if action["after_turn"] != turn_index:
+                    if action['type'] != 'resolve_confirmation' or action["after_turn"] != turn_index:
                         continue
                     if action["expected_payload"].get("order_id") == "{{confirmed_order_id}}":
                         if last_order_id is None:
@@ -415,8 +415,12 @@ async def _run_case_with_events(client, judge_client, case, ground_truth, sessio
                         last_order_id = resolved["order"]["order_id"]
                     transcript_lines.append(f"[评测模拟用户页面点击] action={action['action']}，approved={action['approved']}；服务端决议={resolved['confirmation']['status']}，意向单状态={(resolved.get('order') or {}).get('status', '未创建')}。")
                     confirmations = await capture_confirmations(client, BASE_URL, buyer_id, session_id, collector.events, turn_index)
+            for action in actions:
+                if action['type'] == 'resolve_tool_approval' and action['after_turn'] == turn_index:
+                    text = await execute_tool_approval_action(client, BASE_URL, buyer_id, session_id, action, collector.events)
+                    transcript_lines.append(f"[评测模拟用户页面点击] {action['action']}，approved={action['approved']}。\n[Agent] {text}")
 
-    case_metrics = collect_case_metrics(collector.events, expected_turns=len(case["queries"]), elapsed_ms=(perf_counter() - case_started) * 1000)
+    case_metrics = collect_case_metrics(collector.events, expected_turns=len(case["queries"])+sum(a['type']=='resolve_tool_approval' for a in actions), elapsed_ms=(perf_counter() - case_started) * 1000)
     transcript = "\n\n".join(transcript_lines)
     judge_rubric = build_judge_rubric(case["rubric"], case.get("deterministic"))
     if any(judge_rubric[level] for level in ("p0", "p1", "p2")):
@@ -523,12 +527,13 @@ def compare_runtime_identity(local_app_hash: str, health: dict) -> dict:
 
 
 def actual_trace_strategies(results: list[dict]) -> dict[str, list[str]]:
-    """只采信运行时工具结果；未观察到的召回链不从配置猜测。"""
+    """记录实际检索算法；精确ID读取不排序，不属于检索算法切换，原事件仍完整保留。"""
     return {
         result["id"]: sorted({
             str((event.get("payload") or {})["recall_strategy"])
             for event in result.get("trace_events", [])
             if event.get("type") == "tool.result" and (event.get("payload") or {}).get("recall_strategy")
+            and event['payload']['recall_strategy'] != 'exact_id_lookup'
         })
         for result in results
     }

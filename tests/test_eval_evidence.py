@@ -139,7 +139,7 @@ def test_forbidden_tool_before_turn_checks_only_the_pre_confirmation_trace():
 def test_tool_error_assertion_requires_the_expected_reproducible_failure():
     assertion = [{
         "criterion": "不支持目的国要如实报错", "kind": "tool_error",
-        "tool": "product_search_tool", "contains": "暂不支持的目的国",
+        "tools": ["product_search_tool", "quote_products"], "contains": "不支持",
     }]
     events = [{
         "type": "tool.result",
@@ -147,6 +147,11 @@ def test_tool_error_assertion_requires_the_expected_reproducible_failure():
     }]
 
     assert evaluate_trace_assertions(assertion, events)[0]["pass"] is True
+    quote = [{"type":"tool.result","payload":{"tool":"quote_products","error":"商品不支持配送至 BR：P2079"}}]
+    assert evaluate_trace_assertions(assertion, quote)[0]["pass"] is True
+    assert not evaluate_trace_assertions(assertion, [{"type":"tool.result","payload":{"tool":"quote_products","error":"网络超时"}}])[0]["pass"]
+    assert not evaluate_trace_assertions(assertion, [{"type":"tool.result","payload":{"tool":"other","error":"不支持"}}])[0]["pass"]
+    assert not evaluate_trace_assertions(assertion, [{"type":"final.result","payload":{"text":"不支持配送至 BR"}}])[0]["pass"]
 
 
 def test_landed_price_consistency_is_checked_from_tool_facts():
