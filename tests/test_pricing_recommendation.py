@@ -2,7 +2,7 @@ from tests.presentation_helpers import delivery_middlewares
 """完整报价与推荐链：使用真实目录、证据库和 SQLite，不调用外部模型。"""
 import pytest
 
-from app.application.tools.recommendation_tools import build_recommendation_tool, Pick
+from app.application.tools.recommendation_tools import build_recommendation_tool, build_bundle_tool, Pick
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.pricing import QuoteItem
 from app.application.usecases.order_usecases import OrderItemInput
@@ -51,13 +51,13 @@ async def test_recommendation_uses_evidence_current_constraints_and_actual_quant
     catalog = CatalogSearchUseCase(env.products, pricing=env.service._pricing)
     result = await catalog.execute(ProductSearchSpec(product_id="P1001", ship_to="CN"))
     await env.evidence.save("buyer-1", "session-1", "products", result)
-    tool = build_recommendation_tool(catalog, env.evidence, env.bus)
+    tool = build_bundle_tool(catalog, env.evidence, env.bus)
     pick = Pick(product_id="P1001", sku_id="P1001-S1", quantity=2, reason="适合旅行")
     context = ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY", "landed_budget_major": 400}})
     token = ShoppingContext.set(context)
     try:
-        rejected = await tool([pick], "bundle", None, [], "两件搭配用于旅行。")
+        rejected = await tool([pick], '两件搭配用于旅行。')
         assert not rejected.ok and "超过当前预算" in str(rejected)
         assert not await env.evidence.search("buyer-1", "session-1", kind="recommendation")
     finally:
@@ -66,7 +66,7 @@ async def test_recommendation_uses_evidence_current_constraints_and_actual_quant
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY", "landed_budget_major": 450}}))
     try:
-        accepted = await tool([pick], "bundle", None, [], "两件搭配用于旅行。")
+        accepted = await tool([pick], '两件搭配用于旅行。')
         assert accepted.ok
         saved = (await env.evidence.search("buyer-1", "session-1", kind="recommendation"))[0]["data"]
         assert saved["quote"]["total_amount_minor"] == 41800
@@ -81,7 +81,7 @@ def test_final_recommendation_is_not_replaced_by_later_search():
     from tests.presentation_helpers import accept
     from tests.test_product_delivery import adapter,emit
     target,_=adapter()
-    payload={'mode':'alternatives','hits':[{'product_id':'P1001'}],'quote':None,'result_ref':'ctx_test'}
+    payload={'mode': 'individual', 'hits': [{'product_id': 'P1001'}], 'quote': None, 'result_ref': 'ctx_test'}
     accept(target,'recommendation',payload)
     emit(target,'tool.result',{'tool':'product_search_tool','hits':[{'product_id':'P1003'}]})
     target.finish('已交付','completed',None)
@@ -119,10 +119,9 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs):
             return self
-    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_products", "args": {
-        "mode": "bundle", "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "preferred_sku_id":None, "dimensions":["旅行收纳"], "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
+    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_bundle", "args": { "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
         AIMessage(content="两件合计418元")])
-    tool = as_langchain_tool(build_recommendation_tool(catalog, env.evidence, env.bus), args_schema=RecommendationInput)
+    tool = as_langchain_tool(build_bundle_tool(catalog, env.evidence, env.bus), args_schema=RecommendationInput)
     graph = create_agent(model, tools=[tool], middleware=delivery_middlewares())
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY"}}))

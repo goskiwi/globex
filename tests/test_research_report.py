@@ -31,7 +31,7 @@ def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
     data = report_pair()
     data['summary'] = '3款头戴式耳机，P1022是最低价'
     before = deepcopy(data)
-    result = project_research_report(data, RATES)
+    result = project_research_report(data, RATES, title='研究结果')
     assert result['product_count'] == 2 and result['sku_count'] == 2
     unit, landed = result['price_comparisons']
     assert unit['minimum_minor'] == 29118 and unit['maximum_minor'] == 29900
@@ -49,7 +49,7 @@ def test_assessment_is_presented_separately_without_replacing_facts_or_price_com
     candidate = data['candidates'][0]
     candidate['assessment'] = '适合优先减轻随身负担的人；背负舒适度尚未核验。'
     before = deepcopy(candidate['facts'])
-    result = project_research_report(data, RATES)
+    result = project_research_report(data, RATES, title='研究结果')
     assert result['items'][0]['assessment'] == candidate['assessment']
     assert result['items'][0]['facts'] == before
     text = _report(result)
@@ -74,7 +74,7 @@ def test_counts_distinguish_canonical_products_and_explicit_skus():
     first, second = data['candidates']
     first['facts']['product']['canonical_product_id'] = 'same-product'
     second['facts']['product']['canonical_product_id'] = 'same-product'
-    result = project_research_report(data, RATES)
+    result = project_research_report(data, RATES, title='研究结果')
     assert (result['product_count'], result['sku_count']) == (1, 2)
     assert '1款商品、2个明确规格' in research_summary('completed', data['candidates'])
 
@@ -96,7 +96,7 @@ def test_incomparable_quotes_never_create_landed_ranking(change):
         quote['currency'] = quote['line']['currency'] = 'USD'
     else:
         quote['historical'] = True
-    comparisons = project_research_report(data, RATES)['price_comparisons']
+    comparisons = project_research_report(data, RATES, title='研究结果')['price_comparisons']
     assert len(comparisons) == 1 and comparisons[0]['kind'] == 'unit_price'
 
 
@@ -109,7 +109,7 @@ def test_product_only_or_historical_candidates_do_not_borrow_current_sku_prices(
     else:
         candidate['sku_id'] = None
         candidate['facts']['sku'] = None
-    result = project_research_report(data, RATES)
+    result = project_research_report(data, RATES, title='研究结果')
     assert result['price_comparisons'] == []
     assert result['items'][1]['facts']['historical'] is historical
 
@@ -120,7 +120,7 @@ def test_tied_prices_keep_all_lowest_candidates_and_full_read_facts():
     product = data['candidates'][0]['facts']['product']
     product['catalog_extension'] = {'value': '保留原始目录字段'}
     before = deepcopy(product)
-    result = project_research_report(data, RATES)
+    result = project_research_report(data, RATES, title='研究结果')
     unit = result['price_comparisons'][0]
     assert unit['spread_minor'] == 0 and len(unit['lowest']) == len(unit['highest']) == 2
     assert result['items'][0]['facts']['product'] == before

@@ -81,7 +81,7 @@ async def test_research_delivery_status_and_summary_survive_history_restore(tmp_
     events=[]
     target=AGUIRunAdapter(RunAgentInput.model_validate(saved['input']),events.append)
     target.start()
-    start(target,'report','present_research',{'task_ids':['a','b']})
+    start(target,'report','present_research',{'reports':[{'task_id':'a','title':'背包研究'},{'task_id':'b','title':'耳机研究'}]})
     end(target,'report','present_research',{'status':status,'task_ids':['a','b'],'completed_task_ids':completed})
     target.finish('研究报告',status,None)
     await journal.append('r','owner',[e.model_dump(mode='json',by_alias=True,exclude_none=True) for e in events])

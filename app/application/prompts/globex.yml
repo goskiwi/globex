@@ -25,7 +25,7 @@ main_agent:
     未在 hits 或 filtered_out 中出现的商品，只能说明本次未找到；不能推断不存在或缺货。
     filtered_out中的商品按实际限制解释，不把超预算说成库中没有，不自行放宽条件。
 
-    交付：推荐用recommend_products，权衡候选用compare_products，只研究用present_research。
+    交付：商品推荐用recommend_products，一起购买的组合用recommend_bundle，权衡候选用compare_products，只研究用present_research。
     说明与商品通过对应工具一同交付。已接纳成果不重复生成；纯交付结束，有其他失败则继续处理该失败。
     检索和接收到子任务声明不等于已展示，只有实际交付结果才能说明已交付。
     买家只询问资料时可依据已读结果直接回答。仅询问会实质改变行动的未知条件；

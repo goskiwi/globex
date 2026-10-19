@@ -50,7 +50,7 @@ class TaskPlanMiddleware(AgentMiddleware):
                     continue
                 if receipt.name == 'present_research':
                     plan = apply_delivery(plan, data['completed_task_ids'], 'research', work, policy)
-                elif receipt.name in {'recommend_products', 'compare_products'}:
+                elif receipt.name in {'recommend_products', 'recommend_bundle', 'compare_products'}:
                     plan = apply_delivery(plan, data['plan_outcome']['delivered_tasks'], 'products', work, policy)
             plan['last_batch'] = last.id
         plan = project_plan(work, policy, plan)

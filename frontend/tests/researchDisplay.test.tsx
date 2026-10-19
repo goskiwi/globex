@@ -10,7 +10,7 @@ import type {ResearchDelivery} from '../src/types';
 import {readResearchReports} from '../src/lib/research';
 
 const assessment='适合优先减轻随身负担的人，折叠后也方便收纳。若每天携带电脑，独立电脑仓和保护能力仍需核验。';
-const report={task_id:'bag',goal:'通勤背包研究',status:'partial',product_count:1,sku_count:1,
+const report={task_id:'bag',title:'通勤背包研究',status:'partial',product_count:1,sku_count:1,
   caveats:[],unmet_requirements:['电脑仓资料尚未核实'],questions:[],issues:[],price_comparisons:[],items:[{
     product_id:'P1003',sku_id:'P1003-S1',assessment,caveats:['是否有独立电脑仓？'],
     facts:{product:{product_id:'P1003',title:'Wanderlite 折叠旅行双肩包 35L',weight_kg:0.38,
@@ -113,4 +113,14 @@ it('跨币种研究卡复用读取时显示金额，保留已有的同规格到�
  const html=renderToStaticMarkup(<ResearchReports delivery={data}/>);
  expect(html).toContain('¥291.18');expect(html).toContain('¥316.18');
  expect(html).not.toContain('到手价待目的地与规格确认');
+});
+
+it('研究展示只消费Main交付的标题，不从旧goal或内部任务拼标题',()=>{
+  const read=readResearchReports([delivery]);
+  const html=renderToStaticMarkup(<ResearchReports delivery={read[0]}/>);
+  expect(html).toContain('<h3>通勤背包研究</h3>');
+  const {title,...withoutTitle}=report;
+  expect(readResearchReports([{...delivery,reports:[{...withoutTitle,goal:'内部任务 description/highlights'}]}])).toEqual([]);
+  expect(readResearchReports([{...delivery,reports:[{...report,title:'研究'.repeat(41)}]}])).toEqual([]);
+  expect(readResearchReports([{...delivery,reports:[{...report,title:'🎒'.repeat(80)}]}])).toHaveLength(1);
 });

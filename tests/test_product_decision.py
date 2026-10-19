@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 from app.application.tools.recommendation_tools import (
     RecommendationInput, ComparisonInput, Pick, MAX_DECISION_ITEMS,
-    build_recommendation_tool, build_comparison_tool,
+    build_recommendation_tool, build_comparison_tool, build_bundle_tool,
 )
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.product_search_spec import ProductSearchSpec
@@ -18,18 +18,17 @@ def picks():
             for pid in ('P1003', 'P1018', 'P1049', 'P3004')]
 
 
-def test_shared_capacity_and_explicit_decision_fields():
-    entries = picks()
-    for model, field in ((RecommendationInput, 'picks'), (ComparisonInput, 'entries')):
-        values = {field: entries, 'preferred_sku_id': 'P1018-S1', 'dimensions': ['雨天骑行', '背负'], 'guidance':'雨天骑车更推荐防水款；更在意轻便时可看折叠款。'}
-        if field == 'picks': values['mode'] = 'alternatives'
-        assert model.model_validate(values).dimensions == ['雨天骑行', '背负']
-        assert model.model_json_schema()['properties'][field]['maxItems'] == MAX_DECISION_ITEMS
-        for missing in ('preferred_sku_id', 'dimensions', 'guidance'):
-            with pytest.raises(ValidationError):
-                model.model_validate({k:v for k,v in values.items() if k != missing})
-        with pytest.raises(ValidationError):
-            model.model_validate({**values, field:entries * 4})
+def test_recommendation_and_comparison_own_their_delivery_fields():
+    entries=picks()
+    recommendation=RecommendationInput(picks=entries,guidance='依据用途选择')
+    assert set(RecommendationInput.model_fields)=={'picks','guidance'}
+    for model,field,values in [
+        (RecommendationInput,'picks',{'picks':entries,'guidance':'依据用途选择'}),
+        (ComparisonInput,'entries',{'entries':entries,'guidance':'比较防水与背负','preferred_sku_id':'P1018-S1','dimensions':['防水','背负']})]:
+        assert model.model_json_schema()['properties'][field]['maxItems']==MAX_DECISION_ITEMS
+        with pytest.raises(ValidationError):model.model_validate({**values,field:entries*4})
+        for required in model.model_json_schema()['required']:
+            with pytest.raises(ValidationError):model.model_validate({k:v for k,v in values.items() if k!=required})
 
 
 def test_reason_is_short_choice_advice_without_truncating_long_input():
@@ -55,16 +54,17 @@ async def test_four_choices_share_facts_preference_focus_and_capacity(confirmati
         selected = 'P1018-S1'
         focus = ['雨天骑行', '防水与背负']
         guidance = '这次更看重防雨，首选防水款；其他候选分别适合轻装或预算优先。'
-        recommendation = json.loads((await recommend(picks(), 'alternatives', selected, focus, guidance)).text)
+        recommendation = json.loads((await recommend(picks(), guidance)).text)
         comparison = json.loads((await compare(picks(), selected, focus, guidance)).text)
-        for key in ('guidance', 'hits', 'preferred_sku_id', 'dimensions', 'max_items'):
-            assert recommendation[key] == comparison[key]
-        assert len(recommendation['hits']) == 4
-        assert recommendation['hits'][0]['default_sku_id'] == selected
-        totals = {p['default_sku_id']:p['landed_price']['total_amount_minor'] for p in comparison['hits']}
-        assert totals['P1003-S1'] == 15400 and totals['P1018-S1'] == 24400 and totals['P1049-S1'] == 6400
-        assert not (await recommend(picks(), 'alternatives', 'P9999-S1', focus, guidance)).ok
-        assert not (await recommend(picks(), 'bundle', selected, focus, guidance)).ok
+        assert recommendation['guidance']==comparison['guidance']
+        assert {p['default_sku_id']:p for p in recommendation['hits']} == {p['default_sku_id']:p for p in comparison['hits']}
+        assert [p['default_sku_id'] for p in recommendation['hits']] == [p.sku_id for p in picks()]
+        assert not {'preferred_sku_id','dimensions','max_items'} & set(recommendation)
+        assert comparison['preferred_sku_id']==selected and comparison['dimensions']==focus
+        totals={p['default_sku_id']:p['landed_price']['total_amount_minor'] for p in comparison['hits']}
+        assert totals['P1003-S1']==15400 and totals['P1018-S1']==24400 and totals['P1049-S1']==6400
+        assert not (await compare(picks(),'P9999-S1',focus,guidance)).ok
+        assert not (await build_bundle_tool(catalog,env.evidence,env.bus)(picks(),guidance)).ok
         assert ShoppingContext.current().selected_lines == ()
         assert await env.store.list_confirmations(buyer_id='buyer-1',session_id='session-1') == []
     finally:
@@ -87,11 +87,11 @@ async def test_valid_identifiers_in_explanation_do_not_reject_catalog_choices(co
         elif field=='tradeoffs':pick=pick.model_copy(update={'tradeoffs':['P1003-S1 与其他选项不同']})
         else:dimensions=['P1003 的收纳']
         tool=build_recommendation_tool(catalog,env.evidence,env.bus)
-        result=await tool([pick],'alternatives','P1003-S1',dimensions,guidance)
+        result=(await build_comparison_tool(catalog,env.evidence,env.bus)([pick,pick.model_copy(update={'sku_id':'P1003-S2'})], 'P1003-S1', dimensions, guidance)) if field=='dimensions' else await tool([pick],guidance)
         assert result.ok
         data=json.loads(result.text)
         assert data['guidance']==guidance and data['hits'][0]['default_sku_id']=='P1003-S1'
-        assert await env.evidence.search('buyer-1','session-1',kind='recommendation')
+        assert await env.evidence.search('buyer-1','session-1',kind='comparison' if field=='dimensions' else 'recommendation')
     finally:ShoppingContext.reset(context)
 
 
@@ -100,7 +100,7 @@ async def test_native_agent_delivers_valid_id_explanation_without_another_genera
     from tests.test_langgraph_runtime import _container
     from app.application.usecases.intents import SubmitIntentInput
     guidance='按你指定的P1012展示这款充气颈枕。'
-    model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1012'}),call('recommend_products',{'picks':[{'product_id':'P1012','sku_id':'P1012-S1','quantity':1,'reason':'方便收纳'}],'mode':'alternatives','preferred_sku_id':'P1012-S1','dimensions':['收纳'],'guidance':guidance})])
+    model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1012'}),call('recommend_products', {'picks': [{'product_id': 'P1012', 'sku_id': 'P1012-S1', 'quantity': 1, 'reason': '方便收纳'}], 'guidance': guidance})])
     c=await _container(tmp_path,monkeypatch,model)
     try:
         result=await c.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','推荐充气颈枕'))

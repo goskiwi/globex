@@ -62,4 +62,4 @@ async def test_ordinary_conversation_unchanged():
 async def test_successful_old_delivery_without_guidance_is_not_given_placeholder_advice():
     from app.application.runtime.delivery import presentation
     with pytest.raises(ValueError,match='展示结果缺少说明'):
-        presentation('recommend_products',{'hits':[{'product_id':'P1001'}]},'call')
+        presentation('recommend_products', {'hits': [{'product_id': 'P1001'}]}, 'call')

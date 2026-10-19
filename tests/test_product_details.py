@@ -52,9 +52,7 @@ async def test_complete_out_of_budget_and_out_of_stock_details_do_not_change_fil
         with pytest.raises(ValueError):
             await _verified_order_items(e.evidence,'buyer','detail-test',
                 [{'product_id':'P3021','sku_id':'P3021-S2','quantity':1}])
-        refused=await build_recommendation_tool(catalog,e.evidence,e.bus)(
-            [Pick(product_id='P3021',sku_id='P3021-S2',quantity=1,reason='想查看这款')],
-            'alternatives','P3021-S2',[], '这款只供查看。')
+        refused=await build_recommendation_tool(catalog, e.evidence, e.bus)([Pick(product_id='P3021', sku_id='P3021-S2', quantity=1, reason='想查看这款')], '这款只供查看。')
         assert not refused.ok
         assert len(await e.evidence.search('buyer','detail-test',kind='product_details'))==2
     finally:ShoppingContext.reset(token)

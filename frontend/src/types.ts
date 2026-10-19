@@ -117,7 +117,7 @@ export interface SessionSummary {
 
 export interface ToolApproval { id: string; tool: string; label: string; arguments: string | Record<string, unknown> }
 
-export interface ProductDecision {
+export interface Comparison {
   guidance: string;
   hits: ProductCard[];
   preferred_sku_id: string | null;
@@ -127,9 +127,15 @@ export interface ProductDecision {
   unverified_requirements: string[];
 }
 
-export interface Recommendation extends ProductDecision { mode: "alternatives" | "bundle"; quote: PriceQuote | null }
+export interface Recommendation {
+  guidance: string;
+  hits: ProductCard[];
+  result_ref: string;
+  unverified_requirements: string[];
+  mode: "individual" | "bundle";
+  quote: PriceQuote | null;
+}
 
-export interface Comparison extends ProductDecision {}
 
 export interface ProductView {
   runId: string;
@@ -265,7 +271,7 @@ export interface ResearchCandidate {
 }
 export interface ResearchReport {
   task_id: string;
-  goal: string;
+  title: string;
   status: 'completed' | 'partial' | 'needs_input' | 'failed';
   product_count: number;
   sku_count: number;

@@ -43,8 +43,8 @@ function Questions({candidate}: {candidate: ResearchCandidate}) {
 export default function ResearchReports({delivery}: {delivery: ResearchDelivery}) {
   const [detail,setDetail]=useState<ResearchCandidate|null>(null);
   return <section className="research-reports" aria-label="研究候选与取舍">
-    {delivery.reports.map(report=><section className="research-category" key={report.task_id} aria-label={report.goal}>
-      <div className="research-heading"><h3>{report.goal}</h3><span>{report.status==='completed'?'研究完成':report.status==='partial'?'部分完成':report.status==='needs_input'?'需要补充信息':'研究未完成'}</span></div>
+    {delivery.reports.map(report=><section className="research-category" key={report.task_id} aria-label={report.title}>
+      <div className="research-heading"><h3>{report.title}</h3><span>{report.status==='completed'?'研究完成':report.status==='partial'?'部分完成':report.status==='needs_input'?'需要补充信息':'研究未完成'}</span></div>
       <p className="research-count">{report.product_count}款商品 · {report.sku_count}个明确规格</p>
       {!!report.items.length && <div className="research-analysis" aria-label="选择依据与取舍">
         {report.items.map(candidate=><div key={`${candidate.product_id}:${candidate.sku_id}`}>

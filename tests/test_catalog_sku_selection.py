@@ -123,7 +123,7 @@ async def test_search_recommendation_details_and_confirmation_use_the_same_sku(c
     try:
         recommend = build_recommendation_tool(catalog, e.evidence, e.bus)
         pick = Pick(product_id="P2101", sku_id="P2101-S2", quantity=1, reason="此规格在预算内")
-        reply = await recommend([pick], "alternatives", pick.sku_id, [], "可选择这款餐盒。")
+        reply = await recommend([pick], '可选择这款餐盒。')
         assert reply.ok
         card = json.loads(reply.text)["hits"][0]
         assert [s["sku_id"] for s in card["skus"]] == [pick.sku_id]
@@ -141,7 +141,7 @@ async def test_search_recommendation_details_and_confirmation_use_the_same_sku(c
         assert await e.store.get_inventory() == before
         changed = {"parameters": {**policy["parameters"], "price_max_major": 5}}
         ShoppingContext.set(replace(context, effective_search=changed))
-        assert not (await recommend([pick], "alternatives", pick.sku_id, [], "再核对预算。 ")).ok
+        assert not (await recommend([pick], '再核对预算。 ')).ok
         blocked = await catalog.product_details("P2101", replace(spec, price_max_major=5))
         assert all("over_price_cap" in s["constraint_issues"] for s in blocked["hits"][0]["skus"])
     finally:

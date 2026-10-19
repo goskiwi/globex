@@ -86,17 +86,17 @@ function readLandedPrice(value: unknown, currency: string): ProductCard["landed_
 }
 
 export function readRecommendation(value: unknown): import("../types").Recommendation | null {
-  if (!isRecord(value) || !["alternatives", "bundle"].includes(String(value.mode)) || typeof value.result_ref !== "string") return null;
-  const decision = readDecision(value, 1);
-  if (!decision || (value.mode === "bundle" && decision.preferred_sku_id !== null)) return null;
+  if (!isRecord(value) || !["individual", "bundle"].includes(String(value.mode)) ||
+      typeof value.guidance !== 'string' || !value.guidance.trim() || value.guidance.length > 1200 ||
+      typeof value.result_ref !== 'string' || !Array.isArray(value.hits) || !value.hits.length || value.hits.length > 12) return null;
+  const hits=readProducts(value.hits);
+  if(hits.length!==value.hits.length || hits.some(p=>!p.default_sku_id) || new Set(hits.map(p=>p.default_sku_id)).size!==hits.length)return null;
   const quote = isRecord(value.quote) ? readLandedPrice(value.quote, String(value.quote.currency)) : null;
-  return {...decision, mode: value.mode as "alternatives" | "bundle",
-    quote: quote && !("unavailable_reason" in quote) ? quote : null};
+  return {guidance:value.guidance,hits,result_ref:value.result_ref,mode:value.mode as 'individual'|'bundle',
+    unverified_requirements:Array.isArray(value.unverified_requirements)?value.unverified_requirements.filter((v):v is string=>typeof v==='string'):[],
+    quote:quote && !("unavailable_reason" in quote)?quote:null};
 }
 
-export function readComparison(value: unknown): import("../types").Comparison | null {
-  return readDecision(value, 2);
-}
 
 export function readPresentations(value:unknown): CommerceSnapshot['presentations'] {
   if(!Array.isArray(value))return [];
@@ -136,8 +136,8 @@ export function readProductViews(value: unknown): CommerceSnapshot['productViews
   });
 }
 
-function readDecision(value: unknown, minimum: number): import("../types").ProductDecision | null {
-  if (!isRecord(value) || !Array.isArray(value.hits) || value.hits.length < minimum ||
+export function readComparison(value: unknown): import("../types").Comparison | null {
+  if (!isRecord(value) || !Array.isArray(value.hits) || value.hits.length < 2 ||
       typeof value.guidance !== "string" || !value.guidance.trim() || value.guidance.length > 1200 ||
       typeof value.result_ref !== "string" || !Number.isSafeInteger(value.max_items) ||
       Number(value.max_items) < value.hits.length || !Array.isArray(value.dimensions) ||

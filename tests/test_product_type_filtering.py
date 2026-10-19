@@ -95,9 +95,7 @@ async def test_recommendation_cannot_bypass_type_using_previously_read_product(c
     effective=compile_search(ShoppingWork(filters=Filters(product_type='耳机')))
     token=ShoppingContext.set(ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search=effective))
     try:
-        result=await build_recommendation_tool(catalog,env.evidence,env.bus)(
-            [Pick(product_id='P1003',sku_id='P1003-S1',quantity=1,reason='已读的背包')],
-            'alternatives','P1003-S1',[],'按当前需要选择')
+        result=await build_recommendation_tool(catalog, env.evidence, env.bus)([Pick(product_id='P1003', sku_id='P1003-S1', quantity=1, reason='已读的背包')], '按当前需要选择')
         assert not result.ok and 'product_type_mismatch' in result.data
     finally:
         ShoppingContext.reset(token)
@@ -116,7 +114,7 @@ async def test_parallel_research_keeps_type_in_each_scope_and_candidate_facts(tm
         'filters':{'ship_to':'CN','target_currency':'CNY'},'plan':steps}}),
         AIMessage(content='',tool_calls=[{'id':s['id'],'name':'task_dispatch','args':{
             'subagent_type':'search_agent','task':{'goal':s['goal'],'step_id':s['id']}}} for s in steps]),
-        call('present_research',{'task_ids':['bag','ear']})])
+        call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag', 'ear']]})])
     container=await _container(tmp_path,monkeypatch,main)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:next(children))
     try:

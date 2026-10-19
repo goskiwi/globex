@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 
-DELIVERY_KINDS = {"recommend_products":"recommendation", "compare_products":"comparison",
+DELIVERY_KINDS = {"recommend_products":"recommendation", "recommend_bundle":"recommendation", "compare_products":"comparison",
                   "show_product_details":"product_view", "present_research":"research",
                   "show_shopping_form":"clarification"}
 PRODUCT_DELIVERIES = frozenset({"recommendation", "comparison", "product_view"})

@@ -19,8 +19,7 @@ it('完整App表单归属原回复，提交后接一次结果、收起表单，�
     ]};}
   const product={product_id:'P1003',title:'轻便通勤背包',brand:'测试品牌',category:'旅行装备',origin_country:'CN',price_major:129,currency:'CNY',
     score:0,highlights:['可折叠'],default_sku_id:'P1003-S1',skus:[{sku_id:'P1003-S1',spec:'黑色',price_major:129,currency:'CNY',stock:50}],recommendation_reason:'适合随身携带'};
-  const decision={mode:'alternatives',preferred_sku_id:'P1003-S1',dimensions:['便携收纳'],max_items:12,guidance:'更推荐便携款。',
-    hits:[product],quote:null,unverified_requirements:[],result_ref:'ctx_owned'};
+  const decision={mode:'individual',guidance:'更推荐便携款。',hits:[product],quote:null,unverified_requirements:[],result_ref:'ctx_owned'};
   const sse=(events:any[])=>new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'Content-Type':'text/event-stream'}});
   vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
     if(url.endsWith('/ag-ui/run')){

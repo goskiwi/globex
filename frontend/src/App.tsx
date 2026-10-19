@@ -100,7 +100,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
     .find((message) => message.role === "user");
   const decision = agent.comparison ?? agent.recommendation;
   const shownProducts = decision?.hits ?? [];
-  const comparisonLimit = decision?.max_items;
+  const comparisonLimit = agent.comparison?.max_items;
   const comparisonUsesDelivery = compared.every(p => shownProducts.some(hit => comparisonKey(hit) === comparisonKey(p)));
   useEffect(() => {
     if (!decision) return;
@@ -115,7 +115,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
   const currentDestination='ship_to' in agent.shoppingFilters
     ? (typeof agent.shoppingFilters.ship_to==='string'?agent.shoppingFilters.ship_to:undefined):landedDestination;
   const requestQuote=(country:string)=>{
-    const scope=agent.recommendation?.mode==='bundle'?'核对整套组合一起购买的总价':'分别核对每个备选，按已交付的规格和数量独立报价';
+    const scope=agent.recommendation?.mode==='bundle'?'核对整套组合一起购买的总价':'按已交付的规格和数量分别核对商品报价';
     submit(`请${scope}，配送至${country}；保留当前预算和偏好，不下单。`);
   };
 
@@ -286,7 +286,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
         }}>计算到手价</button>}
       {agent.comparison&&<button className="quote-action" onClick={()=>{setCompared([...shownProducts]);setShowCompare(true);}}>查看对比</button>}
       <>
-        {!!decision?.dimensions.length && <p className="comparison-focus">本次关注：{decision.dimensions.join("、")}</p>}
+        {!!agent.comparison?.dimensions.length && <p className="comparison-focus">本次关注：{agent.comparison!.dimensions.join("、")}</p>}
         {renderCards(shownProducts)}
       </>
     </section>
@@ -468,7 +468,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
                           p.id===currentDecisionId?<div key={p.id}>{deliveredProducts}</div>
                           :p.kind==='product_view'?<section key={p.id} className="product-views" aria-label="商品详情"><ProductCards mode="view" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>
                           :p.kind==='research'?<ResearchReports key={p.id} delivery={{...p.payload,runId:p.runId} as unknown as ResearchDelivery}/>
-                          :p.kind==='recommendation'||p.kind==='comparison'?<section key={p.id} className="historical-products"><p className="comparison-focus">{(p.payload as unknown as Comparison).dimensions.join('、')}</p><ProductCards mode="research" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>:null)}
+                          :p.kind==='recommendation'||p.kind==='comparison'?<section key={p.id} className="historical-products">{p.kind==='comparison'&&<p className="comparison-focus">{(p.payload as unknown as Comparison).dimensions.join('、')}</p>}<ProductCards mode="research" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>:null)}
                         {agent.shoppingForms.filter(form=>message.id===`${form.origin_run_id}:final:answer`).map(form=><ShoppingForm
                           key={form.form_id} form={form} busy={busy||!!agent.toolApprovals?.length||agent.confirmations.some(c=>c.status==='pending'&&!c.expired)}
                           request={agent.workspaceRequest} onApplied={applyForm}
@@ -715,8 +715,8 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
       {showCompare && compared.length >= 2 && (
         <Modal title="商品比较" onClose={() => setShowCompare(false)}>
           <ProductComparison products={compared}
-            preferredSkuId={comparisonUsesDelivery ? decision?.preferred_sku_id : null}
-            dimensions={comparisonUsesDelivery ? decision?.dimensions : []}/>
+            preferredSkuId={comparisonUsesDelivery ? agent.comparison?.preferred_sku_id : null}
+            dimensions={comparisonUsesDelivery ? agent.comparison?.dimensions : []}/>
         </Modal>
       )}
       <div className={`toast ${toast ? "visible" : ""}`} role="status">

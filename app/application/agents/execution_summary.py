@@ -4,7 +4,7 @@ import math
 TOOL_LABELS = {
     'product_search_tool': '检索商品', 'get_product_details': '读取商品资料',
     'show_product_details': '准备商品详情', 'update_shopping_state': '更新选购条件',
-    'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐',
+    'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐', 'recommend_bundle': '准备组合推荐',
     'compare_products': '准备比较结果', 'show_shopping_form': '补充选购需求',
     'SubagentResult': '提交任务结果', 'category_insight_tool': '查询选购知识',
     'present_research': '交付研究报告',
@@ -14,7 +14,7 @@ TOOL_LABELS = {
     'query_order_tool': '查询订单', 'cancel_order_tool': '准备取消确认',
     'load_agent_skill_tool': '读取选购方案', 'lookup_strategy_memory_tool': '查阅选购建议',
 }
-DELIVERY_TOOLS = {'recommend_products': 'recommendation', 'compare_products': 'comparison',
+DELIVERY_TOOLS = {'recommend_products': 'recommendation', 'recommend_bundle': 'recommendation', 'compare_products': 'comparison',
                   'show_product_details': 'product_view'}
 COUNTRIES = {'CN': '中国', 'US': '美国', 'JP': '日本', 'SG': '新加坡', 'EU': '欧盟'}
 AGENTS = {'search_agent': '商品研究', 'trade_agent': '交易准备'}
@@ -100,8 +100,8 @@ def request_summary(name, arguments):
         return conditions(arguments)
     if name == 'product_search_tool' and text(arguments.get('normalized_query')):
         return '检索词：' + arguments['normalized_query']
-    if name == 'present_research' and isinstance(arguments.get('task_ids'), list):
-        return f'汇总{len(set(arguments["task_ids"]))}项研究成果'
+    if name == 'present_research' and isinstance(arguments.get('reports'), list):
+        return f'汇总{len(arguments["reports"])}项研究成果'
     if name == 'quote_products':
         parts = ['配送至' + destination(arguments['ship_to'])] if text(arguments.get('ship_to')) else []
         if text(arguments.get('currency')):
@@ -140,13 +140,13 @@ def delivery_summary(name, data, *, delivered=False):
     if name == 'show_product_details':
         platforms = {p['source_platform'] for p in items if text(p.get('source_platform'))}
         return f'{"已展示" if delivered else "已准备"}{product_count(items)}款商品的完整资料' + (f'，覆盖{len(platforms)}个平台' if platforms else '')
-    kind = '推荐' if name == 'recommend_products' else '比较'
+    kind = '推荐' if name in {'recommend_products','recommend_bundle'} else '比较'
     parts = [f'{"已交付" if delivered else "已装配"}{len(items)}款{kind}商品']
-    preferred = data.get('preferred_sku_id')
+    preferred = data.get('preferred_sku_id') if name == 'compare_products' else None
     primary = next((p for p in items if preferred and p.get('default_sku_id') == preferred), None)
     if primary and text(primary.get('title')):
         parts.append('首选：' + primary['title'])
-    if name == 'recommend_products' and isinstance(data.get('quote'), dict):
+    if name in {'recommend_products','recommend_bundle'} and isinstance(data.get('quote'), dict):
         quoted = quote_summary(data['quote'])
         if quoted:
             parts.append(quoted)

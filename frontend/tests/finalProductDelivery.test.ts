@@ -10,9 +10,7 @@ it("整轮部分完成仍展示服务端已确认的成功交付，不把研究�
     const body=JSON.parse(String(init.body));
     const events=[{type:"RUN_STARTED",threadId:body.threadId,runId:body.runId},
       {type:"MESSAGES_SNAPSHOT",messages:[...body.messages,{id:"answer",role:"assistant",content:"已确认这款，其他候选尚未确认。"}]},
-      {type:"STATE_SNAPSHOT",snapshot:{status:"partial",executionStatus:"partial",stopReason:"model_call_limit",presentations:[...presented('recommendation',{mode:"alternatives",
-          guidance:"已确认这款，其他候选尚未确认。",preferred_sku_id:"P1003-S1",dimensions:["用途"],max_items:12,
-          hits:[product],quote:null,result_ref:"ctx_delivered",unverified_requirements:[]},body.runId),...presented('comparison',null,body.runId)]}},
+      {type:"STATE_SNAPSHOT",snapshot:{status:"partial",executionStatus:"partial",stopReason:"model_call_limit",presentations:[...presented('recommendation',{mode:'individual',guidance:"已确认这款，其他候选尚未确认。",hits:[product],quote:null,result_ref:"ctx_delivered",unverified_requirements:[]},body.runId),...presented('comparison',null,body.runId)]}},
       {type:"RUN_FINISHED",threadId:body.threadId,runId:body.runId}];
     return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(""),{headers:{"Content-Type":"text/event-stream"}});
   }});
@@ -50,8 +48,7 @@ it("追问和空快照保留交付，新的交付才替换并归档一次",async
   const client=new CommerceClient({url:"/commerce/ag-ui/run",fetch:async(_,init)=>{
     const body=JSON.parse(String(init.body));count++;
     if(count===1)firstRun=body.runId;
-    const recommendation=count===2?null:{mode:"alternatives",guidance:"更在意轻便时选择这款。",preferred_sku_id:null,dimensions:["用途"],max_items:12,hits:[count===1?product:replacement],quote:null,
-      result_ref:`ctx_${count}`,unverified_requirements:[]};
+    const recommendation=count===2?null:{mode:'individual',guidance:"更在意轻便时选择这款。",hits:[count===1?product:replacement],quote:null,result_ref:`ctx_${count}`,unverified_requirements:[]};
     const events=[{type:"RUN_STARTED",threadId:body.threadId,runId:body.runId},
       {type:"STATE_SNAPSHOT",snapshot:{presentations:[...presented('recommendation',recommendation,recommendation?body.runId:null),...presented('comparison',null,recommendation?body.runId:null)]}},
       {type:"RUN_FINISHED",threadId:body.threadId,runId:body.runId}];

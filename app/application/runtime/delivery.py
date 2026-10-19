@@ -65,5 +65,5 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         request_id=(context.source_run_id or context.source_message_id) if context else ''
         remaining=pending_plan_goals(state.get('task_plan',{}),request_id)
         if remaining:
-            lines.append('尚未完成的计划目标：'+'；'.join(remaining))
+            lines.append(f'还有{len(remaining)}项计划任务尚未完成。')
         return {'messages':[AIMessage(content='\n\n'.join(lines))],'jump_to':'end'}

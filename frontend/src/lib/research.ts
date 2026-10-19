@@ -10,7 +10,7 @@ export function readResearchReports(value: unknown): ResearchDelivery[] {
   return value.filter(batch => record(batch) && typeof batch.runId === 'string' && batch.runId
     && typeof batch.guidance === 'string' && ['completed','partial'].includes(batch.status)
     && strings(batch.task_ids) && strings(batch.completed_task_ids) && Array.isArray(batch.reports)
-    && batch.reports.every((r: unknown) => record(r) && typeof r.task_id === 'string' && typeof r.goal === 'string'
+    && batch.reports.every((r: unknown) => record(r) && typeof r.task_id === 'string' && typeof r.title === 'string' && r.title.trim().length > 0 && Array.from(r.title).length <= 80
       && ['completed','partial','needs_input','failed'].includes(r.status) && amount(r.product_count) && amount(r.sku_count)
       && ['unmet_requirements','caveats','questions','issues'].every(k=>strings(r[k]))
       && Array.isArray(r.items) && r.items.every((c: unknown)=>record(c) && typeof c.product_id === 'string'

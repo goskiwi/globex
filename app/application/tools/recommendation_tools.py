@@ -1,5 +1,5 @@
 """报价只读；最终推荐由 Main 提交，商品事实与金额始终由业务代码装配。"""
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
@@ -23,25 +23,22 @@ class Pick(BaseModel):
     tradeoffs: list[str] = Field(default_factory=list, max_length=3, description="影响本次选择的实际局限或资料缺口；未知不等于没有，无必要取舍时为空")
 
 
-class DecisionInput(BaseModel):
-    """两种交付共用选择语义；不把用户需求映射成固定品类属性。"""
+class RecommendationInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    guidance: str = Field(min_length=1, max_length=1200, description="面向买家的整体选择建议：充分解释依据、优先项与关键取舍，避免重复卡片中的数值和内部执行过程")
-    preferred_sku_id: str | None = Field(description="明确首选的 SKU，必须属于本次集合；证据不足无法选择时填 null，理由说明缺口；组合购买填 null。这不是买家选购或交易授权")
-    dimensions: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=6,
-        description="本次根据用户用途与偏好实际比较的关注点，如收纳、背负；开放文本，不是属性名或评分公式。不适用时填 []，不凑维度")
+    picks: list[Pick] = Field(min_length=1, max_length=MAX_DECISION_ITEMS, title="推荐商品", description="本轮选择的商品，按希望展示的顺序排列")
+    guidance: str = Field(min_length=1, max_length=1200, description="面向买家说明本次选择依据与必要取舍，不重复卡片数值或内部过程")
 
 
-class RecommendationInput(DecisionInput):
-    picks: list[Pick] = Field(min_length=1, max_length=MAX_DECISION_ITEMS, title="推荐商品")
-    mode: Literal["alternatives", "bundle"] = Field(description="alternatives 各选项独立报价；bundle 为一起购买的组合")
-
-
-class ComparisonInput(DecisionInput):
+class ComparisonInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     entries: list[Pick] = Field(min_length=2, max_length=MAX_DECISION_ITEMS, title="比较商品")
+    guidance: str = Field(min_length=1, max_length=1200, description="解释候选之间与本次需求有关的差异和取舍")
+    preferred_sku_id: str | None = Field(description="比较中的推荐倾向；必须属于本次集合，不能据此替买家选购或交易")
+    dimensions: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=6,
+        description="本次比较关注点，不要求逐维填表；不适用时为空")
 
 
-def _decision(request: DecisionInput, cards: list[dict]) -> dict:
+def _decision(request: ComparisonInput, cards: list[dict]) -> dict:
     preferred = request.preferred_sku_id
     if preferred is not None:
         card = next((card for card in cards if card['default_sku_id'] == preferred), None)
@@ -87,44 +84,50 @@ def build_quote_tool(pricing, evidence_store, bus):
     return quote_products
 
 
-def build_recommendation_tool(catalog, evidence_store, bus):
-    async def recommend_products(picks: list[Pick], mode: str, preferred_sku_id: str | None, dimensions: list[str], guidance: str):
-        """把本轮选择交付为商品卡。商品事实和费用由代码填充，你提交选择判断。
+async def _recommend(catalog, evidence_store, request, *, bundle):
+    context = ShoppingContext.current()
+    if context is None:
+        return _fail("缺少买家会话")
+    try:
+        cards, quotes, budget, ship_to, currency, unverified = await _assemble_choices(catalog, evidence_store, context, request.picks)
+        for card in cards:
+            if any(issue != "over_landed_budget" for issue in card["constraint_issues"]):
+                raise ValueError(f"推荐不满足当前条件：{card['default_sku_id']} {card['constraint_issues']}")
+        combined = catalog.pricing.assemble([q["items"][0] for q in quotes], ship_to, currency) if quotes and bundle else None
+        checked = [combined] if combined else quotes
+        if budget is not None and ship_to and any(q["total_amount_minor"] > round(budget * 100) for q in checked):
+            return _fail("推荐到手总额超过当前预算，请调整选项或明确交回预算缺口。报价：" + str(checked))
+        mode = 'bundle' if bundle else 'individual'
+        await _check_task_bundle_budgets(catalog, context, request.picks, mode)
+        result = {"guidance":request.guidance, "mode":mode, "hits":cards, "quote":combined,
+                  "unverified_requirements":unverified}
+        _attach_plan_outcome(result, context, request.picks)
+        result["result_ref"] = await evidence_store.save(context.buyer_id, context.shopping_session_id, "recommendation", result)
+        return _ok(result)
+    except (ValueError, KeyError, TypeError) as exc:
+        return _fail(str(exc))
 
-        检索候选不是最终推荐。推荐使用当前购物条件，不修改买家的选购项或交易授权。
-        alternatives 表示互相替代的选项，bundle 表示一起购买；目的地未知时仅展示商品价。
-        reason 是对买家说的短建议：首选抓住本次最重要的需要，备选说明更看重什么时值得选。
-        参数只在能解释选择时引用，不逐项复述；关键的未知能力不能写成确定适配。
-        alternatives 明确首选；bundle 推荐整套组合，preferred_sku_id 填 null。
-        guidance 提交整体选购建议，解释首选与备选之间怎么选；reason 只解释当前单款。
-        dimensions 是本次关注点，不要求逐维填表。建议与卡片一次交付，不重写已交付的成果。
+
+def build_recommendation_tool(catalog, evidence_store, bus):
+    async def recommend_products(picks: list[Pick], guidance: str):
+        """交付本轮选定商品与建议，顺序即展示顺序。事实与金额由目录和计价服务提供。
+
+        按买家本轮需要确定选择项，reason说明每项与实际需求的联系，guidance说明整体选择依据。
+        各选择独立报价；一起购买的整套组合使用recommend_bundle。仅交付建议，不选购或交易。
         """
-        context = ShoppingContext.current()
-        if context is None:
-            return _fail("缺少买家会话")
-        try:
-            request = RecommendationInput(picks=picks, mode=mode, preferred_sku_id=preferred_sku_id, dimensions=dimensions, guidance=guidance)
-            if request.mode == 'bundle' and request.preferred_sku_id is not None:
-                raise ValueError("组合购买推荐整套组合，不指定单品首选")
-            cards, quotes, budget, ship_to, currency, unverified = await _assemble_choices(catalog, evidence_store, context, request.picks)
-            for card in cards:
-                if any(issue != "over_landed_budget" for issue in card["constraint_issues"]):
-                    raise ValueError(f"推荐不满足当前条件：{card['default_sku_id']} {card['constraint_issues']}")
-            bundle = catalog.pricing.assemble([q["items"][0] for q in quotes], ship_to, currency) if quotes and mode == "bundle" else None
-            checked = [bundle] if bundle else quotes
-            if budget is not None and ship_to:
-                if any(q["total_amount_minor"] > round(budget * 100) for q in checked):
-                    return _fail("推荐到手总额超过当前预算，请调整选项或明确交回预算缺口。报价：" + str(checked))
-            result = {**_decision(request, cards), "mode": mode, "hits": cards, "quote": bundle,
-                      "unverified_requirements": unverified}
-            await _check_task_bundle_budgets(catalog, context, request.picks, mode)
-            _attach_plan_outcome(result, context, request.picks)
-            ref = await evidence_store.save(context.buyer_id, context.shopping_session_id, "recommendation", result)
-            result["result_ref"] = ref
-            return _ok(result)
-        except (ValueError, KeyError, TypeError) as exc:
-            return _fail(str(exc))
+        return await _recommend(catalog, evidence_store, RecommendationInput(picks=picks,guidance=guidance),bundle=False)
     return recommend_products
+
+
+def build_bundle_tool(catalog, evidence_store, bus):
+    async def recommend_bundle(picks: list[Pick], guidance: str):
+        """交付一起购买的整套商品组合；按全部规格和数量合计检查到手预算。
+
+        reason说明每件在本次组合中的作用，guidance解释组合取舍。事实和组合总价由代码装配。
+        互相替代的选择使用recommend_products。此调用不选购、不准备订单、不代表买家批准。
+        """
+        return await _recommend(catalog, evidence_store, RecommendationInput(picks=picks,guidance=guidance),bundle=True)
+    return recommend_bundle
 
 
 def build_comparison_tool(catalog, evidence_store, bus):
@@ -214,11 +217,11 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
 
 
 def _attach_plan_outcome(result, context, picks):
-    from app.application.runtime.research_plan import plan_delivery
+    from app.application.runtime.research_plan import plan_delivery, project_delivery_outcome
     outcome = plan_delivery(context.task_plan, picks, result["hits"])
-    result['plan_outcome'] = outcome
+    result['plan_outcome'] = project_delivery_outcome(outcome)
     if outcome['unmet_goals']:
-        result['guidance'] += '\n尚未完成：' + '；'.join(outcome['unmet_goals']) + '。本次仅交付已有结果。'
+        result['guidance'] += f"\n还有{len(outcome['unmet_goals'])}项关联任务尚未完成，本次仅交付已有结果。"
 
 
 async def _check_task_bundle_budgets(catalog, context, picks, mode):

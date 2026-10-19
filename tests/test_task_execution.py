@@ -47,7 +47,7 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'args': {
             'subagent_type': 'search_agent', 'task': {'goal': step['goal'], 'step_id': step['id']}},
             'id': step['id']} for step in steps]),
-        call('present_research', {'task_ids': ['bag', 'cup']}),
+        call('present_research', {'reports': [{'task_id': task_id, 'title': {'bag':'背包研究','cup':'水杯研究'}[task_id]} for task_id in ['bag', 'cup']]}),
         AIMessage(content='下一轮无需重新交付研究。')])
     c = await _container(tmp_path, monkeypatch, model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: next(child_models))
@@ -91,7 +91,7 @@ async def test_research_report_requires_existing_current_task(source):
                             artifact={'data': {'status': 'failed', 'scope': None}}),
                 ToolMessage(content='', name='task_dispatch', tool_call_id='valid', artifact={'data': report})]
     tasks = {} if source == 'missing' else {'P1003': {'stale': source == 'stale'}}
-    result = await tool(['P1003'], SimpleNamespace(state={'messages': messages, 'task_plan': {'tasks': tasks}}))
+    result = await tool([{'task_id':'P1003','title':'背包研究'}], SimpleNamespace(state={'messages': messages, 'task_plan': {'tasks': tasks}}))
     if source == 'current':
         assert result.ok and result.data['status'] == 'completed'
         assert result.data['reports'][0]['items'][0]['facts']['product']['title'] == 'P1003 正确商品名'
@@ -104,9 +104,8 @@ def pick(sku='P1003-S1',task_id='bag'):
     return {'product_id':'P1003','sku_id':sku,'quantity':1,'reason':'旅行收纳','task_id':task_id}
 
 
-def recommend(picks=None,mode='alternatives'):
-    return call('recommend_products',{'picks':picks or [pick()], 'mode':mode,
-        'preferred_sku_id':'P1003-S1' if mode=='alternatives' else None,'dimensions':[], 'guidance':'可考虑这款旅行背包。'})
+def recommend(picks=None,*,bundle=False):
+    return call('recommend_bundle' if bundle else 'recommend_products', {'picks': picks or [pick()], 'guidance': '可考虑这款旅行背包。'})
 
 
 @pytest.mark.parametrize('budget,extra_goal',[(100,False),(150,False),(150,True)])
@@ -144,7 +143,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
             assert outcome['status']=='completed'
             assert state['task_plan']['steps'][0]['status']=='delivered'
             if extra_goal:
-                assert '选择水杯' in result.final_text
+                assert '还有1项计划任务尚未完成' in result.final_text
                 assert state['task_plan']['steps'][1]['status']=='pending'
     finally:await c.shutdown()
 
@@ -156,12 +155,12 @@ async def test_scoped_bundle_budget_uses_combined_quote(tmp_path,monkeypatch):
         'filters':{'landed_budget_major':500,'ship_to':'CN','target_currency':'CNY'},
         'plan':[{'id':'bag','goal':'组合背包','filters':{'landed_budget_major':200}}]}}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包组合','step_id':'bag'}}),
-        recommend([pick(),pick('P1003-S2')],mode='bundle'),AIMessage(content='组合超过分项预算')])
+        recommend([pick(),pick('P1003-S2')],bundle=True),AIMessage(content='组合超过分项预算')])
     c=await _container(tmp_path,monkeypatch,model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:
         _,state=await ask(c,'总预算500，其中背包组合到手总额不超过200')
-        receipt=next(m for m in state['messages'] if isinstance(m,ToolMessage) and m.name=='recommend_products')
+        receipt=next(m for m in state['messages'] if isinstance(m,ToolMessage) and m.name=='recommend_bundle')
         assert receipt.status=='error' and '所属子任务' in receipt.content
         assert state['task_plan']['steps'][0]['status']=='verified'
     finally:await c.shutdown()

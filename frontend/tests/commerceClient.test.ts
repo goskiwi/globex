@@ -85,7 +85,7 @@ describe("通过官方 SDK 消费真实 AG-UI 协议", () => {
           {
             type: "STATE_DELTA",
             delta: [
-              { op: "replace", path: "/presentations", value: presented("recommendation",{mode:"alternatives",guidance:"审核后的建议",hits:[product],preferred_sku_id:null,dimensions:["用途"],max_items:12,quote:null,result_ref:"ctx_final",unverified_requirements:[]},body.runId) },
+              { op: "replace", path: "/presentations", value: presented("recommendation",{mode:'individual',guidance:"审核后的建议",hits:[product],quote:null,result_ref:"ctx_final",unverified_requirements:[]},body.runId) },
             ],
           },
           {

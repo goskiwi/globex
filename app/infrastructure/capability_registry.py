@@ -13,7 +13,7 @@ import sqlite3
 
 CAPABILITY_CONTRACT_VERSION = "1"
 # Skill 只能描述现有只读业务能力；不含偏好改写、交易确认、代码/文件执行。
-SKILL_TOOL_ALLOWLIST = frozenset({"quote_products", "recommend_products", "compare_products", "show_product_details", "product_search_tool", "get_product_details", "category_insight_tool", "conversation_fact_lookup",
+SKILL_TOOL_ALLOWLIST = frozenset({"quote_products", "recommend_products", "recommend_bundle", "compare_products", "show_product_details", "product_search_tool", "get_product_details", "category_insight_tool", "conversation_fact_lookup",
                                 "query_order_tool", "web_search_tool"})
 
 

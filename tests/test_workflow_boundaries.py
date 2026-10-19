@@ -9,7 +9,7 @@ from app.application.usecases.intents import SubmitIntentInput
 def rec(guidance='依据已读资料选择',task_id=None):
     pick={'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'依据目录候选'}
     if task_id:pick['task_id']=task_id
-    return call('recommend_products',{'picks':[pick],'mode':'alternatives','preferred_sku_id':'P1003-S1','dimensions':[],'guidance':guidance})
+    return call('recommend_products', {'picks': [pick], 'guidance': guidance})
 
 
 async def ask(c,text):
@@ -117,7 +117,7 @@ async def test_stale_dependent_research_is_not_reused_in_same_request(tmp_path,m
 async def test_parallel_presentations_complete_both_referenced_plan_steps(tmp_path,monkeypatch):
     children=iter([ScriptedModel(responses=[call('product_search_tool',{'product_id':pid,'sku_id':pid+'-S1'}),submission(candidates=[{'product_id':pid,'sku_id':pid+'-S1','assessment':'已读候选'}])]) for pid in ['P1003','P1008']])
     steps=[{'id':'bag','goal':'研究背包'},{'id':'cup','goal':'研究水杯'}]
-    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':steps}}),AIMessage(content='',tool_calls=[{'name':'task_dispatch','id':step['id'],'args':{'subagent_type':'search_agent','task':{'step_id':step['id'],'goal':step['goal']}}} for step in steps]),AIMessage(content='',tool_calls=[{'name':'recommend_products','id':step['id']+'-show','args':{'picks':[{'task_id':step['id'],'product_id':pid,'sku_id':pid+'-S1','quantity':1,'reason':'按本任务依据选择'}],'mode':'alternatives','preferred_sku_id':pid+'-S1','dimensions':[],'guidance':step['goal']+'结果。'}} for step,pid in zip(steps,['P1003','P1008'])])])
+    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':steps}}),AIMessage(content='',tool_calls=[{'name':'task_dispatch','id':step['id'],'args':{'subagent_type':'search_agent','task':{'step_id':step['id'],'goal':step['goal']}}} for step in steps]),AIMessage(content='',tool_calls=[{'name':'recommend_products','id':step['id']+'-show','args':{'picks': [{'task_id': step['id'], 'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1, 'reason': '按本任务依据选择'}], 'guidance': step['goal'] + '结果。'}} for step,pid in zip(steps,['P1003','P1008'])])])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:next(children))
     try:

@@ -16,20 +16,22 @@ const products: ProductCard[] = [1,2,3,4].map(n=>({
 const decision={guidance:"通勤时优先考虑收纳和背负，按这次携带物品选择首选。".repeat(14),hits:products,preferred_sku_id:"P9002-S1",dimensions:["收纳","背负"],max_items:12,
   result_ref:"ctx_test",unverified_requirements:[]};
 
-it("四款交付解析保留同一首选、开放关注点和容量，不接受旧结果格式",()=>{
+it("推荐只承载选择和说明，比较保留自己的倾向、关注点与容量",()=>{
   expect(readComparison(decision)?.hits).toHaveLength(4);
-  const recommendation={...decision,mode:"alternatives",quote:null};
-  expect(readRecommendation(recommendation)?.dimensions).toEqual(["收纳","背负"]);
-  expect(readRecommendation({...recommendation,dimensions:["外观设计","剪辑用途"]})?.dimensions).toEqual(["外观设计","剪辑用途"]);
-  for (const key of ["guidance","preferred_sku_id","dimensions","max_items"]) {
-    const incomplete={...recommendation} as Record<string,unknown>;delete incomplete[key];
-    expect(readRecommendation(incomplete)).toBeNull();
-    expect(readComparison(incomplete)).toBeNull();
+  expect(readComparison(decision)?.dimensions).toEqual(['收纳','背负']);
+  const recommendation={guidance:decision.guidance,hits:products,result_ref:'ctx_test',unverified_requirements:[],mode:'individual',quote:null};
+  const read=readRecommendation(recommendation)!;
+  expect(read.hits).toHaveLength(4);
+  expect(read).not.toHaveProperty('dimensions');expect(read).not.toHaveProperty('preferred_sku_id');
+  for(const key of ['guidance','hits','result_ref']){
+    const missing={...recommendation} as Record<string,unknown>;delete missing[key];expect(readRecommendation(missing)).toBeNull();
   }
-  expect(readRecommendation({...recommendation,preferred_sku_id:"P9999-S1"})).toBeNull();
+  for(const key of ['preferred_sku_id','dimensions','max_items']){
+    const missing={...decision} as Record<string,unknown>;delete missing[key];expect(readComparison(missing)).toBeNull();
+  }
+  expect(readComparison({...decision,preferred_sku_id:'P9999-S1'})).toBeNull();
   expect(readComparison({...decision,max_items:3})).toBeNull();
-  expect(readRecommendation({...recommendation,mode:"bundle"})).toBeNull();
-  expect(readRecommendation({...recommendation,guidance:"  "})).toBeNull();
+  expect(readRecommendation({...recommendation,guidance:'  '})).toBeNull();
 });
 
 it("推荐卡片绑定原回复，追问与刷新不移动，新的比较在新回复下交付",async()=>{
@@ -43,7 +45,7 @@ it("推荐卡片绑定原回复，追问与刷新不移动，新的比较在新�
       if(posts===1)firstRun=body.runId;
       const text=posts===1?'首轮选购建议':posts===2?'这是后续查库存的回答':'新的比较建议';
       messages=[...body.messages,{id:`${body.runId}:final:answer`,role:'assistant',content:text}];
-      if(posts===1)state={presentations:[...presented('recommendation',{...decision,guidance:text,mode:'alternatives',quote:null},body.runId),...presented('comparison',null,body.runId)]};
+      if(posts===1)state={presentations:[...presented('recommendation',{...decision,guidance:text,mode:'individual',quote:null},body.runId),...presented('comparison',null,body.runId)]};
       if(posts===3)state={presentations:[...presented('recommendation',null,body.runId),...presented('comparison',{...decision,guidance:text},body.runId)]};
       for(const p of state.presentations??[])if(!records.some(r=>r.id===p.id))records.push(p);
       const events=[{type:'RUN_STARTED',threadId:body.threadId,runId:body.runId},
@@ -89,7 +91,7 @@ it("推荐卡片绑定原回复，追问与刷新不移动，新的比较在新�
   }finally{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();}
 });
 
-it("实际 App 四张卡全部可勾选，手动比较复用首选与关注点，不重新请求模型",async()=>{
+it("实际 App 推荐卡可勾选比较，不自动附加比较倾向与维度，不重新请求模型",async()=>{
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   localStorage.clear();sessionStorage.clear();
   vi.stubGlobal("scrollTo",vi.fn());Element.prototype.scrollIntoView=vi.fn();
@@ -99,7 +101,7 @@ it("实际 App 四张卡全部可勾选，手动比较复用首选与关注点�
     if(String(url).endsWith("/ag-ui/run")) {
       const body=JSON.parse(String(init?.body));
       const events=[{type:"RUN_STARTED",threadId:body.threadId,runId:body.runId},
-        {type:"STATE_SNAPSHOT",snapshot:{skillUsages:[],progress:[],presentations:[...presented('recommendation',{...decision,mode:"alternatives",quote:null},body.runId),...presented('comparison',null,body.runId)]}},
+        {type:"STATE_SNAPSHOT",snapshot:{skillUsages:[],progress:[],presentations:[...presented('recommendation',{...decision,mode:'individual',quote:null},body.runId),...presented('comparison',null,body.runId)]}},
         {type:"MESSAGES_SNAPSHOT",messages:[...body.messages,{id:`${body.runId}:final:answer`,role:"assistant",content:decision.guidance}]},
         {type:"RUN_FINISHED",threadId:body.threadId,runId:body.runId}];
       return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(""),{headers:{"Content-Type":"text/event-stream"}});
@@ -136,8 +138,8 @@ it("实际 App 四张卡全部可勾选，手动比较复用首选与关注点�
     await act(async()=>host.querySelector<HTMLButtonElement>('.compare-go')!.click());
     const table=document.querySelector('.compare-table')!;
     expect(table.querySelectorAll('thead th')).toHaveLength(5);
-    expect(document.body.textContent).toContain('本次关注：收纳、背负');
-    expect(table.textContent).toContain('更推荐这款');
+    expect(document.body.textContent).not.toContain('本次关注：收纳、背负');
+    expect(table.textContent).not.toContain('更推荐这款');
     expect(table.textContent).toContain('隔层资料未提供');
     expect(requests.filter(u=>u.endsWith('/ag-ui/run'))).toHaveLength(modelCalls);
   } finally {

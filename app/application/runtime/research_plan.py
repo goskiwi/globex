@@ -118,6 +118,12 @@ def delivery_coverage(plan:ResearchPlan,requested,delivered,kind):
             'delivered_tasks':sorted(delivered),'unmet_goals':missing}
 
 
+def project_delivery_outcome(coverage):
+    """面向买家的完成信息不携带内部任务指令。"""
+    return {'status':coverage['status'], 'delivered_tasks':coverage['delivered_tasks'],
+            'remaining_count':len(coverage['unmet_goals'])}
+
+
 def pending_plan_goals(plan: ResearchPlan, request_id: str) -> list[str]:
     """仅本次实际参与计划时报告未完成目标，独立操作不接管旧计划。"""
     participates = any(task['scope']['request_id'] == request_id and task['scope']['step_id'] is not None
