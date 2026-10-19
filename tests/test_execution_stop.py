@@ -271,3 +271,70 @@ async def test_stopped_checkpoint_reopens_from_sqlite_as_closed_turn(tmp_path):
         before=await graph.aget_state(session.config)
         assert before.next==() and before.values['messages'][-1].additional_kwargs['execution_stop']=='budget_exhausted'
         assert (await runner._reply('handoff',session,[HumanMessage(content='新的请求')])).text=='新任务完成'
+
+
+@pytest.mark.parametrize('phase', ['tool', 'model'])
+async def test_cancelled_sqlite_turn_closes_tool_protocol_without_replaying(tmp_path, phase):
+    """实际取消与预算停止走同一收尾，重开图后不能留下未响应的调用。"""
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+    entered = asyncio.Event()
+    completed = asyncio.Event()
+    calls = []
+
+    async def committed_read():
+        """模拟已完成且不得重放的业务操作。"""
+        calls.append('completed')
+        completed.set()
+        return ToolResult('已完成')
+
+    async def waiting_read():
+        """模拟仍在等待的工具。"""
+        await completed.wait()
+        calls.append('waiting')
+        # 等待兄弟节点结果真正写入 checkpoint，区别于函数刚返回前的窗口。
+        while not any(t.result is not None for t in (await graph.aget_state(session.config)).tasks):
+            await asyncio.sleep(.01)
+        entered.set()
+        await asyncio.Event().wait()
+
+    class WaitingModel(ScriptedModel):
+        async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+            if self.cursor:
+                entered.set()
+                await asyncio.Event().wait()
+            return self._generate(messages, stop, run_manager, **kwargs)
+
+    tool_calls = [{'id': 'done', 'name': 'committed_read', 'args': {}}]
+    if phase == 'tool':
+        tool_calls.append({'id': 'waiting', 'name': 'waiting_read', 'args': {}})
+    model = WaitingModel(responses=[AIMessage(content='', tool_calls=tool_calls)])
+    tools = [as_langchain_tool(committed_read), as_langchain_tool(waiting_read)]
+    path = str(tmp_path / 'cancelled.db')
+    async with AsyncSqliteSaver.from_conn_string(path) as saver:
+        graph = create_agent(model, tools=tools, checkpointer=saver)
+        runner, session = root(graph, TradeEventBus())
+        execution = asyncio.create_task(runner._reply('handoff', session, [HumanMessage(content='研究')]))
+        await asyncio.wait_for(entered.wait(), 5)
+        execution.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+        snapshot = await graph.aget_state(session.config)
+        assert snapshot.next == ()
+        messages = snapshot.values['messages']
+        invoked = {c['id'] for m in messages if isinstance(m, AIMessage) for c in m.tool_calls}
+        answered = {m.tool_call_id for m in messages if isinstance(m, ToolMessage)}
+        assert invoked == answered
+        assert messages[-1].additional_kwargs['execution_stop'] == 'cancelled'
+        # 已完成的并行结果保留，未完成的调用只记错误，不能伪造成功。
+        results = {m.name: m for m in messages if isinstance(m, ToolMessage)}
+        assert results['committed_read'].status == 'success'
+        if phase == 'tool':
+            assert results['waiting_read'].status == 'error'
+
+    async with AsyncSqliteSaver.from_conn_string(path) as saver:
+        model = ScriptedModel(responses=[AIMessage(content='新查询完成')])
+        graph = create_agent(model, tools=tools, checkpointer=saver)
+        runner, session = root(graph, TradeEventBus())
+        assert (await runner._reply('handoff', session, [HumanMessage(content='独立新查询')])).text == '新查询完成'
+        assert calls == (['completed', 'waiting'] if phase == 'tool' else ['completed'])
+        assert (await graph.aget_state(session.config)).next == ()

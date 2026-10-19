@@ -54,10 +54,11 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
                 result = await session.graph.ainvoke(graph_input, config=config)
             if observer.interrupted:
                 raise asyncio.CancelledError()
-    except (ExecutionStopped, GraphRecursionError, ContextCapacityError) as error:
-        reason = error.reason if isinstance(error, ExecutionStopped) else (
+    except (asyncio.CancelledError, ExecutionStopped, GraphRecursionError, ContextCapacityError) as error:
+        cancelled = isinstance(error, asyncio.CancelledError)
+        reason = 'cancelled' if cancelled else error.reason if isinstance(error, ExecutionStopped) else (
             "context_capacity" if isinstance(error, ContextCapacityError) else "step_limit")
-        text = evidence.stopped_text(reason)
+        text = "本轮执行已中断；已完成操作保留，未完成调用不会自动重放。" if cancelled else evidence.stopped_text(reason)
         # 原生 END 更新提交已完成并行节点的 pending writes，并清除未运行任务。
         # 不调用模型补总结，也不 resume 任何写工具。
         await session.graph.aupdate_state(session.config, None, as_node=END)
@@ -72,6 +73,9 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
         final = AIMessage(content=text, additional_kwargs={"execution_stop": reason})
         await session.graph.aupdate_state(session.config, {"messages": [*unfinished, final]}, as_node="model")
         await session.graph.aupdate_state(session.config, None, as_node=END)
+        # 用户停止、服务中断也必须先关闭持久工具批次，再交给运行服务记录停止状态。
+        if cancelled:
+            raise
         from app.application.runtime.request_scope import ShoppingContext
         context=ShoppingContext.current()
         presentations=tuple(p for p in snapshot.values.get('presentations',[]) if not context or p['runId']==context.source_run_id)
