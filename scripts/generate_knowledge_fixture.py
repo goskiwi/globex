@@ -72,7 +72,7 @@ def _long_body(category: str, focus: str, variant: str) -> str:
     return "\n".join(paragraphs) + "\n"
 
 
-def _entry(filename: str, document_id: str, *, region: str, topic: str) -> dict:
+def _entry(filename: str, document_id: str, *, region: str, topic: str,categories: list[str] | None=None) -> dict:
     return {
         "document_id": document_id,
         "filename": filename,
@@ -84,6 +84,7 @@ def _entry(filename: str, document_id: str, *, region: str, topic: str) -> dict:
         "region": region,
         "version": "2026.08-eval-v1",
         "topic": topic,
+        "applicability":{"categories":categories or [],"all_categories":topic=="policy"},
     }
 
 
@@ -92,13 +93,14 @@ def build_manifest() -> list[dict]:
     for filename in sorted(path.name for path in _KNOWLEDGE.glob("*.md") if not path.name.startswith("eval-")):
         # 历史的跨境通则包含关税/免税/限制等政策性说法，必须走来源和有效期门禁。
         topic = "policy" if filename == "cross-border-guide.md" else "category"
-        entries.append(_entry(filename, Path(filename).stem, region="GLOBAL", topic=topic))
+        categories={"travel-gear.md":["旅行装备"],"digital-accessories.md":["数码配件"],"home-living.md":["家居生活"],"outdoor-sports.md":["户外运动"],"cross-border-guide.md":[]}[filename]
+        entries.append(_entry(filename, Path(filename).stem, region="GLOBAL", topic=topic,categories=categories))
     for slug, category, focus in _CATEGORIES:
         for variant in ("概览", "参数判断", "价格与预算", "避坑与合规"):
             filename = f"eval-{slug}-{variant}.md"
             path = _KNOWLEDGE / filename
             path.write_text(_long_body(category, focus, variant), encoding="utf-8")
-            entries.append(_entry(filename, Path(filename).stem, region="GLOBAL", topic="category"))
+            entries.append(_entry(filename, Path(filename).stem, region="GLOBAL", topic="category",categories=[category]))
     for region in _REGIONS:
         filename = f"eval-policy-{region.lower()}.md"
         (_KNOWLEDGE / filename).write_text(

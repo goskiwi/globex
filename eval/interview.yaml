@@ -93,7 +93,6 @@
           {
             "criterion": "展示 SKU 数量和金额正确",
             "kind": "presentation_matches",
-            "event": "recommendation.result",
             "items": [
               {
                 "sku_id": "P1003-S1",
@@ -102,7 +101,8 @@
                 "currency": "CNY"
               }
             ],
-            "turn": 5
+            "turn": 5,
+            "presentation_kind": "recommendation"
           },
           {
             "criterion": "真实上下文整理完成",
@@ -124,8 +124,8 @@
           {
             "criterion": "交付后不再调用模型总结",
             "kind": "presentation_terminal",
-            "event": "recommendation.result",
-            "turn": 5
+            "turn": 5,
+            "presentation_kind": "recommendation"
           }
         ],
         "p2": []
@@ -162,7 +162,10 @@
           {
             "criterion": "两项研究交回候选与证据",
             "kind": "delegation_delivered",
-            "categories": ["旅行装备", "数码配件"],
+            "categories": [
+              "旅行装备",
+              "数码配件"
+            ],
             "minimum": 2
           },
           {
@@ -210,7 +213,6 @@
           {
             "criterion": "展示 SKU 数量和金额正确",
             "kind": "presentation_matches",
-            "event": "comparison.result",
             "items": [
               {
                 "sku_id": "P1001-S1",
@@ -224,7 +226,8 @@
                 "total_amount_minor": 43800,
                 "currency": "CNY"
               }
-            ]
+            ],
+            "presentation_kind": "comparison"
           },
           {
             "criterion": "每轮有实际交付",
@@ -235,7 +238,7 @@
           {
             "criterion": "交付后不再调用模型总结",
             "kind": "presentation_terminal",
-            "event": "comparison.result"
+            "presentation_kind": "comparison"
           }
         ],
         "p2": []
@@ -271,7 +274,6 @@
           {
             "criterion": "展示 SKU 数量和金额正确",
             "kind": "presentation_matches",
-            "event": "recommendation.result",
             "items": [
               {
                 "sku_id": "P1003-S1",
@@ -286,7 +288,8 @@
                 "currency": "CNY"
               }
             ],
-            "bundle_total_minor": 26800
+            "bundle_total_minor": 26800,
+            "presentation_kind": "recommendation"
           },
           {
             "criterion": "每轮有实际交付",
@@ -297,7 +300,7 @@
           {
             "criterion": "交付后不再调用模型总结",
             "kind": "presentation_terminal",
-            "event": "recommendation.result"
+            "presentation_kind": "recommendation"
           }
         ],
         "p2": []
@@ -540,7 +543,6 @@
           {
             "criterion": "展示 SKU 数量和金额正确",
             "kind": "presentation_matches",
-            "event": "recommendation.result",
             "items": [
               {
                 "sku_id": "P1003-S1",
@@ -549,7 +551,8 @@
                 "currency": "CNY"
               }
             ],
-            "turn": 2
+            "turn": 2,
+            "presentation_kind": "recommendation"
           },
           {
             "criterion": "每轮有实际交付",
@@ -564,13 +567,13 @@
               "product_search_tool",
               "quote_products"
             ],
-            "success_event": "recommendation.result"
+            "presentation_kind": "recommendation"
           },
           {
             "criterion": "交付后不再调用模型总结",
             "kind": "presentation_terminal",
-            "event": "recommendation.result",
-            "turn": 2
+            "turn": 2,
+            "presentation_kind": "recommendation"
           }
         ],
         "p2": []

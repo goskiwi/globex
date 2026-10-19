@@ -10,6 +10,11 @@ def tool_results(events, name):
     return [e["payload"] for e in events if e.get("type") == "eval.tool_result" and e.get("payload", {}).get("tool") == name]
 
 
+def deliveries(events,assertion):
+    return [(i,e['payload']['payload']) for i,e in enumerate(events)
+            if e.get('type')=='presentation.result' and e['payload'].get('kind')==assertion['presentation_kind']]
+
+
 def check(assertion, events):
     kind = assertion["kind"]
     if kind == 'vector_rerank_executed':
@@ -36,7 +41,7 @@ def check(assertion, events):
     if kind == "business_recovered":
         failures = [i for i,e in enumerate(events) if e.get("type") == "eval.tool_result"
                     and e["payload"].get("tool") in assertion["failure_tools"] and e["payload"].get("state") == "error"]
-        completed = [i for i,e in enumerate(events) if e.get("type") == assertion["success_event"] and e.get("payload",{}).get("hits")]
+        completed = [i for i,payload in deliveries(events,assertion) if payload.get("hits")]
         return any(a < b for a in failures for b in completed), f"实际失败位置 {failures}；后续业务交付位置 {completed}"
     if kind == "context_compacted":
         rows = [e["payload"] for e in events if e.get("type") == "eval.context.operation"]
@@ -56,15 +61,14 @@ def check(assertion, events):
                 if isinstance(result, dict):
                     product_categories.update({hit['product_id']:hit.get('category')
                         for hit in result.get('hits', []) if hit.get('product_id')})
-        covered = {product_categories.get(candidate.get('product_id'))
+        covered = {candidate.get('facts',{}).get('product',{}).get('category') or product_categories.get(candidate.get('product_id'))
                    for row in valid for candidate in row['candidates']}
         required = set(assertion.get('categories', []))
         return (len(valid) >= assertion.get("minimum", 1) and required <= covered), f"有候选与证据的交接 {len(valid)} 次；状态 {[r.get('status') for r in rows]}；缺失品类 {sorted(required-covered)}"
-    event_type = assertion["event"]
-    deliveries = [(i, e["payload"]) for i, e in enumerate(events) if e.get("type") == event_type]
-    if not deliveries:
-        return False, f"未观察到 {event_type}"
-    index, payload = deliveries[-1]
+    accepted=deliveries(events,assertion)
+    if not accepted:
+        return False,f"未观察到已接纳的{assertion['presentation_kind']}"
+    index,payload=accepted[-1]
     if kind == "presentation_terminal":
         after = []
         for e in events[index+1:]:

@@ -22,6 +22,11 @@ from app.infrastructure.resilience import (
 _TERMS = ("露营灯", "登山杖", "免税额度", "塑料", "茶具", "耳机", "行李箱", "运费")
 
 
+
+def _manifest(directory,documents):
+    rows=[{'document_id':identifier,'filename':identifier+'.md','source':'合成测试资料','source_type':'synthetic_evaluation_fixture','published_at':'2026-08-01','effective_from':'2026-08-01','effective_to':'2026-12-31','region':'GLOBAL','version':'test-1','topic':topic,'applicability':{'categories':categories,'all_categories':topic=='policy'}} for identifier,(topic,categories) in documents.items()]
+    (directory/'manifest.jsonl').write_text(''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in rows))
+
 @pytest.fixture()
 async def knowledge_base(tmp_path):
     kb = MarkdownKnowledgeBase(
@@ -37,7 +42,8 @@ async def knowledge_base(tmp_path):
     (docs / "guide.md").write_text(
         "# 通则\n美国免税额度约 800 美元，运费按首件全价加续件折价计。", encoding="utf-8",
     )
-    inserted = await bootstrap_category_knowledge(kb, knowledge_dir=docs)
+    _manifest(docs,{'outdoor':('category',['户外运动']),'guide':('policy',[])})
+    inserted=await bootstrap_category_knowledge(kb,knowledge_dir=docs)
     assert inserted == 2
     yield kb
 
@@ -54,7 +60,7 @@ class TestCategoryKnowledge:
         queue = bus.subscribe("anonymous")
         tool = build_category_insight_tool(knowledge_base, bus)
 
-        response = await tool(question="美国免税额度是多少", top_k=2)
+        response = await tool(question="美国免税额度是多少",scope={"topic":"policy","categories":[]},top_k=2)
         payload = json.loads(response.text)
         assert payload["insights"], "应有知识命中"
         assert "免税额度" in payload["insights"][0]["content"]
@@ -69,7 +75,7 @@ class TestCategoryKnowledge:
         bus = TradeEventBus()
         tool = build_category_insight_tool(BrokenKnowledgeBase(), bus)
         response = await _call(tool_graph(tool,middlewares=[ToolResilienceMiddleware(CircuitBreakerRegistry())]),
-                               question="露营灯怎么挑")
+                               question="露营灯怎么挑",scope={"topic":"category","categories":["户外运动"]})
         assert response.status == "error"
         assert response.artifact["error_code"] == "internal"
         assert "向量库连接失败" not in response.content
@@ -86,13 +92,14 @@ class TestCategoryKnowledge:
             "\n\n## 价格区间\n三件套 80-150 元入门，180-260 元主力。",
             encoding="utf-8",
         )
+        _manifest(docs,{"travel-gear":("category",["旅行装备"])})
         bus = TradeEventBus()
         queue = bus.subscribe("anonymous")
         tool = build_category_insight_tool(
             BrokenKnowledgeBase(), bus, fallback_knowledge_dir=docs,
         )
 
-        response = await tool(question="旅行装备材质、自重和价格怎么判断", top_k=2)
+        response = await tool(question="旅行装备材质、自重和价格怎么判断",scope={"topic":"category","categories":["旅行装备"]},top_k=2)
         payload = json.loads(response.text)
         assert queue.qsize() == 1
 

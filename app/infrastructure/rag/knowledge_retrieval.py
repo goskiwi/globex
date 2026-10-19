@@ -1,8 +1,25 @@
 """按文档覆盖主题，并核对静态知识是否能够回答确定事实请求。"""
 from __future__ import annotations
 import re
+from typing import Literal
+from pydantic import BaseModel,ConfigDict,Field
 from app.infrastructure.rag.category_knowledge import KnowledgeResult, MarkdownKnowledgeBase, _lexical_terms
 from app.infrastructure.rag.vector_knowledge import VectorKnowledgeBase
+
+
+class KnowledgeScope(BaseModel):
+    """查询范围明确表达品类与知识用途；通用资料由目录显式登记。"""
+    model_config=ConfigDict(extra='forbid')
+    topic:Literal['category','policy']
+    categories:list[str]=Field(description='目录中的适用品类；政策通则可为空，不能把指南属性当买家要求')
+    region:str|None=None
+
+
+def applicable(metadata,scope:KnowledgeScope):
+    applicability=metadata.get('applicability',{})
+    return (metadata.get('topic')==scope.topic
+        and (applicability.get('all_categories') is True or bool(set(scope.categories)&set(applicability.get('categories',[]))))
+        and (not scope.region or metadata.get('region') in ('GLOBAL',scope.region)))
 
 
 def unsupported_fact_reason(question: str) -> str | None:
@@ -52,23 +69,28 @@ def targeted_documents(documents, question: str, limit: int) -> list:
     return selected[:limit]
 
 
-async def search_knowledge(knowledge_base, question: str, top_k: int = 3):
+async def search_knowledge(knowledge_base, question: str, top_k: int = 3,*,scope:KnowledgeScope|None=None):
     if type(top_k) is not int or not 1 <= top_k <= 10:
         raise ValueError("知识结果数须在1到10之间")
     if unsupported_fact_reason(question):
         return []
-    results = await knowledge_base.search(queries=[question], top_k=min(80, top_k * 8))
+    documents=await knowledge_base.list_documents() if scope is not None else None
+    if documents is not None:
+        documents=[doc for doc in documents if applicable(doc.metadata,scope)]
+        if not documents:return []
+    constraints={'document_ids':[doc.document_id for doc in documents]} if documents is not None else {}
+    results = await knowledge_base.search(queries=[question], top_k=min(80, top_k * 8),**constraints)
     targets = []
     if isinstance(knowledge_base, VectorKnowledgeBase):
-        targets = targeted_documents(await knowledge_base.list_documents(), question, top_k)
+        targets = targeted_documents(documents if documents is not None else await knowledge_base.list_documents(), question, top_k)
         present = {item.document_id for item in results}
         for document in targets:
             if document.document_id not in present:
                 results.extend(await knowledge_base.search(
-                    queries=[question], top_k=1, document_id=document.document_id,
+                    queries=[question], top_k=1, document_id=document.document_id,**constraints,
                 ))
     if isinstance(knowledge_base, MarkdownKnowledgeBase):
-        targets = targeted_documents(await knowledge_base.list_documents(), question, top_k)
+        targets = targeted_documents(documents if documents is not None else await knowledge_base.list_documents(), question, top_k)
         present = {item.document_id for item in results}
         query_terms = _lexical_terms(question)
         for document in targets:

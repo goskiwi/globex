@@ -50,6 +50,7 @@ async def replay_confirmations(client, container, result):
 async def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only")
+    parser.add_argument("--isolated-knowledge",action="store_true",help="知识库使用内存Qdrant与真实embedding，产品索引仍只读实际服务")
     parser.add_argument("--cases", type=Path, default=runner.PROJECT_ROOT / "eval/interview.yaml")
     parser.add_argument("--replay", type=Path, help="仅重评分已有 case JSON，不调用模型或业务 API")
     parser.add_argument("--output", type=Path, default=Path("eval/verification") / ("interview-"+datetime.now().strftime("%Y%m%d-%H%M%S")))
@@ -93,7 +94,7 @@ async def main(argv=None):
                 "verdict":"ERROR","judged":{},"transcript":"","trace_events":[]}
             with tempfile.TemporaryDirectory(prefix="globex-interview-") as temp:
                 try:
-                    async with isolated_runtime(Path(temp)/"runtime", settings) as (app, container):
+                    async with isolated_runtime(Path(temp)/"runtime", settings,isolated_knowledge=args.isolated_knowledge) as (app, container):
                         if case.get("skill"):
                             buyer = f"eval-buyer-{case['id']}-{runner._RUN_NAMESPACE}"
                             container.orchestrator._sessions._main_factory.buyer_skill_store.save(buyer, "通勤装备比较",
@@ -130,7 +131,8 @@ async def main(argv=None):
                     "hybrid_recall_enabled": settings.hybrid_recall_enabled}}
             result["manual_review"] = {"status":"PENDING", "questions":case["manual_review"]}
             result["wall_elapsed_ms"] = round((perf_counter()-started)*1000)
-            result["scope"] = "真实聊天模型；生产API与主子图；临时SQLite与买家；商品及品类知识保留真实服务配置，实际商品检索执行见retrieval；共享索引只查询；不含支付"
+            result['knowledge_execution']='isolated_qdrant_real_embedding' if args.isolated_knowledge else 'configured_service_readonly'
+            result["scope"] = "真实聊天模型；生产API与主子图；临时SQLite与买家；商品索引实际服务只读；知识索引类型见knowledge_execution；不含支付"
             (args.output/(case["id"]+".json")).write_text(json.dumps(result,ensure_ascii=False,indent=2))
             (args.output/(case["id"]+".spans.json")).write_text(json.dumps(spans,ensure_ascii=False,indent=2))
             results.append(result)

@@ -8,6 +8,7 @@
 """
 import json
 from pathlib import Path
+from app.infrastructure.rag.knowledge_retrieval import KnowledgeScope
 
 from app.application.runtime.results import ToolResult, ToolResultState
 
@@ -37,7 +38,7 @@ def build_category_insight_tool(
     bus: TradeEventBus,
     fallback_knowledge_dir: Path | None = None,
 ):
-    async def category_insight_tool(question: str, top_k: int = 3) -> ToolResult:
+    async def category_insight_tool(question: str, scope: KnowledgeScope, top_k: int = 3) -> ToolResult:
         """查询品类洞察知识库：热卖款型、关键属性判断口径、价格区间、避坑点、跨境通则。
 
         适用于"这个品类怎么挑""现在流行什么""多少钱算合理""有什么坑"这类选购常识问题；
@@ -46,9 +47,15 @@ def build_category_insight_tool(
         Args:
             question (`str`):
                 自然语言问题，建议带上品类词，如"旅行装备怎么挑材质"、"美国免税额度多少"。
+            scope (`KnowledgeScope`):
+                category用于选购口径，填写目录品类；policy用于跨境规则，通用规则categories可为空。
             top_k (`int`):
                 返回知识片段数量，默认 3。
         """
+        scope=KnowledgeScope.model_validate(scope)
+        context=ShoppingContext.current()
+        parameters=(context.effective_search or {}).get('parameters',{}) if context else {}
+        if parameters.get('ship_to'):scope=scope.model_copy(update={'region':parameters['ship_to']})
         session_id = ShoppingContext.current_session_id()
         bus.publish(
             session_id,
@@ -57,10 +64,10 @@ def build_category_insight_tool(
         )
         try:
             from app.infrastructure.rag.knowledge_retrieval import search_knowledge
-            results = await search_knowledge(knowledge_base, question, top_k)
+            results = await search_knowledge(knowledge_base, question, top_k,scope=scope)
         except Exception as err:  # noqa: BLE001 —— 知识库不可用时如实降级，不编造洞察
             fallback = (
-                keyword_fallback_insights(question, fallback_knowledge_dir, top_k)
+                keyword_fallback_insights(question, fallback_knowledge_dir, top_k,scope=scope)
                 if fallback_knowledge_dir is not None
                 else []
             )
@@ -81,7 +88,7 @@ def build_category_insight_tool(
         for item in results:
             metadata = {
                 key: item.chunk.metadata[key]
-                for key in ("source_reference", "source_type", "published_at", "effective_from", "effective_to", "region", "version", "topic")
+                for key in ("source_reference", "source_type", "published_at", "effective_from", "effective_to", "region", "version", "topic", "applicability")
                 if item.chunk.metadata and key in item.chunk.metadata
             }
             insights.append({

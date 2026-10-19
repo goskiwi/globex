@@ -14,8 +14,8 @@ def evaluate(kind, events, **fields):
 
 
 def presentation(total=41800):
-    return {"type":"recommendation.result","payload":{"hits":[{"default_sku_id":"P1001-S1","quantity":2,
-        "currency":"CNY","landed_price":{"total_amount_minor":total}}]}}
+    return {"type":"presentation.result","payload":{"kind":"recommendation","payload":{"hits":[{"default_sku_id":"P1001-S1","quantity":2,
+        "currency":"CNY","landed_price":{"total_amount_minor":total}}]}}}
 
 
 def test_eight_cases_use_existing_scoring_without_judge():
@@ -27,7 +27,7 @@ def test_eight_cases_use_existing_scoring_without_judge():
 
 
 def test_wrong_amount_and_absent_presentation_fail():
-    expected={"event":"recommendation.result","items":[{"sku_id":"P1001-S1","quantity":2,"total_amount_minor":41800}]}
+    expected={"presentation_kind":"recommendation","items":[{"sku_id":"P1001-S1","quantity":2,"total_amount_minor":41800}]}
     assert evaluate("presentation_matches",[presentation()],**expected)
     assert not evaluate("presentation_matches",[presentation(37800)],**expected)
     assert not evaluate("presentation_matches",[],**expected)
@@ -35,22 +35,22 @@ def test_wrong_amount_and_absent_presentation_fail():
 
 def test_terminal_needs_model_evidence_and_rejects_extra_summary():
     request={"type":"eval.model_request","payload":{}}
-    assert evaluate("presentation_terminal",[request,presentation()],event="recommendation.result")
-    assert not evaluate("presentation_terminal",[presentation()],event="recommendation.result")
-    assert not evaluate("presentation_terminal",[request,presentation(),request],event="recommendation.result")
+    assert evaluate("presentation_terminal",[request,presentation()],presentation_kind="recommendation")
+    assert not evaluate("presentation_terminal",[presentation()],presentation_kind="recommendation")
+    assert not evaluate("presentation_terminal",[request,presentation(),request],presentation_kind="recommendation")
 
 
 def test_turn_filter_cannot_borrow_prior_success():
     events=[presentation(),{"type":"eval.turn.complete","payload":{"turn_index":1}},
         presentation(37800),{"type":"eval.turn.complete","payload":{"turn_index":2}}]
-    assert not evaluate("presentation_matches",events,turn=2,event="recommendation.result",
+    assert not evaluate("presentation_matches",events,turn=2,presentation_kind="recommendation",
         items=[{"sku_id":"P1001-S1","total_amount_minor":41800}])
-    assert not evaluate("presentation_matches",events,turn=3,event="recommendation.result",items=[])
+    assert not evaluate("presentation_matches",events,turn=3,presentation_kind="recommendation",items=[])
 
 
 def test_recovery_requires_failure_then_success():
     def tool(status): return {"type":"eval.tool_result","payload":{"tool":"search","state":status}}
-    rule={"failure_tools":["search"],"success_event":"recommendation.result"}
+    rule={"failure_tools":["search"],"presentation_kind":"recommendation"}
     assert evaluate("business_recovered",[tool("error"),presentation()],**rule)
     assert not evaluate("business_recovered",[presentation(),tool("error")],**rule)
 

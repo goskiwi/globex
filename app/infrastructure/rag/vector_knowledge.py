@@ -2,7 +2,7 @@
 import uuid
 
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, MatchAny
 
 from app.infrastructure.embedding.openai_embedding_client import OpenAIEmbeddingClient
 from app.infrastructure.rag.category_knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeResult
@@ -61,13 +61,17 @@ class VectorKnowledgeBase:
         if points:
             await self.client.upsert(self.collection, points=points, wait=True)
 
-    async def search(self, *, queries, top_k=3, document_id=None):
+    async def search(self, *, queries, top_k=3, document_id=None,document_ids=None):
+        if document_ids==[]:return []
+        filters=[]
+        if document_id:filters.append(FieldCondition(key='document_id',match=MatchValue(value=document_id)))
+        if document_ids is not None:filters.append(FieldCondition(key='document_id',match=MatchAny(any=document_ids)))
         vectors = await self.embedding_model.embed_batch(queries)
         results = []
         for vector in vectors:
             response = await self.client.query_points(
                 self.collection, query=vector, limit=top_k, with_payload=True,
-                query_filter=self._filter(document_id) if document_id else None,
+                query_filter=Filter(must=filters) if filters else None,
             )
             results.extend(KnowledgeResult(
                 point.payload["document_id"],

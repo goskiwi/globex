@@ -31,7 +31,7 @@ class LocalCollector:
 
 
 @asynccontextmanager
-async def isolated_runtime(folder: Path, settings, *, model_factory=None):
+async def isolated_runtime(folder: Path, settings, *, model_factory=None,isolated_knowledge=False):
     """仅隔离交易与买家，商品检索始终保留项目真实配置。"""
     from app.composition import build_container
     from app.presentation.server import build_app
@@ -46,6 +46,13 @@ async def isolated_runtime(folder: Path, settings, *, model_factory=None):
             for module in ("app.application.agents.main_agent", "app.application.agents.search_agent", "app.application.agents.trade_agent",
                            "app.application.runtime.middleware", "app.infrastructure.llm"):
                 resources.enter_context(patch(module + ".create_chat_model", model_factory))
+        if isolated_knowledge:
+            from qdrant_client import AsyncQdrantClient
+            from app.infrastructure.rag.vector_knowledge import VectorKnowledgeBase
+            from app.infrastructure.rag.category_knowledge import bootstrap_category_knowledge
+            knowledge=VectorKnowledgeBase(configuration,client=AsyncQdrantClient(':memory:'))
+            await bootstrap_category_knowledge(knowledge)
+            resources.enter_context(patch('app.composition.build_category_knowledge_base',return_value=knowledge))
         with patch("app.composition.load_settings", return_value=configuration):
             container = await build_container()
         async def startup():

@@ -73,10 +73,11 @@ class MarkdownKnowledgeBase:
         ]
         self._documents[document_id] = KnowledgeDocument(document_id, dict(document_metadata), normalized)
 
-    async def search(self, *, queries: list[str], top_k: int = 3) -> list[KnowledgeResult]:
+    async def search(self, *, queries: list[str], top_k: int = 3, document_ids: list[str] | None = None) -> list[KnowledgeResult]:
         terms = set().union(*(_lexical_terms(query) for query in queries))
         ranked: list[KnowledgeResult] = []
         for document in self._documents.values():
+            if document_ids is not None and document.document_id not in document_ids:continue
             for chunk in document.chunks:
                 overlap = terms & _lexical_terms(chunk.content)
                 if overlap:
@@ -161,6 +162,7 @@ def load_knowledge_metadata(knowledge_dir: Path = KNOWLEDGE_DIR) -> dict[str, di
             "region": entry["region"],
             "version": entry["version"],
             "topic": entry["topic"],
+            "applicability": entry["applicability"],
         }
     return metadata
 
@@ -187,12 +189,16 @@ def keyword_fallback_insights(
     question: str,
     knowledge_dir: Path = KNOWLEDGE_DIR,
     top_k: int = 3,
+    *, scope=None,
 ) -> list[dict]:
     """从版本化 Markdown 中按段落检索，作为 embedding 异常时的可追溯降级。"""
     query_terms = _lexical_terms(question)
     metadata_by_id = load_knowledge_metadata(knowledge_dir)
     candidates: list[tuple[int, str, int, str, dict]] = []
     for path in sorted(knowledge_dir.glob("*.md")):
+        if scope is not None:
+            from app.infrastructure.rag.knowledge_retrieval import applicable
+            if not applicable(metadata_by_id.get(path.stem,{}),scope):continue
         text = path.read_text(encoding="utf-8")
         title_match = re.search(r"^#\s+.+$", text, flags=re.MULTILINE)
         title = title_match.group(0) if title_match else f"# {path.stem}"
