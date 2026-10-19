@@ -99,14 +99,23 @@ def plan_delivery(plan: ResearchPlan, picks, cards):
     issues = {c['default_sku_id']: c['constraint_issues'] for c in cards}
     delivered = {key for key in requested if tasks[key]['status'] == 'completed' and not tasks[key].get('unmet_requirements')
                  and all(not issues[p.sku_id] for p in picks if p.task_id == key)}
-    steps = deepcopy(plan.get('steps', []))
+    return delivery_coverage(plan,requested,delivered,'products')
+
+
+def delivery_coverage(plan:ResearchPlan,requested,delivered,kind):
+    """成果是否覆盖其参与的计划；独立任务不替旧计划作完成度声明。"""
+    tasks=plan.get('tasks',{})
+    steps=deepcopy(plan.get('steps',[]))
+    planned={step['id'] for step in steps}
+    if not (set(requested)&planned):steps=[]
+    fulfilled={'delivered'} if kind=='products' else {'reported','delivered'}
     for step in steps:
-        if step['id'] in delivered and step['status'] in {'verified', 'reported', 'delivered'}:
-            step['status'] = 'delivered'
-    missing = list(dict.fromkeys([s['goal'] for s in steps if s['status'] != 'delivered']
-        + [tasks[key]['scope']['goal'] for key in requested - delivered]))
-    return {'status': 'partial' if missing else 'completed', 'steps': steps,
-            'delivered_tasks': sorted(delivered), 'unmet_goals': missing}
+        if step['id'] in delivered and step['status'] in {'verified','reported','delivered'}:
+            step['status']='delivered' if kind=='products' else 'reported'
+    missing=list(dict.fromkeys([s['goal'] for s in steps if s['status'] not in fulfilled]
+        +[tasks[key]['scope']['goal'] for key in set(requested)-set(delivered)]))
+    return {'status':'partial' if missing else 'completed','steps':steps,
+            'delivered_tasks':sorted(delivered),'unmet_goals':missing}
 
 
 def record_research(plan: ResearchPlan, work: ShoppingWork, data: dict) -> None:

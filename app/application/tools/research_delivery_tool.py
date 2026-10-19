@@ -49,10 +49,15 @@ def build_research_delivery_tool(rates: ExchangeRateTable):
                                   state=ToolResultState.ERROR, error_code='business_rejected')
         completed = [key for key in selected if reports[key]['status'] == 'completed'
                      and not reports[key].get('stop_reason')]
+        from app.application.runtime.research_plan import delivery_coverage
+        coverage=delivery_coverage(runtime.state.get('task_plan',{}),selected,completed,'research')
         projected = [project_research_report(reports[key], rates) for key in selected]
-        return ToolResult({'guidance': '\n\n'.join(_report(report) for report in projected),
+        guidance='\n\n'.join(_report(report) for report in projected)
+        if coverage['unmet_goals']:
+            guidance+='\n\n尚未完成的研究目标：'+'；'.join(coverage['unmet_goals'])
+        return ToolResult({'guidance':guidance,
                            'reports': projected,
                            'task_ids': selected, 'completed_task_ids': completed,
-                           'status': 'completed' if len(completed) == len(selected) else 'partial'})
+                           'plan_outcome':coverage,'status':coverage['status']})
     present_research.input_model = ResearchDeliveryInput
     return present_research

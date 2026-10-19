@@ -31,3 +31,20 @@ async def test_same_request_reuses_finished_research_instead_of_building_again(t
         assert child.cursor==2 and result.status=='completed' and result.presentations[-1]['kind']=='research'
         assert len(state['task_plan']['tasks'])==1
     finally:await c.shutdown()
+
+
+async def test_one_report_does_not_complete_two_goal_plan(tmp_path,monkeypatch):
+    from tests.test_agent_handoff import ScriptedModel
+    from tests.test_langgraph_runtime import _container
+    from tests.test_task_execution import ask
+    child=ScriptedModel(responses=[call('get_product_details',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment':'已核验背包'}])])
+    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':'研究背包'},{'id':'ear','goal':'研究耳机'}]}}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag','goal':'研究背包'}}),call('present_research',{'task_ids':['bag']})])
+    c=await _container(tmp_path,monkeypatch,parent)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
+    try:
+        result,state=await ask(c,'分别研究背包、耳机，交回两份研究。')
+        assert result.status=='partial' and result.presentations[-1]['status']=='partial'
+        assert result.presentations[-1]['payload']['plan_outcome']['unmet_goals']==['研究耳机']
+        assert '尚未完成的研究目标：研究耳机' in result.final_text
+        assert len(result.presentations[-1]['payload']['reports'])==1 and state['task_plan']['tasks']['bag']['delivery']=='research'
+    finally:await c.shutdown()
