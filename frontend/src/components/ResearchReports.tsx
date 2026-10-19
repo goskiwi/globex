@@ -46,6 +46,8 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
     {delivery.reports.map(report=><section className="research-category" key={report.task_id} aria-label={report.title}>
       <div className="research-heading"><h3>{report.title}</h3><span>{report.status==='completed'?'研究完成':report.status==='partial'?'部分完成':report.status==='needs_input'?'需要补充信息':'研究未完成'}</span></div>
       <p className="research-count">{report.product_count}款商品 · {report.sku_count}个明确规格</p>
+      <ProductCards mode="research" products={report.items.map(card)}
+        onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}/>
       {!!report.items.length && <div className="research-analysis" aria-label="选择依据与取舍">
         {report.items.map(candidate=><div key={`${candidate.product_id}:${candidate.sku_id}`}>
           <p><strong>{candidate.facts.product.title ?? candidate.product_id}：</strong>{candidate.assessment}</p>
@@ -57,8 +59,6 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
       {!!report.questions.length && <p>需要补充：{report.questions.join('；')}</p>}
       {!!report.issues.length && <p>未完成事项：{report.issues.join('；')}</p>}
       {report.transaction_state==='awaiting_confirmation' && <p>已有确认单等待页面批准，尚未执行交易。</p>}
-      <ProductCards mode="research" products={report.items.map(card)}
-        onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}/>
       {!report.items.length && <p>本次没有交回符合要求的候选，未满足条件见上方说明。</p>}
       {!!report.price_comparisons.length && <details className="research-prices"><summary>同口径价格比较</summary>
         {report.price_comparisons.map((price,i)=><div key={i}>

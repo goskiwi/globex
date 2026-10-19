@@ -64,6 +64,9 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     expect(section).not.toBeNull();
     expect(section.closest('.assistant-turn')?.getAttribute('data-message-id')).toBe(`${firstRun}:final:answer`);
     expect(section.querySelector('.research-analysis')?.textContent).toContain(assessment);
+    const cards=section.querySelector('.product-grid')!;
+    const analysis=section.querySelector('.research-analysis')!;
+    expect(cards.compareDocumentPosition(analysis) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     const turn=section.closest('.assistant-turn')!;
     expect(turn.querySelectorAll('h3')).toHaveLength(1);
     for(const text of [report.title, ...report.caveats, ...report.unmet_requirements, ...report.questions, ...report.issues,
