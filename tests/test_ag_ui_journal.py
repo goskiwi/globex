@@ -30,7 +30,7 @@ async def test_old_delivery_is_history_only_not_a_new_decision(tmp_path):
     next_run,_ = await journal.reserve(body('r2'), 'b1','owner')
     assert 'recommendation' not in next_run['input']['state']
 from app.presentation.ag_ui import parse_intent, register_ag_ui_routes
-from app.presentation.ag_ui_runtime import AGUIRuntime
+from app.application.runtime.runs import RunService
 
 
 def body(run="r1", session="s1", buyer="b1", query="查询旅行背包"):
@@ -128,15 +128,15 @@ async def test_projection_ignores_client_history_and_respects_event_order(tmp_pa
 
 async def test_restart_preserves_finished_run_without_reexecuting_model(tmp_path):
     path, agent = tmp_path / "runs.db", ControlledOrchestrator()
-    runtime = AGUIRuntime(AGUIJournal(path), agent)
+    runtime = RunService(AGUIJournal(path), agent)
     request = RunAgentInput.model_validate(body())
-    await runtime.start(request, parse_intent(request))
+    await runtime.start(request,parse_intent(request).buyer_id)
     await wait_status(runtime.journal, "r1", "completed")
     await runtime.shutdown()
     new_agent = ControlledOrchestrator()
-    restarted = AGUIRuntime(AGUIJournal(path), new_agent)
+    restarted = RunService(AGUIJournal(path), new_agent)
     await restarted.startup()
-    await restarted.start(request, parse_intent(request))
+    await restarted.start(request,parse_intent(request).buyer_id)
     assert new_agent.calls == 0
     saved = await restarted.journal.session("s1", "b1")
     assert saved["messages"][-1]["content"] == "已找到适合周末旅行的背包"
@@ -167,7 +167,7 @@ async def test_abandoned_run_becomes_durable_interrupted_terminal(tmp_path):
 
 async def test_actual_asgi_disconnect_detaches_but_explicit_stop_cancels(tmp_path):
     agent = ControlledOrchestrator(block=True)
-    runtime = AGUIRuntime(AGUIJournal(tmp_path / "runs.db"), agent)
+    runtime = RunService(AGUIJournal(tmp_path / "runs.db"), agent)
     app = application(runtime)
     disconnected = asyncio.Event()
     sent = False
@@ -200,7 +200,7 @@ async def test_actual_asgi_disconnect_detaches_but_explicit_stop_cancels(tmp_pat
 
 async def test_http_cursor_replay_and_history_are_owned_and_do_not_restart(tmp_path):
     agent = ControlledOrchestrator()
-    runtime = AGUIRuntime(AGUIJournal(tmp_path / "runs.db"), agent)
+    runtime = RunService(AGUIJournal(tmp_path / "runs.db"), agent)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(application(runtime)), base_url="http://test") as client:
         original = await client.post("/commerce/ag-ui/run", json=body())
         all_events = frames(original.text)
@@ -222,10 +222,10 @@ async def test_http_cursor_replay_and_history_are_owned_and_do_not_restart(tmp_p
 
 async def test_another_instance_can_stop_a_running_owner(tmp_path):
     agent = ControlledOrchestrator(block=True)
-    first = AGUIRuntime(AGUIJournal(tmp_path / "runs.db"), agent, lease_seconds=2, heartbeat_seconds=0.03)
-    second = AGUIRuntime(AGUIJournal(tmp_path / "runs.db"), ControlledOrchestrator())
+    first = RunService(AGUIJournal(tmp_path / "runs.db"), agent, lease_seconds=2, heartbeat_seconds=0.03)
+    second = RunService(AGUIJournal(tmp_path / "runs.db"), ControlledOrchestrator())
     request = RunAgentInput.model_validate(body())
-    await first.start(request, parse_intent(request))
+    await first.start(request,parse_intent(request).buyer_id)
     await asyncio.wait_for(agent.entered.wait(), 1)
     try:
         await second.cancel("r1", "b1")
@@ -236,9 +236,9 @@ async def test_another_instance_can_stop_a_running_owner(tmp_path):
 
 
 async def test_shutdown_before_producer_first_step_still_writes_terminal(tmp_path):
-    runtime = AGUIRuntime(AGUIJournal(tmp_path / "runs.db"), ControlledOrchestrator(block=True))
+    runtime = RunService(AGUIJournal(tmp_path / "runs.db"), ControlledOrchestrator(block=True))
     request = RunAgentInput.model_validate(body())
-    await runtime.start(request, parse_intent(request))
+    await runtime.start(request,parse_intent(request).buyer_id)
     await runtime.shutdown()
     assert (await runtime.journal.run("r1", "b1"))["status"] == "interrupted"
     assert not runtime.running
@@ -247,7 +247,7 @@ async def test_shutdown_before_producer_first_step_still_writes_terminal(tmp_pat
 async def test_real_tcp_disconnect_and_cursor_reconnect(tmp_path):
     """真正监听回环 TCP，由 HTTP 客户端断开 SSE 后重连，不只模拟 ASGI 消息。"""
     agent = ControlledOrchestrator(block=True)
-    runtime = AGUIRuntime(AGUIJournal(tmp_path / "wire.db"), agent)
+    runtime = RunService(AGUIJournal(tmp_path / "wire.db"), agent)
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
@@ -281,14 +281,17 @@ async def test_real_tcp_disconnect_and_cursor_reconnect(tmp_path):
         await asyncio.wait_for(serving, 5)
         listener.close()
 
-async def test_version_recovery_reads_destination_after_failed_run_and_checks_owner(tmp_path):
+async def test_version_failure_keeps_prior_snapshot_and_owner(tmp_path):
     journal=AGUIJournal(tmp_path/'journal.db');await journal.initialize()
     await journal.reserve(body(),'b1','owner')
-    await journal.append('r1','owner',[{'type':'STATE_SNAPSHOT','snapshot':{'recommendation':{'hits':[{'landed_price':{'ship_to':'CN'}}]}}},{'type':'RUN_FINISHED','threadId':'s1','runId':'r1'}])
+    await journal.append('r1','owner',[{'type':'STATE_SNAPSHOT','snapshot':{'recommendation':{'hits':[{'landed_price':{'ship_to':'CN'}}]}}},
+        {'type':'RUN_FINISHED','threadId':'s1','runId':'r1'}])
     await journal.reserve(body('r2'),'b1','owner2')
-    await journal.append('r2','owner2',[{'type':'STATE_SNAPSHOT','snapshot':{}},{'type':'RUN_ERROR','message':'过期'}])
-    assert await journal.latest_destination('s1','b1')=='CN'
-    with pytest.raises(JournalForbidden):await journal.latest_destination('s1','other')
+    await journal.append('r2','owner2',[{'type':'RUN_ERROR','code':'SESSION_VERSION_CHANGED','message':'版本已更新'}])
+    saved=await journal.run('r1','b1')
+    assert saved['state']['recommendation']['hits'][0]['landed_price']['ship_to']=='CN'
+    assert (await journal.run('r2','b1'))['result']['status']=='failed'
+    with pytest.raises(JournalForbidden):await journal.run('r1','b2')
 
 
 async def test_complete_history_survives_window_limit_and_restart(tmp_path):

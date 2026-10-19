@@ -145,7 +145,8 @@ def test_invalid_optional_export_configuration_isolated_from_business(monkeypatc
 
 
 async def test_otlp_real_http_path_auth_and_native_graph_parent_chain(traced, monkeypatch, tmp_path):
-    from app.presentation.server import _enqueue
+    from app.application.runtime.runs import RunService
+    from app.infrastructure.ag_ui_journal import AGUIJournal
     from app import worker
 
     bus = TradeEventBus()
@@ -158,13 +159,15 @@ async def test_otlp_real_http_path_auth_and_native_graph_parent_chain(traced, mo
 
     container = SimpleNamespace(task_queue=SimpleNamespace(enqueue=enqueue, get_status=AsyncMock(return_value=SimpleNamespace(state="queued"))), bus=bus,
         settings=SimpleNamespace(queue_priority_enabled=False), cache=SimpleNamespace(enabled=False))
+    runs=RunService(AGUIJournal(tmp_path/'runs.db'),None,task_queue=container.task_queue)
+    await runs.startup()
     api = FastAPI()
     api.add_middleware(TracingASGIMiddleware)
 
     @api.post("/commerce/intents/async")
     async def submit():
-        task_id = await _enqueue(container, SubmitIntentInput("session-private", "buyer-private", "zh-CN", "CNY", SECRET), request_id="client-submit-1")
-        return {"task_id": task_id}
+        run = await runs.submit_intent(buyer_id="buyer-private",session_id="session-private",locale="zh-CN",currency="CNY",raw_query=SECRET,request_id="client-submit-1")
+        return {"task_id": run["runId"]}
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://test") as client:
         response = await client.post("/commerce/intents/async", headers={"tracestate": "vendor=state"})
@@ -188,9 +191,12 @@ async def test_otlp_real_http_path_auth_and_native_graph_parent_chain(traced, mo
     runtime=await _container(tmp_path/'runtime',monkeypatch,model)
     runtime.orchestrator._bus=bus
     monkeypatch.setattr(worker, "current_execution_lease", lambda: SimpleNamespace(is_valid=lambda: True))
+    monkeypatch.setattr("app.application.runtime.runs.current_execution_lease", lambda: SimpleNamespace(is_valid=lambda: True))
     try:
-        assert (await worker.execute_intent_task(task, runtime.orchestrator, bus)).text == 'OK'
+        runs.orchestrator=runtime.orchestrator
+        assert (await worker.execute_intent_task(task, runs, bus)).text == 'OK'
     finally:
+        await runs.shutdown()
         await runtime.shutdown()
         await model.aclose()
     assert await asyncio.to_thread(traced.provider.force_flush, 5000)

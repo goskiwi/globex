@@ -507,11 +507,7 @@ export class CommerceClient {
     await this.executeRun(runId,messages);
   };
 
-  private async executeRun(runId: string, messages: ChatMessage[], resume = false, approval?: { id: string; approved: boolean }, allowVersionRestart = true): Promise<void> {
-    const priorSessionId=this.snapshot.sessionId;
-    const priorQuote = (this.snapshot.comparison?.hits ?? this.snapshot.recommendation?.hits ?? []).map(p=>p.landed_price).find(q=>q && "ship_to" in q);
-    let destination = priorQuote && "ship_to" in priorQuote ? priorQuote.ship_to : undefined;
-    let restartVersion=false;
+  private async executeRun(runId: string, messages: ChatMessage[], resume = false, approval?: { id: string; approved: boolean }): Promise<void> {
     const journaled = /\/ag-ui\/run\/?$/.test(this.options.url);
     const baseFetch = this.options.fetch ?? globalThis.fetch;
     const workingMessages = messages.slice(-100);
@@ -576,7 +572,6 @@ export class CommerceClient {
       onStateChanged: ({ state }) => {
         if (!current() || !isRecord(state)) return;
         if (typeof state.executionStatus === "string") executionStatus = state.executionStatus;
-        if (typeof state.resumeDestination === "string" && /^[A-Z]{2}$/.test(state.resumeDestination)) destination=state.resumeDestination;
         const process=readProcess(state.process);
         this.update({
           toolApprovals: readApprovals(state.toolApprovals),
@@ -623,11 +618,6 @@ export class CommerceClient {
       onRunErrorEvent: ({ event }) => {
         terminal = true;
         if (current()) this.update({ recoverableRunId: null });
-        if (event.code === "SESSION_VERSION_CHANGED" && current() && allowVersionRestart && !approval && !resume) {
-          restartVersion=true;
-          this.update({status:"idle",error:null,connectionState:'idle'});
-          return;
-        }
         if(current())this.update({processes:this.snapshot.processes.map(p=>p.runId===runId?{...p,status:event.code==='CANCELLED'?'cancelled':'failed',
           steps:p.steps.map(s=>s.status==='running'?{...s,status:event.code==='CANCELLED'?'cancelled':'unconfirmed',summary:'未收到完整执行结果'}:s)}:p)});
         if (event.code === "CANCELLED" && current()) this.update({ status: "stopped", error: null, connectionState:'idle' });
@@ -661,16 +651,7 @@ export class CommerceClient {
         this.save();
       }
     }
-    if (restartVersion && this.snapshot.sessionId===priorSessionId && !this.active) {
-      const latest=[...messages].reverse().find(m=>m.role==="user");
-      if (latest) {
-        // 只续发本轮明确需求与已知目的地，不复制过期 Skill、助手结论或工具上下文。
-        const query=latest.content+(destination && !/收货|寄到|寄往|配送至/.test(latest.content) ? `\n收货国家：${destination}。` : "");
-        this.reset();
-        const nextRun=newId();
-        await this.executeRun(nextRun,[{id:newId(),role:"user",content:query,runId:nextRun}],false,undefined,false);
-      }
-    }
+
   }
 
   private authHeaders(): Record<string, string> {
@@ -746,7 +727,7 @@ export class CommerceClient {
 
   private applyServerRun(run: Record<string, unknown>) {
     const state = isRecord(run.state) ? run.state : {};
-    const running = run.status === "running";
+    const running = ["queued","running"].includes(String(run.status));
     const messages = readMessages(run.messages);
     const process=readProcess(state.process);
     this.update({
@@ -785,7 +766,7 @@ export class CommerceClient {
       });
       this.save();
       await this.refreshShoppingForms();
-      if (data.run.status === "running") await this.resume();
+      if (["queued","running"].includes(String(data.run.status))) await this.resume();
     } catch {
       if (revision === this.historyRevision && id === this.snapshot.sessionId)
         this.update({ historyError: "该会话暂时无法从服务端恢复，显示已有缓存。", status: "error", error: "连接恢复未完成，可再次打开本段历史重试。" });
@@ -818,7 +799,7 @@ export class CommerceClient {
       if (sessionId !== this.snapshot.sessionId) return;
       if (run.threadId !== sessionId) throw new Error("运行不属于当前会话");
       this.applyServerRun(run);
-      if (run.status === "running" && isRecord(run.input)) {
+      if (["queued","running"].includes(String(run.status)) && isRecord(run.input)) {
         // 新 SDK 实例从本轮日志起点重放，保持 START/工具流协议状态完整，不重复执行模型。
         await this.executeRun(runId, readMessages(run.input.messages), true);
       } else this.save();
@@ -1021,16 +1002,16 @@ export class CommerceClient {
     if (/\/ag-ui\/run\/?$/.test(this.options.url)) void this.journalRequest(`/runs/${encodeURIComponent(runId)}/cancel`, "POST").then(async (run) => {
       if (sessionId !== this.snapshot.sessionId) return;
       this.applyServerRun(run);
-      if (run.status === "running") {
+      if (["queued","running"].includes(String(run.status))) {
         this.update({ status: "running",connectionState:'connected' });
-        for (let attempt = 0; attempt < 30 && run.status === "running"; attempt++) {
+        for (let attempt = 0; attempt < 30 && ["queued","running"].includes(String(run.status)); attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 200));
           if (sessionId !== this.snapshot.sessionId) return;
           run = await this.journalRequest(`/runs/${encodeURIComponent(runId)}`);
         }
         if (sessionId !== this.snapshot.sessionId) return;
         this.applyServerRun(run);
-        if (run.status === "running") this.update({ status: "error", error: "服务端已记录停止请求，收尾仍在进行。可恢复本轮查询最新状态。" });
+        if (["queued","running"].includes(String(run.status))) this.update({ status: "error", error: "服务端已记录停止请求，收尾仍在进行。可恢复本轮查询最新状态。" });
       }
       this.save();
     }).catch((error) => {

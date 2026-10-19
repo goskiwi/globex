@@ -54,7 +54,7 @@ async def isolated_runtime(folder: Path, settings, *, model_factory=None):
             await container.trade_store.initialize_inventory(await container.product_repo.list_all())
             container.product_repo.bind_inventory(container.trade_store.get_inventory)
             await container.context_service.startup()
-            await container.ag_ui_runtime.startup()
+            await container.runs.startup()
         resources.enter_context(patch.object(container, "startup", startup))
         async def supplied_container():
             return container

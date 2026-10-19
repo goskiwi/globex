@@ -120,7 +120,7 @@ def build_app() -> FastAPI:
     from app.presentation.session_management import register_session_management_routes
     register_session_management_routes(api,lambda:container().session_management)
     register_ag_ui_routes(api, lambda: container().orchestrator, lambda: container().confirmations,
-                         get_runtime=lambda: container().ag_ui_runtime)
+                         get_runtime=lambda: container().runs)
     from app.presentation.context_workspace import register_context_routes
     register_context_routes(api, lambda: container().context_service)
     register_confirmation_routes(api, lambda: container().confirmations)
@@ -190,62 +190,53 @@ def build_app() -> FastAPI:
         return JSONResponse({"metrics": registry.snapshot(), "alerts": registry.alerts()},
                             headers={"Cache-Control": "no-store"})
 
-    async def intent_from_request(request: Request, body: SubmitIntentRequest) -> SubmitIntentInput:
-        session_id = body.shopping_session_id or f"session-{uuid.uuid4().hex[:8]}"
-        buyer_id = await require_buyer(request, body.buyer_id)
-        await require_session(request, buyer_id, session_id, create=True)
-        return SubmitIntentInput(session_id, buyer_id, body.locale, body.currency, body.raw_query)
-
-    @api.post("/commerce/intents", response_model=SubmitIntentResponse)
-    async def submit_intent(request: Request, body: SubmitIntentRequest) -> SubmitIntentResponse:
-        c = container()
-        intent = await intent_from_request(request, body)
-        session_id = intent.shopping_session_id
-        if c.task_queue is None:
-            result = await c.orchestrator.handle_intent(intent)
-            return SubmitIntentResponse(
-                shopping_session_id=result.shopping_session_id, final_text=result.final_text,
-                status=result.status, stop_reason=result.stop_reason,
-            )
-
+    async def submit_run(request: Request, body: SubmitIntentRequest):
+        from app.infrastructure.ag_ui_journal import JournalConflict, JournalForbidden, JournalNotFound
+        from app.domain.session.ports.session_store import SessionStoreError
+        from app.presentation.identity import session_error
+        buyer=await require_buyer(request,body.buyer_id)
         try:
-            task_id = await _enqueue(c, intent, request_id=body.request_id)
-        except ValueError as err:
-            raise HTTPException(status_code=409, detail=str(err)) from err
-        return await _await_result(c, task_id, session_id)
+            return await container().runs.submit_intent(buyer_id=buyer,raw_query=body.raw_query,
+                session_id=body.shopping_session_id,request_id=body.request_id,locale=body.locale,currency=body.currency)
+        except SessionStoreError as error:
+            raise session_error(error) from error
+        except (JournalConflict,JournalForbidden,JournalNotFound) as error:
+            code=403 if isinstance(error,JournalForbidden) else 404 if isinstance(error,JournalNotFound) else 409
+            raise HTTPException(code,str(error)) from error
+        except ValueError as error:
+            raise HTTPException(422,str(error)) from error
 
-    @api.post("/commerce/intents/async")
-    async def submit_intent_async(request: Request, body: SubmitIntentRequest) -> dict:
-        c = container()
-        intent = await intent_from_request(request, body)
-        session_id = intent.shopping_session_id
-        if c.task_queue is None:
-            raise HTTPException(status_code=503, detail="队列未启用，请使用 /commerce/intents")
-        try:
-            task_id = await _enqueue(c, intent, request_id=body.request_id)
-        except ValueError as err:
-            raise HTTPException(status_code=409, detail=str(err)) from err
-        status = await c.task_queue.get_status(task_id)
-        return {"shopping_session_id": session_id, "task_id": task_id, "state": status.state if status else "queued"}
+    def task_state(run):
+        return {'queued':'queued','running':'running','completed':'done'}.get(run['status'],'failed')
 
-    @api.get("/commerce/tasks/{task_id}")
-    async def get_task(request: Request, task_id: str, buyer_id: str = Query(min_length=1)) -> dict:
-        c = container()
-        buyer_id = await require_buyer(request, buyer_id)
-        await require_task(request, buyer_id, task_id)
-        if c.task_queue is None:
-            raise HTTPException(status_code=503, detail="队列未启用")
-        status = await c.task_queue.get_status(task_id)
-        if status is None:
-            raise HTTPException(status_code=404, detail=f"任务不存在或已过期：{task_id}")
-        return {
-            "task_id": status.task_id,
-            "state": status.state,
-            "final_text": status.final_text,
-            "execution_status": status.execution_status, "stop_reason": status.stop_reason,
-            "error": status.error,
-            "queue_position": status.queue_position,
-        }
+    @api.post('/commerce/intents',response_model=SubmitIntentResponse)
+    async def submit_intent(request: Request,body: SubmitIntentRequest):
+        c=container();run=await submit_run(request,body)
+        timeout=c.settings.queue_wait_seconds if c.task_queue is not None else None
+        run=await c.runs.wait(run['runId'],body.buyer_id,timeout)
+        result=run['result']
+        if result is None:
+            return SubmitIntentResponse(run_id=run['runId'],shopping_session_id=run['threadId'],final_text='请求已接收，仍在排队或执行；可按运行ID查询。',
+                status='partial',stop_reason='wait_timeout')
+        return SubmitIntentResponse(run_id=run['runId'],shopping_session_id=run['threadId'],final_text=result['text'],
+            status=result['status'],stop_reason=result['stop_reason'])
+
+    @api.post('/commerce/intents/async')
+    async def submit_intent_async(request: Request,body: SubmitIntentRequest):
+        run=await submit_run(request,body)
+        return {'shopping_session_id':run['threadId'],'task_id':run['runId'],'state':task_state(run)}
+
+    @api.get('/commerce/tasks/{task_id}')
+    async def get_task(request: Request,task_id: str,buyer_id: str=Query(min_length=1)):
+        from app.infrastructure.ag_ui_journal import JournalForbidden,JournalNotFound
+        buyer=await require_buyer(request,buyer_id)
+        try:run=await container().runs.journal.run(task_id,buyer)
+        except (JournalForbidden,JournalNotFound) as error:
+            raise HTTPException(403 if isinstance(error,JournalForbidden) else 404,str(error)) from error
+        result=run['result']
+        return {'task_id':run['runId'],'state':task_state(run),'final_text':result['text'] if result else '',
+                'execution_status':result['status'] if result else None,'stop_reason':result['stop_reason'] if result else None,
+                'error':run['state'].get('executionError'),'queue_position':None}
 
     @api.websocket("/commerce/events")
     async def commerce_events(websocket: WebSocket) -> None:
@@ -276,74 +267,6 @@ def build_app() -> FastAPI:
             raise confirmation_error(err) from err
 
     return api
-
-
-async def _queue_priority(c: Container, session_id: str) -> int:
-    """按对话轮数定队列优先级（0 = 正常，1 = 大请求）。
-
-    长会话上下文大、单次耗时长，分到低优先流，避免堵住新会话。
-    轮数计数存 Redis（计数不原子，但优先级本身是启发式，差一两次无影响）；
-    Redis 不可用或开关关闭时一律返回 0，退化为单队列。
-    """
-    if not c.settings.queue_priority_enabled or not c.cache.enabled:
-        return 0
-    key = f"globex:turns:{session_id}"
-    try:
-        current = int(await c.cache.get_raw(key) or 0) + 1
-        await c.cache.set_json(key, current, _TURN_COUNTER_TTL_SECONDS)
-    except Exception:  # noqa: BLE001 —— 计数失败不能影响入队
-        return 0
-    return 1 if current >= c.settings.queue_large_request_turns else 0
-
-
-async def _enqueue(c: Container, intent: SubmitIntentInput, *, request_id: str | None = None) -> str:
-    """请求 ID 标识一次提交；同一句话的新提交可以形成新的任务。"""
-    # task_id 从请求身份确定，Redis enqueue 原子去重；没有客户端 ID 就视为新意图。
-    identity = f"{intent.buyer_id}\n{intent.shopping_session_id}\n{request_id or uuid.uuid4().hex}"
-    task_id = f"task-{hashlib.sha256(identity.encode()).hexdigest()}"
-    if getattr(c, "session_store", None) is not None:
-        await c.session_store.bind_task_owner(task_id, intent.shopping_session_id, intent.buyer_id)
-    await c.task_queue.enqueue(  # type: ignore[union-attr]
-        IntentTask(
-            task_id=task_id, shopping_session_id=intent.shopping_session_id,
-            buyer_id=intent.buyer_id, locale=intent.locale, currency=intent.currency,
-            raw_query=intent.raw_query,
-            priority=await _queue_priority(c, intent.shopping_session_id),
-            **inject_task_context(session_id=intent.shopping_session_id, task_id=task_id),
-        ),
-    )
-    status = await c.task_queue.get_status(task_id)  # type: ignore[union-attr]
-    if status is not None and status.state == "queued":
-        c.bus.publish(intent.shopping_session_id, "task.queued", {"task_id": task_id})
-    return task_id
-
-
-async def _await_result(c: Container, task_id: str, session_id: str) -> SubmitIntentResponse:
-    """等 worker 跑完。
-
-    优先等 final.result 事件（实时）；同时定期查任务状态兜底——
-    worker 崩溃或任务进死信时事件永远不会来，只靠等事件会把请求挂死。
-    """
-    queue = c.bus.subscribe(session_id)
-    deadline = time.monotonic() + c.settings.queue_wait_seconds
-    try:
-        while time.monotonic() < deadline:
-            # 会话事件只负责唤醒。结果必须来自该 task_id 的已持久化终态。
-            status = await c.task_queue.get_status(task_id)  # type: ignore[union-attr]
-            if status is not None and status.state == "done":
-                return SubmitIntentResponse(shopping_session_id=session_id, final_text=status.final_text,
-                                            status=status.execution_status, stop_reason=status.stop_reason)
-            if status is not None and status.state == "failed":
-                return SubmitIntentResponse(shopping_session_id=session_id, final_text=f"[error] {status.error}",
-                                            status="failed", stop_reason="queue_failed")
-            try:
-                await asyncio.wait_for(queue.get(), timeout=min(2.0, max(0.01, deadline - time.monotonic())))
-            except asyncio.TimeoutError:
-                pass
-        return SubmitIntentResponse(shopping_session_id=session_id,
-            final_text="[error] 处理超时，请稍后重试或改用异步接口查询任务状态", status="partial", stop_reason="wait_timeout")
-    finally:
-        c.bus.unsubscribe(session_id, queue)
 
 
 def build_container_origins() -> list[str]:

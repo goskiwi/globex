@@ -148,8 +148,8 @@ async def test_production_owns_clients_and_never_publishes_raw_text(tmp_path,mon
     settings=replace(_settings(tmp_path),llm_api_key='test-key',embedding_api_key='test-key',llm_base_url='https://audit.test/v1',output_guard_enabled=True)
     try:
         async with isolated_runtime(tmp_path/'runtime',settings) as (_,container):
-            request=RunAgentInput.model_validate(body());runtime=container.ag_ui_runtime
-            await runtime.start(request,parse_intent(request))
+            request=RunAgentInput.model_validate(body());runtime=container.runs
+            await runtime.start(request,parse_intent(request).buyer_id)
             if outcome=='cancel':
                 await asyncio.wait_for(waiting.wait(),5)
                 await runtime.cancel('r1','b1')

@@ -6,6 +6,8 @@ GLOBEX_REDIS_SERVER_BIN=/path/to/redis-server uv run pytest -q tests/test_queue_
 """
 from __future__ import annotations
 
+from app.infrastructure.eventbus import TradeEventBus
+
 from app.application.runtime.execution import ExecutionResult
 import asyncio
 from contextvars import Context
@@ -395,28 +397,35 @@ async def test_malformed_message_dead_letter_preserves_source(real_redis):
     assert (await real_redis.xpending(_LARGE_STREAM, _GROUP))["pending"] == 0
 
 
-async def test_worker_error_result_is_failed_not_done_and_uses_fresh_state(real_redis):
+async def admitted_run(tmp_path, queue, orchestrator):
+    from ag_ui.core import RunAgentInput
+    from app.application.runtime.runs import RunService
+    from app.infrastructure.ag_ui_journal import AGUIJournal
+    item=task()
+    service=RunService(AGUIJournal(tmp_path/'runs.db'),orchestrator,task_queue=queue)
+    await service.startup()
+    body=RunAgentInput.model_validate({'runId':item.task_id,'threadId':item.shopping_session_id,'state':{},
+        'messages':[{'id':'user','role':'user','content':item.raw_query}],'tools':[],'context':[],
+        'forwardedProps':{'buyerId':item.buyer_id,'locale':item.locale,'currency':item.currency}})
+    await service.start(body,item.buyer_id)
+    return service
+
+
+async def test_worker_error_result_is_failed_not_done_and_uses_fresh_state(real_redis,tmp_path):
     from app.worker import execute_intent_task
-    queue = RedisStreamTaskQueue(real_redis)
-    await queue.enqueue(task())
-    observed = []
+    from app.application.usecases.intents import SubmitIntentOutput
+    queue=RedisStreamTaskQueue(real_redis);observed=[]
     class Orchestrator:
-        async def handle_intent(self, _intent, **kwargs):
-            observed.append((kwargs["fresh_session"], kwargs["persistence_guard"]()))
-            return SimpleNamespace(error="结果明确失败", final_text="[error] 结果明确失败")
-    class Bus:
-        def publish(self, *_args):
-            pass
-    async def handler(intent):
-        return await execute_intent_task(intent, Orchestrator(), Bus())
-    stopping = asyncio.Event()
-    runner = consume(queue, handler, stopping, max_deliveries=1)
-    try:
-        await eventually(lambda: has_state(queue, "task-1", "failed"))
-    finally:
-        await stop_consumer(runner, stopping)
-    assert observed == [(True, True)]
-    assert (await queue.get_status("task-1")).error == "结果明确失败"
+        async def handle_intent(self,intent,**kwargs):
+            observed.append((kwargs['fresh_session'],kwargs['persistence_guard']()))
+            return SubmitIntentOutput(intent.shopping_session_id,'失败',error='结果明确失败',status='failed')
+    service=await admitted_run(tmp_path,queue,Orchestrator())
+    async def handler(item):return await execute_intent_task(item,service,TradeEventBus())
+    stopping=asyncio.Event();runner=consume(queue,handler,stopping,max_deliveries=1)
+    try:await eventually(lambda:has_state(queue,'task-1','failed'))
+    finally:await stop_consumer(runner,stopping);await service.shutdown()
+    assert observed==[(True,True)]
+    assert (await queue.get_status('task-1')).execution_status=='failed'
 
 
 async def test_session_lease_wait_is_bounded(real_redis):
@@ -429,24 +438,49 @@ async def test_session_lease_wait_is_bounded(real_redis):
         await asyncio.create_task(competing(), context=Context())
 
 
-async def test_worker_persistence_failure_is_terminal_without_business_replay(real_redis):
+async def test_worker_persistence_failure_is_terminal_without_business_replay(real_redis,tmp_path):
     from app.worker import execute_intent_task
-    from app.infrastructure.eventbus import TradeEventBus
-    queue = RedisStreamTaskQueue(real_redis)
-    await queue.enqueue(task())
-    calls = []
+    from app.application.usecases.intents import SubmitIntentOutput
+    queue=RedisStreamTaskQueue(real_redis);calls=[]
     class Orchestrator:
-        async def handle_intent(self, intent, **kwargs):
+        async def handle_intent(self,intent,**kwargs):
             calls.append(intent)
-            return SimpleNamespace(error="执行已发生，请核查状态", error_code="PERSISTENCE_FAILED")
-    async def handler(intent):
-        return await execute_intent_task(intent, Orchestrator(), TradeEventBus())
-    stopping = asyncio.Event()
-    runner = consume(queue, handler, stopping, max_deliveries=3)
-    try:
-        await eventually(lambda: has_state(queue, "task-1", "failed"))
-    finally:
-        await stop_consumer(runner, stopping)
-    assert len(calls) == 1
-    assert (await queue.get_status("task-1")).error == "执行已发生，请核查状态"
-    assert (await real_redis.xpending(_STREAM, _GROUP))["pending"] == 0
+            return SubmitIntentOutput(intent.shopping_session_id,'失败',error='执行已发生，请核查状态',error_code='PERSISTENCE_FAILED',status='failed')
+    service=await admitted_run(tmp_path,queue,Orchestrator())
+    async def handler(item):return await execute_intent_task(item,service,TradeEventBus())
+    stopping=asyncio.Event();runner=consume(queue,handler,stopping,max_deliveries=3)
+    try:await eventually(lambda:has_state(queue,'task-1','failed'))
+    finally:await stop_consumer(runner,stopping);await service.shutdown()
+    assert len(calls)==1 and (await queue.get_status('task-1')).error=='执行已发生，请核查状态'
+
+
+async def test_broker_loss_recovers_pending_and_never_replays_completed_run(real_redis,tmp_path):
+    from app.worker import execute_intent_task
+    from app.application.usecases.intents import SubmitIntentOutput
+    from app.application.runtime.runs import RunService
+    queue=RedisStreamTaskQueue(real_redis);calls=[]
+    class Orchestrator:
+        async def handle_intent(self,intent,**kwargs):
+            calls.append(intent)
+            return SubmitIntentOutput(intent.shopping_session_id,'唯一结果',status='completed')
+    service=await admitted_run(tmp_path,queue,Orchestrator())
+    # 仅清空 fixture 创建的 Redis：模拟 broker 丢失，持久运行仍保存在独立 SQLite。
+    await real_redis.flushdb()
+    await service.shutdown()
+    recovered=RunService(service.journal,service.orchestrator,task_queue=queue)
+    await recovered.startup()
+    assert await real_redis.xlen(_STREAM)==1
+    async def handler(item):return await execute_intent_task(item,recovered,TradeEventBus())
+    stopping=asyncio.Event();runner=consume(queue,handler,stopping)
+    try:await eventually(lambda:has_state(queue,'task-1','done'))
+    finally:await stop_consumer(runner,stopping)
+    await real_redis.flushdb()
+    await queue.enqueue(task())
+    stopping=asyncio.Event();runner=consume(queue,handler,stopping)
+    try:await eventually(lambda:has_state(queue,'task-1','done'))
+    finally:await stop_consumer(runner,stopping);await recovered.shutdown()
+    assert len(calls)==1
+    run=await recovered.journal.run('task-1','buyer-1')
+    assert run['result']['text']=='唯一结果'
+    events,_,_=await recovered.journal.events('task-1','buyer-1',0)
+    assert sum(event['event']['type']=='RUN_STARTED' for event in events)==1

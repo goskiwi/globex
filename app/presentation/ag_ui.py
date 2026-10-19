@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""AG-UI 传输：所有执行、重连和取消均由持久 AGUIRuntime 管理。"""
+"""AG-UI 传输：所有执行、重连和取消均由持久 RunService 管理。"""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +14,7 @@ from app.application.usecases.confirmation_service import ConfirmationService
 from app.application.agents.orchestrator import MainAgentOrchestrator
 from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.ag_ui_journal import JournalConflict, JournalForbidden, JournalNotFound
-from app.presentation.ag_ui_runtime import AGUIRuntime
+from app.application.runtime.runs import RunService
 from app.presentation.identity import require_buyer, require_session
 from app.infrastructure.capability_registry import CapabilityVersionChanged
 import json
@@ -62,7 +62,7 @@ def parse_intent(body: RunAgentInput) -> SubmitIntentInput:
 def register_ag_ui_routes(
     api: FastAPI, get_orchestrator: Callable[[], MainAgentOrchestrator],
     get_confirmations: Callable[[], ConfirmationService] | None = None,
-    *, get_runtime: Callable[[], AGUIRuntime],
+    *, get_runtime: Callable[[], RunService],
 ) -> None:
     def runtime():
         return get_runtime()
@@ -86,7 +86,7 @@ def register_ag_ui_routes(
             for item in events:
                 after = item["seq"]
                 yield f"id: {run_id}:{after}\ndata: {json.dumps(item['event'], ensure_ascii=False)}\n\n"
-            if status != "running" and after >= last:
+            if status not in {"queued", "running"} and after >= last:
                 return
             if not events:
                 yield ": keep-alive\n\n"
@@ -118,7 +118,7 @@ def register_ag_ui_routes(
             after = cursor(request, body.run_id, 0)
             if after:
                 await manager.journal.events(body.run_id, intent.buyer_id, after)
-            await manager.start(body, intent)
+            await manager.start(body, intent.buyer_id)
             await manager.journal.events(body.run_id, intent.buyer_id, after)
         except (JournalConflict, JournalForbidden, JournalNotFound) as err:
             raise translate(err) from err

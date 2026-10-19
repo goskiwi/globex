@@ -34,34 +34,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("app.worker")
 
 
-async def execute_intent_task(task: IntentTask, orchestrator, bus) -> ExecutionResult:
+async def execute_intent_task(task: IntentTask, runs, bus) -> ExecutionResult:
     """只执行意图；running/retrying/终态与 ACK 由持有租约的队列原子治理。"""
     with trace_worker_task(task):
-        return await _execute_traced_task(task, orchestrator, bus)
+        return await _execute_traced_task(task, runs, bus)
 
 
-async def _execute_traced_task(task: IntentTask, orchestrator, bus):
-    lease = current_execution_lease()
+async def _execute_traced_task(task: IntentTask, runs, bus):
+    lease=current_execution_lease()
     if lease is None or not lease.is_valid():
-        raise RuntimeError("worker 未持有有效执行租约")
-    bus.publish(task.shopping_session_id, "task.started", {"task_id": task.task_id})
-    result = await orchestrator.handle_intent(
-        SubmitIntentInput(
-            shopping_session_id=task.shopping_session_id,
-            buyer_id=task.buyer_id,
-            locale=task.locale,
-            currency=task.currency,
-            raw_query=task.raw_query,
-        ),
-        fresh_session=True,
-        persistence_guard=lease.is_valid,
-    )
-    # Orchestrator 会把常规异常封装成结果，不能把 [error] 误标成 done。
-    if result.error:
-        if getattr(result, "error_code", None) == "PERSISTENCE_FAILED":
-            raise NonRetryableTaskError(result.error)
-        raise RuntimeError(result.error)
-    return ExecutionResult(result.final_text, result.status, result.stop_reason)
+        raise RuntimeError('worker未持有有效执行租约')
+    bus.publish(task.shopping_session_id,'task.started',{'task_id':task.task_id})
+    return await runs.execute_queued(task)
 
 
 async def main() -> None:
@@ -87,7 +71,7 @@ async def main() -> None:
             nonlocal in_flight
             in_flight += 1
             try:
-                return await execute_intent_task(task, container.orchestrator, container.bus)
+                return await execute_intent_task(task, container.runs, container.bus)
             finally:
                 in_flight -= 1
     

@@ -271,9 +271,9 @@ async def test_event_observers_are_task_scoped_including_children():
 async def test_http_endpoint_contract_and_reject_stale_resume(tmp_path):
     orchestrator, _, _ = make_orchestrator()
     app = FastAPI()
-    from app.presentation.ag_ui_runtime import AGUIRuntime
+    from app.application.runtime.runs import RunService
     from app.infrastructure.ag_ui_journal import AGUIJournal
-    runtime=AGUIRuntime(AGUIJournal(tmp_path/"journal.db"),orchestrator)
+    runtime=RunService(AGUIJournal(tmp_path/"journal.db"),orchestrator)
     await runtime.startup()
     register_ag_ui_routes(app, lambda: orchestrator, get_runtime=lambda:runtime)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
@@ -294,9 +294,9 @@ async def test_http_disconnect_preserves_run_until_explicit_cancel(swallow_cance
     conversations = SimpleNamespace(touch_session=AsyncMock(), append_turn=AsyncMock(), append_events=AsyncMock())
     orchestrator._conversation_store = conversations
     app = FastAPI()
-    from app.presentation.ag_ui_runtime import AGUIRuntime
+    from app.application.runtime.runs import RunService
     from app.infrastructure.ag_ui_journal import AGUIJournal
-    runtime=AGUIRuntime(AGUIJournal(tmp_path/"journal.db"),orchestrator)
+    runtime=RunService(AGUIJournal(tmp_path/"journal.db"),orchestrator)
     await runtime.startup()
     register_ag_ui_routes(app, lambda: orchestrator, get_runtime=lambda:runtime)
     disconnected = asyncio.Event()

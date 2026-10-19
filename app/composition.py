@@ -72,7 +72,8 @@ from app.infrastructure.tracing import setup_tracing, shutdown_tracing
 from app.infrastructure.ag_ui_journal import AGUIJournal
 from app.infrastructure.queue.archive import QueueArchive
 from app.infrastructure.capability_registry import CapabilityRegistry
-from app.presentation.ag_ui_runtime import AGUIRuntime
+from app.application.runtime.runs import RunService, queue_priority
+from functools import partial
 from app.infrastructure.runtime_version import app_source_fingerprint
 from app.infrastructure.vector.index_bootstrap import bootstrap_product_index
 from app.infrastructure.vector.embedding_identity import embedding_identity
@@ -115,7 +116,7 @@ class Container:
     trade_store: Any = None
     trade_db_engine: Any = None
     runtime: dict = field(default_factory=dict)
-    ag_ui_runtime: Any = None
+    runs: Any = None
     session_store: Any = None
     identity_policy: Any = None
     prompt_registry: Any = None
@@ -129,8 +130,8 @@ class Container:
         """建表 / 建向量库 / 建知识库。任一失败只告警，对应能力降级但服务可用。"""
         if self.context_service is not None:
             await self.context_service.startup()
-        if self.ag_ui_runtime is not None:
-            await self.ag_ui_runtime.startup()
+        if self.runs is not None:
+            await self.runs.startup()
         if self.db_engine is not None and (self.trade_store is None or self.db_engine is not self.trade_db_engine):
             try:
                 await bootstrap_schema(self.db_engine)
@@ -152,8 +153,8 @@ class Container:
         try:
             if self.context_service is not None:
                 await self.context_service.shutdown()
-            if self.ag_ui_runtime is not None:
-                await self.ag_ui_runtime.shutdown()
+            if self.runs is not None:
+                await self.runs.shutdown()
             if isinstance(self.session_store, JsonFileSessionStore):
                 await self.session_store.close()
             await self.vector_index.close()
@@ -360,7 +361,7 @@ async def build_container() -> Container:
             trade_store=trade_store,
             trade_db_engine=trade_db_engine,
             runtime={"app_source_sha256": source_fingerprint},
-            ag_ui_runtime=AGUIRuntime(journal, orchestrator, confirmations, shopping_forms=main_factory.shopping_form_store),
+            runs=RunService(journal, orchestrator, confirmations, shopping_forms=main_factory.shopping_form_store, task_queue=task_queue, session_store=session_store, priority=partial(queue_priority,settings,cache)),
             session_management=SessionManagement(orchestrator,journal,session_store,conversation_store,
                 search_factory.evidence_store,main_factory.shopping_form_store,graph_checkpointer),
             session_store=session_store,

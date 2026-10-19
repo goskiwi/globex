@@ -486,7 +486,8 @@ class RedisStreamTaskQueue(TaskQueue):
                 return
             await self.set_status(TaskStatus(task.task_id, "running"))
             result = await handler(task)
-            await self.set_status(TaskStatus(task.task_id, "done", final_text=result.text,
+            await self.set_status(TaskStatus(task.task_id, "failed" if result.status == 'failed' else "done",
+                                            final_text=result.text, error=result.text if result.status == 'failed' else None,
                                             execution_status=result.status, stop_reason=result.stop_reason))
             await self._ack(delivery, lease)
         except asyncio.CancelledError:

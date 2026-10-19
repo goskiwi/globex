@@ -20,7 +20,7 @@ from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.shopping_forms import ShoppingFormStore
 from app.infrastructure.ag_ui_journal import AGUIJournal, JournalConflict
 from app.presentation.ag_ui import parse_intent
-from app.presentation.ag_ui_runtime import AGUIRuntime
+from app.application.runtime.runs import RunService
 from tests.test_agent_handoff import ScriptedModel
 from tests.test_ag_ui_journal import body, ControlledOrchestrator
 from tests.trade_test_helpers import confirmation_env
@@ -88,17 +88,17 @@ async def test_form_continuation_is_owned_saved_submission_and_cannot_replace_qu
     rows=await forms.list_for_session('b1','s1')
     assert rows[0]['origin_run_id']=='origin' and rows[0]['submission']['run_id']==saved['run_id']
     assert not await forms.list_for_session('b2','s1')
-    runtime=AGUIRuntime(AGUIJournal(tmp_path/'runs.db'),ControlledOrchestrator(),shopping_forms=forms)
+    runtime=RunService(AGUIJournal(tmp_path/'runs.db'),ControlledOrchestrator(),shopping_forms=forms)
     await runtime.startup()
     try:
         data=body(saved['run_id'],query=saved['query']);data['messages'][-1]['id']=saved['run_id']+':user'
         native=RunAgentInput.model_validate(data)
-        await runtime.start(native,parse_intent(native))
+        await runtime.start(native,parse_intent(native).buyer_id)
         for _ in range(100):
             if (await runtime.journal.run(saved['run_id'],'b1'))['status']!='running':break
             await asyncio.sleep(.01)
         assert runtime.orchestrator.calls==1
-        await runtime.start(native,parse_intent(native));assert runtime.orchestrator.calls==1
+        await runtime.start(native,parse_intent(native).buyer_id);assert runtime.orchestrator.calls==1
         data['messages'][-1]['content']='替换为模型伪造答案';bad=RunAgentInput.model_validate(data)
-        with pytest.raises(JournalConflict):await runtime.start(bad,parse_intent(bad))
+        with pytest.raises(JournalConflict):await runtime.start(bad,parse_intent(bad).buyer_id)
     finally:await runtime.shutdown()

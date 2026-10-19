@@ -306,23 +306,22 @@ it("仅使用显式登录身份，忽略旧的全局身份与缓存入口",async
  expect(withoutCache.getSnapshot().sessionId).toBe("pao-history");
 });
 
-it.each([false,true])("版本过期保留旧历史并仅在新会话重试一次（再次过期=%s）",async(repeat)=>{
+it("版本过期保留会话与完整需求，不自动改写为新会话重发",async()=>{
  const posts:any[]=[];
  const client=new CommerceClient({url:'/commerce/ag-ui/run',fetch:async(_url,init)=>{
   const body=JSON.parse(String(init.body));posts.push(body);
   return sse(body.runId,[[1,{type:'RUN_STARTED',threadId:body.threadId,runId:body.runId}],
-   [2,{type:'STATE_SNAPSHOT',snapshot:{products:[],resumeDestination:'CN'}}],
-   [3, posts.length===1 || repeat ? {type:'RUN_ERROR',code:'SESSION_VERSION_CHANGED',message:'选购环境已更新，旧记录仍保留'} : {type:'RUN_FINISHED',threadId:body.threadId,runId:body.runId}]]);
+   [2, posts.length===2?{type:'RUN_ERROR',code:'SESSION_VERSION_CHANGED',message:'选购环境已更新，请开启新选购'}:
+     {type:'RUN_FINISHED',threadId:body.threadId,runId:body.runId}]]);
  }});
- const query='请核对 product_id=P1003，sku_id=P1003-S1 的库存与到手价';
- await client.submit(query);
+ await client.submit('明确配防雨罩的背包，300元人民币，寄中国');
+ const original=client.getSnapshot().sessionId;
+ await client.submit('预算改为100，其他要求不变');
  expect(posts).toHaveLength(2);
- expect(posts[0].threadId).not.toBe(posts[1].threadId);
- expect(posts[1].messages).toHaveLength(1);
- expect(posts[1].messages[0].content).toBe(query+'\n收货国家：CN。');
- expect(posts[1].forwardedProps.buyerId).toBe('test-buyer');
- expect(client.getSnapshot().history.some(item=>item.id===posts[0].threadId)).toBe(true);
- expect(client.getSnapshot().status).toBe(repeat?'error':'idle');
+ expect(client.getSnapshot().sessionId).toBe(original);
+ expect(client.getSnapshot().status).toBe('error');
+ expect(client.getSnapshot().error).toContain('选购环境已更新');
+ expect(client.getSnapshot().messages.map(m=>m.content).join(' ')).toContain('明确配防雨罩');
 });
 
  it("首轮模型运行早于会话落库时，确认列表404不会成为交易报错",async()=>{

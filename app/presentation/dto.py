@@ -20,6 +20,7 @@ class SubmitIntentRequest(BaseModel):
 
 
 class SubmitIntentResponse(BaseModel):
+    run_id: str
     shopping_session_id: str
     final_text: str
     status: str
