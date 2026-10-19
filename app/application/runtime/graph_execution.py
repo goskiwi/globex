@@ -95,7 +95,9 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
     request_id=(context.source_run_id or (latest.id if latest else '')) if context else ''
     current_tasks=[task for task in result.get('task_plan',{}).get('tasks',{}).values()
                    if request_id and task.get('scope',{}).get('request_id')==request_id]
-    unfinished=any(task['status']!='completed' or not task.get('delivery') for task in current_tasks)
+    from app.application.runtime.research_plan import pending_plan_goals
+    unfinished=(any(task['status']!='completed' or not task.get('delivery') for task in current_tasks)
+                or bool(pending_plan_goals(result.get('task_plan',{}),request_id)))
 
     return ExecutionResult(text, 'needs_input' if any(p['status']=='needs_input' for p in presentations) else
         'failed' if reason=='provider_refusal' else

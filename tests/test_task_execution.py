@@ -131,10 +131,10 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
             assert len(deliveries)==1 and deliveries[0]['hits'][0]['price_major']==129
             assert result.status==('partial' if extra_goal else 'completed')
             outcome=deliveries[0]['plan_outcome']
-            assert outcome['status']==('partial' if extra_goal else 'completed')
+            assert outcome['status']=='completed'
             assert state['task_plan']['steps'][0]['status']=='delivered'
             if extra_goal:
-                assert '选择水杯' in deliveries[0]['guidance']
+                assert '选择水杯' in result.final_text
                 assert state['task_plan']['steps'][1]['status']=='pending'
     finally:await c.shutdown()
 

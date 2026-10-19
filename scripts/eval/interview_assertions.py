@@ -1,5 +1,4 @@
 """端到端用例的业务断言，复用现有事件，不解析模型 Markdown 金额。"""
-import json
 
 
 KINDS = {"answer_present", "confirmation_prepared", "presentation_matches", "presentation_terminal", "business_recovered", "delegation_delivered",
@@ -13,6 +12,17 @@ def tool_results(events, name):
 def deliveries(events,assertion):
     return [(i,e['payload']['payload']) for i,e in enumerate(events)
             if e.get('type')=='presentation.result' and e['payload'].get('kind')==assertion['presentation_kind']]
+
+
+def candidate_identity(candidate):
+    """原题要求明确SKU，必须与程序关联的商品及规格事实一致。"""
+    product_id,sku_id=candidate.get('product_id'),candidate.get('sku_id')
+    facts=candidate.get('facts') or {}
+    if (isinstance(product_id,str) and product_id and isinstance(sku_id,str) and sku_id
+            and (facts.get('product') or {}).get('product_id')==product_id
+            and (facts.get('sku') or {}).get('sku_id')==sku_id):
+        return product_id,sku_id
+    return None
 
 
 def check(assertion, events):
@@ -47,24 +57,27 @@ def check(assertion, events):
         rows = [e["payload"] for e in events if e.get("type") == "eval.context.operation"]
         return any(r.get("status") == "completed" for r in rows), f"整理状态 {[r.get('status') for r in rows]}"
     if kind == "delegation_delivered":
-        rows = []
-        for call in tool_results(events, "task_dispatch"):
-            for value in call.get("result", []):
-                if isinstance(value, str):
-                    try: value = json.loads(value)
-                    except ValueError: continue
-                if isinstance(value, dict): rows.append(value)
-        valid = [r for r in rows if r.get("status") in ("completed", "partial") and r.get("candidates") and r.get("evidence_refs")]
-        product_categories = {}
-        for call in tool_results(events, "product_search_tool"):
-            for result in call.get("result", []):
-                if isinstance(result, dict):
-                    product_categories.update({hit['product_id']:hit.get('category')
-                        for hit in result.get('hits', []) if hit.get('product_id')})
-        covered = {candidate.get('facts',{}).get('product',{}).get('category') or product_categories.get(candidate.get('product_id'))
-                   for row in valid for candidate in row['candidates']}
+        # 核对完整业务结果，不把供模型阅读的截断投影当成唯一证据。
+        rows = [event['payload'] for event in events if event.get('type')=='tool.result'
+                and event.get('payload',{}).get('tool')=='task_dispatch'
+                and not event['payload'].get('error')]
+        sources = {r['scope']['task_id']:r for r in rows
+                   if r.get('status') in ('completed','partial') and r.get('candidates') and r.get('evidence_refs')
+                   and (r.get('scope') or {}).get('task_id')
+                   and all(candidate_identity(c) for c in r['candidates'])}
+        valid = {}
+        for _,payload in deliveries(events,{'presentation_kind':'research'}):
+            for report in payload.get('reports',[]):
+                task_id=report.get('task_id')
+                source=sources.get(task_id)
+                if not source or task_id not in payload.get('task_ids',[]):continue
+                identities={candidate_identity(c) for c in report.get('items',[])}
+                if identities and None not in identities and identities <= {candidate_identity(c) for c in source['candidates']}:
+                    valid[task_id]=report
+        covered = {candidate['facts']['product'].get('category')
+                   for report in valid.values() for candidate in report['items']}
         required = set(assertion.get('categories', []))
-        return (len(valid) >= assertion.get("minimum", 1) and required <= covered), f"有候选与证据的交接 {len(valid)} 次；状态 {[r.get('status') for r in rows]}；缺失品类 {sorted(required-covered)}"
+        return (len(valid) >= assertion.get("minimum", 1) and required <= covered), f"实际交付且SKU关联正确的研究 {len(valid)} 份；状态 {[r.get('status') for r in rows]}；缺失品类 {sorted(required-covered)}"
     accepted=deliveries(events,assertion)
     if not accepted:
         return False,f"未观察到已接纳的{assertion['presentation_kind']}"

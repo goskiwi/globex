@@ -59,4 +59,11 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         values=[accepted.get((r.artifact or {}).get('execution_id')) for r in reversed(receipts)]
         if not all(values):return None
         lines=[('请填写下方的问题，提交后我会继续选购。' if p['kind']=='clarification' else p['payload']['guidance']) for p in values]
+        from app.application.runtime.request_scope import ShoppingContext
+        from app.application.runtime.research_plan import pending_plan_goals
+        context=ShoppingContext.current()
+        request_id=(context.source_run_id or context.source_message_id) if context else ''
+        remaining=pending_plan_goals(state.get('task_plan',{}),request_id)
+        if remaining:
+            lines.append('尚未完成的计划目标：'+'；'.join(remaining))
         return {'messages':[AIMessage(content='\n\n'.join(lines))],'jump_to':'end'}

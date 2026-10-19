@@ -76,16 +76,40 @@ def test_completed_delegates_do_not_make_an_empty_main_reply_pass():
     assert evaluate("answer_present",events)
 
 
+def research_candidate(pid,category):
+    return {'product_id':pid,'sku_id':pid+'-S1','facts':{'product':{'product_id':pid,'category':category},'sku':{'sku_id':pid+'-S1'}}}
+
+
+def research_events(candidates):
+    events=[]
+    for index,candidate in enumerate(candidates):
+        task_id='task-'+str(index)
+        events.append({'type':'tool.result','payload':{'tool':'task_dispatch','status':'completed','candidates':[candidate],'evidence_refs':['ctx_actual'],'scope':{'task_id':task_id}}})
+    reports=[{'task_id':'task-'+str(i),'items':[c]} for i,c in enumerate(candidates)]
+    events.append({'type':'presentation.result','payload':{'kind':'research','payload':{'task_ids':[r['task_id'] for r in reports],'reports':reports}}})
+    return events
+
+
 def test_two_deliveries_of_same_category_do_not_cover_two_requested_categories():
-    events=[{"type":"eval.tool_result","payload":{"tool":"product_search_tool","result":[
-        {"hits":[{"product_id":"bag","category":"旅行装备"},{"product_id":"ear","category":"数码配件"}]}]}}]
-    for _ in range(2):
-        events.append({"type":"eval.tool_result","payload":{"tool":"task_dispatch","result":[
-            {"status":"completed","candidates":[{"product_id":"bag"}],"evidence_refs":["ref"]}]}})
-    rule={"minimum":2,"categories":["旅行装备","数码配件"]}
-    assert not evaluate("delegation_delivered",events,**rule)
-    events[-1]['payload']['result'][0]['candidates'][0]['product_id']='ear'
-    assert evaluate("delegation_delivered",events,**rule)
+    bag=research_candidate('bag','旅行装备');ear=research_candidate('ear','数码配件')
+    rule={'minimum':2,'categories':['旅行装备','数码配件']}
+    assert not evaluate('delegation_delivered',research_events([bag,bag]),**rule)
+    assert evaluate('delegation_delivered',research_events([bag,ear]),**rule)
+
+
+@pytest.mark.parametrize('failure',['missing_sku','mismatched_sku','missing_provenance','no_report','invented_presented_sku'])
+def test_original_research_requires_actual_report_with_verified_skus(failure):
+    from copy import deepcopy
+    events=research_events([research_candidate('bag','旅行装备'),research_candidate('ear','数码配件')])
+    if failure=='missing_sku':events[0]['payload']['candidates'][0].pop('sku_id')
+    elif failure=='mismatched_sku':events[0]['payload']['candidates'][0]['facts']['sku']['sku_id']='another-sku'
+    elif failure=='missing_provenance':events[0]['payload']['evidence_refs']=[]
+    elif failure=='no_report':events.pop()
+    else:
+        events=deepcopy(events)
+        events[-1]['payload']['payload']['reports'][0]['items']=[research_candidate('invented','旅行装备')]
+    assert not evaluate('delegation_delivered',events,minimum=2,categories=['旅行装备','数码配件'])
+
 
 
 @pytest.mark.asyncio

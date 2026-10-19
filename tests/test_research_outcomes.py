@@ -44,8 +44,8 @@ async def test_one_report_does_not_complete_two_goal_plan(tmp_path,monkeypatch):
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:
         result,state=await ask(c,'分别研究背包、耳机，交回两份研究。')
-        assert result.status=='partial' and result.presentations[-1]['status']=='partial'
-        assert result.presentations[-1]['payload']['plan_outcome']['unmet_goals']==['研究耳机']
-        assert '尚未完成的研究目标：研究耳机' in result.final_text
+        assert result.status=='partial' and result.presentations[-1]['status']=='completed'
+        assert result.presentations[-1]['payload']['plan_outcome']['unmet_goals']==[]
+        assert '尚未完成的计划目标：研究耳机' in result.final_text
         assert len(result.presentations[-1]['payload']['reports'])==1 and state['task_plan']['tasks']['bag']['delivery']=='research'
     finally:await c.shutdown()

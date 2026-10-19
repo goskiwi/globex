@@ -105,11 +105,9 @@ def plan_delivery(plan: ResearchPlan, picks, cards):
 
 
 def delivery_coverage(plan:ResearchPlan,requested,delivered,kind):
-    """成果是否覆盖其参与的计划；独立任务不替旧计划作完成度声明。"""
+    """单项成果只声明本次引用任务的覆盖，整轮计划由批次归并后计算。"""
     tasks=plan.get('tasks',{})
-    steps=deepcopy(plan.get('steps',[]))
-    planned={step['id'] for step in steps}
-    if not (set(requested)&planned):steps=[]
+    steps=[deepcopy(step) for step in plan.get('steps',[]) if step['id'] in requested]
     fulfilled={'delivered'} if kind=='products' else {'reported','delivered'}
     for step in steps:
         if step['id'] in delivered and step['status'] in {'verified','reported','delivered'}:
@@ -118,6 +116,14 @@ def delivery_coverage(plan:ResearchPlan,requested,delivered,kind):
         +[tasks[key]['scope']['goal'] for key in set(requested)-set(delivered)]))
     return {'status':'partial' if missing else 'completed','steps':steps,
             'delivered_tasks':sorted(delivered),'unmet_goals':missing}
+
+
+def pending_plan_goals(plan: ResearchPlan, request_id: str) -> list[str]:
+    """仅本次实际参与计划时报告未完成目标，独立操作不接管旧计划。"""
+    participates = any(task['scope']['request_id'] == request_id and task['scope']['step_id'] is not None
+                       for task in plan.get('tasks', {}).values())
+    return [step['goal'] for step in plan.get('steps', [])
+            if step['status'] not in {'reported', 'delivered'}] if request_id and participates else []
 
 
 def record_research(plan: ResearchPlan, work: ShoppingWork, data: dict) -> None:
