@@ -3,57 +3,49 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.tools.order_tools import _ok, _fail
 from app.domain.catalog.product_search_spec import ProductSearchSpec
+from app.application.tools.product_details_tool import ProductDetailsInput
 from app.application.runtime.request_scope import ShoppingContext
 
 
 class ProductViewInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    product_ids: list[str] = Field(min_length=1, max_length=12, description="需要展示的已识别商品ID。不同平台记录分别传入；不提交候选评分或首选")
+    targets: list[ProductDetailsInput] = Field(min_length=1, max_length=12, description="要查看的商品与可选具体SKU；不同平台记录分别填写，明确规格须保持，不代表购买选购")
     guidance: str = Field(min_length=1, max_length=600, description="对买家说的简短查看说明，用商品名称，不用内部编号。资料、规格、价格和库存由卡片展示，不逐项复述，不劝提高预算才能看")
 
 
 def build_product_view_tool(catalog, evidence_store, bus):
-    async def show_product_details(product_ids: list[str], guidance: str):
+    async def show_product_details(targets: list[ProductDetailsInput], guidance: str):
         """把指定商品交付为只读详情卡，缺货、超预算或条件不满足也能展示。
 
-        用户要求看看、查看详情时，先用get_product_details了解资料，再调用本工具展示；
+        用户要求看看、查看详情时可直接展示已指定对象；需要额外分析资料时再读取详情。
         不确定对象时先从检索/历史定位目录ID。商品事实由代码实时读取，不由你重填。
         同款由页面按canonical_product_id合并为一张商品卡，卡内保留各平台全部规格和报价。
-        product_ids仍提交各平台记录，不能自行丢掉报价；guidance不要按记录数说成多款或多张卡。
+        targets仍提交各平台记录，不能自行丢掉报价；guidance不要按记录数说成多款或多张卡。
         不能用recommend_products代替详情展示。
         不变更预算、选购项或交易授权；成功交付后本轮结束，不再写一份参数报告。
         """
-        request = ProductViewInput(product_ids=product_ids, guidance=guidance)
+        request = ProductViewInput(targets=targets, guidance=guidance)
         context = ShoppingContext.current()
         if context is None:
             return _fail("缺少买家会话")
         try:
-            if len(set(request.product_ids)) != len(request.product_ids):
-                raise ValueError("详情商品ID不得重复")
+            if len({(t.product_id,t.sku_id) for t in request.targets}) != len(request.targets):
+                raise ValueError("详情查看对象不得重复")
             effective = context.effective_search or {"parameters": {}}
             parameters = dict(effective["parameters"])
             budget = parameters.pop("landed_budget_major", None)
             parameters["target_currency"] = parameters.get("target_currency") or context.currency
             cards = []
-            for identifier in request.product_ids:
+            for target in request.targets:
+                identifier = target.product_id
                 spec = ProductSearchSpec(product_id=identifier, **parameters,
                     excluded_product_ids=tuple(effective.get("excluded_products", [])),
                     excluded_sku_ids=tuple(effective.get("excluded_skus", [])))
-                selected = [line["sku_id"] for line in context.selected_lines
-                            if line["product_id"] == identifier]
-                # 单一明确选购规格决定详情默认项；多个规格同时选购时不擅自取舍。
                 result = await catalog.product_details(identifier, spec,
-                    sku_id=selected[0] if len(selected) == 1 else None,
-                    landed_budget_major=budget)
+                    sku_id=target.sku_id, landed_budget_major=budget)
                 if not result["hits"]:
                     raise ValueError(f"目录不存在该商品，不能展示：{identifier}")
-                if len(selected) == 1:
-                    result["hits"][0]["selected_sku_id"] = selected[0]
                 cards.extend(result["hits"])
-            names = {identifier: card['title'] for card in cards
-                     for identifier in (card['product_id'], card['default_sku_id'])}
-            if any(identifier in request.guidance for identifier in names):
-                raise ValueError("查看说明使用商品名称，不使用内部编号：" + '；'.join(names.values()))
             payload = {"guidance": request.guidance, "hits": cards, "purpose": "product_view"}
             payload["result_ref"] = await evidence_store.save(context.buyer_id, context.shopping_session_id, "product_view", payload)
             bus.publish(context.shopping_session_id, "product_view.result", payload)

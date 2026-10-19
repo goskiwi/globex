@@ -23,7 +23,7 @@ async def test_blocked_products_are_displayed_without_becoming_candidates(confir
     token=ShoppingContext.set(ShoppingContextSnapshot('s','buyer','zh-CN','CNY',effective_search=effective))
     try:
         tool=build_product_view_tool(catalog,e.evidence,e.bus)
-        result=await tool(['P3020','P3021'],'下面按平台展示 Roamix 单侧支撑颈枕的完整资料。')
+        result=await tool([{'product_id':'P3020'},{'product_id':'P3021'}],'下面按平台展示 Roamix 单侧支撑颈枕的完整资料。')
         assert result.ok
         payload=json.loads(result.text)
         assert payload['purpose']=='product_view' and len(payload['hits'])==2
@@ -31,7 +31,7 @@ async def test_blocked_products_are_displayed_without_becoming_candidates(confir
         assert all('over_price_cap' in s['constraint_issues'] for p in payload['hits'] for s in p['skus'])
         assert effective['parameters']['price_max_major']==100 and not work.selections
         assert await e.evidence.find_product('buyer','s',product_id='P3021',sku_id='P3021-S2') is None
-        assert not (await tool(['P99999'],'查看指定商品')).ok
+        assert not (await tool([{'product_id':'P99999'}],'查看指定商品')).ok
     finally:ShoppingContext.reset(token)
 
 
@@ -41,7 +41,7 @@ async def test_view_then_explicit_purchase_keeps_budget_and_correct_platform_sku
     effective=compile_search(work)
     token=ShoppingContext.set(ShoppingContextSnapshot('view-purchase','buyer','zh-CN','CNY',effective_search=effective))
     try:
-        result=await build_product_view_tool(catalog,e.evidence,e.bus)(['P3020','P3021'],'查看 Roamix 颈枕。')
+        result=await build_product_view_tool(catalog,e.evidence,e.bus)([{'product_id':'P3020'},{'product_id':'P3021'}],'查看 Roamix 颈枕。')
         assert result.ok and not work.selections
         stock=await e.store.get_inventory(['P3021-S2'])
         with pytest.raises(ValueError,match='库存不足'):
@@ -69,11 +69,11 @@ async def test_view_projects_selected_sku_without_hiding_other_choices(confirmat
     token=ShoppingContext.set(context)
     try:
         tool=build_product_view_tool(CatalogSearchUseCase(e.products,pricing=e.service._pricing),e.evidence,e.bus)
-        result=await tool(['P1003'],'查看已选雾霾蓝及其他颜色。')
+        result=await tool([{'product_id':'P1003','sku_id':'P1003-S2'}],'查看雾霾蓝及其他颜色。')
         assert result.ok
         card=json.loads(result.text)['hits'][0]
         assert card['default_sku_id']=='P1003-S2'
-        assert card['selected_sku_id']=='P1003-S2'
+        assert 'selected_sku_id' not in card
         assert {s['sku_id'] for s in card['skus']}=={'P1003-S1','P1003-S2'}
         assert card['landed_price']['items'][0]['sku_id']=='P1003-S2'
         assert ShoppingContext.current()==context
@@ -116,7 +116,7 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
     guidance='下面是 Roamix 单侧颈枕的资料，按平台分别展示。'
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
         call('get_product_details',{'product_id':'P3020'}),
-        call('show_product_details',{'product_ids':['P3020','P3021'],'guidance':guidance})])
+        call('show_product_details',{'targets':[{'product_id':'P3020'},{'product_id':'P3021'}],'guidance':guidance})])
     container=await _container(tmp_path,monkeypatch,model)
     try:
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','商品价100元人民币，看看颈枕'))
@@ -125,3 +125,24 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
         assert state.values['shopping_work']['filters']['price_max_major']==100
         assert not await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
     finally:await container.shutdown()
+
+
+@pytest.mark.parametrize('product,sku',[('P3004','P3004-S2'),('P40018','P40018-S2')])
+async def test_readonly_target_retains_requested_sku_without_purchase(tmp_path,product,sku):
+    from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
+    from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
+    from app.infrastructure.eventbus import TradeEventBus
+    from app.application.tools.product_details_tool import build_product_details_tool
+    catalog=CatalogSearchUseCase(InMemoryProductRepository());store=ContextEvidenceStore(tmp_path/'evidence.db');bus=TradeEventBus()
+    context=ShoppingContextSnapshot('view-target','buyer','zh-CN','CNY',effective_search={'parameters':{'target_currency':'CNY','ship_to':'CN'}})
+    token=ShoppingContext.set(context)
+    try:
+        read=await build_product_details_tool(catalog,bus,store)(product,sku)
+        shown=await build_product_view_tool(catalog,store,bus)([{'product_id':product,'sku_id':sku}],f'查看 {sku} 当前规格和库存。')
+        assert shown.ok
+        first=read.data['hits'][0];second=shown.data['hits'][0]
+        assert first['default_sku_id']==second['default_sku_id']==sku
+        assert first['price_major']==second['price_major']
+        assert second['landed_price']['items'][0]['sku_id']==sku
+        assert ShoppingContext.current()==context and not context.selected_lines
+    finally:ShoppingContext.reset(token)
