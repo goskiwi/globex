@@ -54,11 +54,12 @@ async def main(comparison=False):
                 async with asyncio.timeout(90):
                     answer = await runner._reply("pricing-live", session, [HumanMessage(name="synthetic",
                         content=("比较 P1001-S1 和 P1001-S2 两种规格，各买两件寄中国，到手预算450元人民币。给我比较表和主要取舍，不要下单。" if comparison else "想买两件旅行三件套，寄中国，到手总预算450元人民币。请核对P1001-S1是否合适，给出推荐和两件完整费用，不要下单。"))])
-            results = [e.payload for e in events if e.type == ("comparison.result" if comparison else "recommendation.result")]
+            results = [e.payload["payload"] for e in events if e.type == "presentation.result"
+                and e.payload["kind"] == ("comparison" if comparison else "recommendation")]
             quote = results[-1]["hits"][0]["landed_price"] if results else None
             passed = bool(quote and quote["items"][0]["sku_id"] == "P1001-S1" and
                           quote["items"][0]["quantity"] == 2 and quote["total_amount_minor"] == 41800
-                          and answer.product_delivery_complete and answer.text == results[-1]['guidance'])
+                          and answer.status == "completed" and any(p["kind"] == ("comparison" if comparison else "recommendation") for p in answer.presentations) and answer.text == results[-1]['guidance'])
             if comparison:
                 passed = passed and [c["default_sku_id"] for c in results[-1]["hits"]] == ["P1001-S1", "P1001-S2"]
                 passed = passed and results[-1]["hits"][1]["landed_price"]["total_amount_minor"] == 43800
