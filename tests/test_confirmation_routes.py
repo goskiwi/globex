@@ -156,6 +156,7 @@ async def test_real_server_cancel_route_prepares_then_resolves_using_same_ledger
     env = confirmation_env
     lightweight = SimpleNamespace(
         confirmations=env.service, bus=env.bus, backplane=None,
+        settings=SimpleNamespace(metrics_reader_buyers=(), metrics_scrape_token_file=""), identity_policy=None,
         cancel_order=CancelOrderUseCase(env.service), query_order=QueryOrderUseCase(env.store),
         orchestrator=None, startup=AsyncMock(), shutdown=AsyncMock(),
     )
@@ -199,7 +200,8 @@ async def test_health_reports_runtime_and_refuses_readiness_without_required_sto
         confirmations=env.service, bus=env.bus, backplane=None,
         startup=AsyncMock(), shutdown=AsyncMock(), db_engine=env.engine,
         trade_db_engine=BrokenEngine() if broken_trade else env.engine,
-        settings=SimpleNamespace(llm_model="test-model"),
+        settings=SimpleNamespace(llm_model="test-model", metrics_reader_buyers=(), metrics_scrape_token_file=""),
+        identity_policy=None,
         cache=SimpleNamespace(enabled=True, ping=AsyncMock(return_value=redis_ready)), task_queue=None,
         runtime={"app_source_sha256": "a" * 64},
     )

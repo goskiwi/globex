@@ -15,6 +15,7 @@ API 进程负责收请求、入队、等结果；worker 进程负责把队列里
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 import asyncio
 import logging
 import os
@@ -49,6 +50,7 @@ async def _execute_traced_task(task: IntentTask, runs, bus):
 
 async def main() -> None:
     container = await build_container()
+    metrics_server = metrics_task = None
     try:
         if container.task_queue is None:
             raise RuntimeError("未启用队列（需配置 REDIS_URL 且 QUEUE_ENABLED 不为 0），worker 无事可做")
@@ -78,13 +80,48 @@ async def main() -> None:
             "worker 启动：%s（并发度 %d）", consumer_name, container.settings.worker_concurrency,
         )
         await container.startup()
-        await container.task_queue.consume(
+        if container.settings.worker_metrics_port:
+            from fastapi import FastAPI
+            import uvicorn
+            from app.presentation.metrics import configure_metrics_access, register_metrics_routes
+            if not 1 <= container.settings.worker_metrics_port <= 65535:
+                raise ValueError("WORKER_METRICS_PORT 必须为1至65535，或0关闭")
+            metrics_api = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+            configure_metrics_access(metrics_api, container.settings, container.identity_policy)
+            register_metrics_routes(metrics_api)
+            metrics_server = uvicorn.Server(uvicorn.Config(metrics_api, host="0.0.0.0",
+                port=container.settings.worker_metrics_port, log_config=None, access_log=False))
+            # 信号由Worker的消费循环统一处理，指标服务不能抢走优雅退出。
+            metrics_server.capture_signals = nullcontext
+            metrics_task = asyncio.create_task(metrics_server.serve(), name="worker-metrics")
+        consume_task = asyncio.create_task(container.task_queue.consume(
             consumer_name=consumer_name,
             handler=handle,
             should_stop=stopping.is_set,
             concurrency=container.settings.worker_concurrency,
-        )
+        ))
+        try:
+            if metrics_task is None:
+                await consume_task
+            else:
+                done, _ = await asyncio.wait({consume_task, metrics_task}, return_when=asyncio.FIRST_COMPLETED)
+                if metrics_task in done and not stopping.is_set():
+                    await metrics_task
+                    raise RuntimeError("Worker指标服务意外停止")
+                await consume_task
+        finally:
+            if not consume_task.done():
+                consume_task.cancel()
+                await asyncio.gather(consume_task, return_exceptions=True)
     finally:
+        if metrics_server is not None:
+            metrics_server.should_exit = True
+            if metrics_task is not None:
+                try:
+                    await asyncio.wait_for(metrics_task, timeout=5)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    metrics_task.cancel()
+                    await asyncio.gather(metrics_task, return_exceptions=True)
         await container.shutdown()
 
 

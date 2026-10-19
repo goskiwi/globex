@@ -108,6 +108,23 @@ async def has_state(queue, task_id, state):
     return status is not None and status.state == state
 
 
+async def test_metrics_count_both_streams_lag_pending_and_dead_letters(real_redis):
+    queue = RedisStreamTaskQueue(real_redis)
+    for stream in (_STREAM, _LARGE_STREAM):
+        await real_redis.xgroup_create(stream, _GROUP, id="0", mkstream=True)
+        await real_redis.xadd(stream, {"payload": "test"})
+    await real_redis.xadd(_STREAM, {"payload": "test"})
+    await real_redis.xreadgroup(_GROUP, "metrics-test", {_STREAM: ">"}, count=1)
+    await real_redis.xadd(_DEAD_STREAM, {"payload": "test"})
+    assert await queue.metrics() == {"depth": 3, "lag": 2, "pending": 1, "dead_letters": 1}
+
+
+async def test_metrics_do_not_report_zero_when_consumer_group_is_missing(real_redis):
+    await real_redis.xadd(_STREAM, {"payload": "test"})
+    with pytest.raises(RuntimeError, match="消费者组未就绪"):
+        await RedisStreamTaskQueue(real_redis).metrics()
+
+
 async def test_enqueue_is_atomic_deduplicated_and_payload_bound(real_redis):
     queue = RedisStreamTaskQueue(real_redis)
     original = task()

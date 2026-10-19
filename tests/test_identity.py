@@ -80,7 +80,7 @@ async def secured(confirmation_env, monkeypatch,tmp_path):
     store = SqlSessionStore(env.engine)
     container = SimpleNamespace(
         confirmations=env.service, session_store=store, identity_policy=POLICY,
-        settings=SimpleNamespace(llm_model="test", session_owner_binding=True),
+        settings=SimpleNamespace(llm_model="test", session_owner_binding=True, metrics_reader_buyers=(), metrics_scrape_token_file=""),
         bus=env.bus, backplane=None, startup=AsyncMock(), shutdown=AsyncMock(),
         task_queue=None, db_engine=env.engine, trade_db_engine=env.engine,
         cache=SimpleNamespace(enabled=False),

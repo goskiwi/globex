@@ -245,6 +245,23 @@ class RedisStreamTaskQueue(TaskQueue):
     async def depth(self) -> int:
         return sum([await self._stream_depth(stream) for stream in (_STREAM, _LARGE_STREAM)])
 
+    async def metrics(self) -> dict[str, int]:
+        """监控读失败直接暴露，不将Redis不可用解释为队列为空。"""
+        lag = pending = 0
+        for stream in (_STREAM, _LARGE_STREAM):
+            groups = await self._client.xinfo_groups(stream)
+            group = next((g for g in groups
+                if _text(g.get("name", g.get(b"name", ""))) == _GROUP), None)
+            if group is None:
+                raise RuntimeError("队列消费者组未就绪")
+            current_lag = group.get("lag", group.get(b"lag"))
+            if current_lag is None:
+                raise RuntimeError("Redis尚不能确定队列lag")
+            lag += int(current_lag)
+            pending += int(group.get("pending", group.get(b"pending", 0)))
+        return {"depth": lag + pending, "lag": lag, "pending": pending,
+                "dead_letters": await self._client.xlen(_DEAD_STREAM)}
+
     async def _stream_depth(self, stream: str) -> int:
         try:
             groups = await self._client.xinfo_groups(stream)

@@ -40,7 +40,7 @@ async def container(request,real_redis,tmp_path):
         if worker is not None:await worker
         await runs.shutdown();await engine.dispose()
     return SimpleNamespace(runs=runs,orchestrator=runs.orchestrator,task_queue=queue,bus=bus,backplane=None,
-        settings=SimpleNamespace(queue_wait_seconds=3,data_dir=tmp_path),session_store=store,identity_policy=policy,
+        settings=SimpleNamespace(queue_wait_seconds=3,data_dir=tmp_path,metrics_reader_buyers=(),metrics_scrape_token_file=""),session_store=store,identity_policy=policy,
         startup=startup,shutdown=shutdown,calls=calls,dispatch=dispatch)
 
 @pytest.fixture

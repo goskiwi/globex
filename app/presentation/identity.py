@@ -1,5 +1,6 @@
 """所有买家入口共用身份与会话归属检查；严格模式不接收 query 中的 token。"""
 from __future__ import annotations
+import secrets
 
 from fastapi import HTTPException, Request, WebSocket
 
@@ -93,13 +94,17 @@ async def require_task(request: Request, buyer_id: str, task_id: str) -> None:
 async def require_metrics_reader(request: Request) -> str:
     """全进程聚合指标只对服务端明确授权的签名主体开放。"""
     readers = getattr(request.app.state, "metrics_reader_buyers", ())
-    if not readers:
+    scrape_token = getattr(request.app.state, 'metrics_scrape_token', '')
+    if not readers and not scrape_token:
         raise HTTPException(status_code=404, detail="运维指标接口未启用")
     policy = identity_policy(request)
     if policy.mode != "hmac":
         raise HTTPException(status_code=503, detail="运维指标要求配置严格签名身份")
+    supplied = _token(request)
+    if scrape_token and secrets.compare_digest(supplied.encode(), scrape_token.encode()):
+        return 'prometheus'
     try:
-        buyer_id = policy.verify(_token(request))
+        buyer_id = policy.verify(supplied)
     except IdentityError as error:
         raise HTTPException(status_code=401, detail="需要有效的运维读取凭证", headers={"WWW-Authenticate": "Bearer"}) from error
     if buyer_id not in readers:

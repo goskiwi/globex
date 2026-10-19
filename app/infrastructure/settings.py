@@ -123,6 +123,8 @@ class Settings:
     identity_mode: str = "hmac"
     prompt_pin_version: str = ""
     metrics_reader_buyers: tuple[str, ...] = ()
+    metrics_scrape_token_file: str = ""  # 独立只读采集凭据，不用于业务身份
+    worker_metrics_port: int = 0
     identity_hmac_secret: str = field(default="", repr=False)
     demo_login_password: str = field(default="", repr=False)
     reranker_mode: str = "http"  # 只允许专用 HTTP 精排或显式关闭
@@ -237,6 +239,8 @@ def load_settings() -> Settings:
         identity_mode=os.getenv("IDENTITY_MODE", "hmac"),
         prompt_pin_version=os.getenv("PROMPT_PIN_VERSION", ""),
         metrics_reader_buyers=tuple(item.strip() for item in os.getenv("METRICS_READER_BUYERS", "").split(",") if item.strip()),
+        metrics_scrape_token_file=os.getenv("METRICS_SCRAPE_TOKEN_FILE", ""),
+        worker_metrics_port=int(os.getenv("WORKER_METRICS_PORT", "0")),
         identity_hmac_secret=os.getenv("IDENTITY_HMAC_SECRET", ""),
         demo_login_password=os.getenv("DEMO_LOGIN_PASSWORD", ""),
     )

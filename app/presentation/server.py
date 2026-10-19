@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.application.usecases.intents import SubmitIntentInput
@@ -39,7 +39,8 @@ from app.presentation.connection import ConnectionManager
 from app.presentation.confirmations import register_confirmation_routes, confirmation_error
 from app.presentation.ag_ui import register_ag_ui_routes
 from app.presentation.buyer_workspace import register_buyer_workspace_routes
-from app.presentation.identity import require_buyer, require_session, require_task, require_metrics_reader
+from app.presentation.identity import require_buyer, require_session, require_task
+from app.presentation.metrics import configure_metrics_access, register_metrics_routes
 from app.infrastructure.tracing import TracingASGIMiddleware, inject_task_context, install_log_correlation
 from app.presentation.dto import (
     CancelOrderRequest,
@@ -75,12 +76,11 @@ def build_app() -> FastAPI:
     async def lifespan(application: FastAPI):
         c = await build_container()
         state["c"] = c
-        application.state.identity_policy = getattr(c, "identity_policy", None)
         application.state.session_store = getattr(c, "session_store", None)
         application.state.session_owner_binding = getattr(getattr(c, "settings", None), "session_owner_binding", True)
-        application.state.metrics_reader_buyers = getattr(getattr(c, "settings", None), "metrics_reader_buyers", ())
         state["connections"] = ConnectionManager(c.bus)
         try:
+            configure_metrics_access(application, c.settings, c.identity_policy)
             await c.startup()
             if c.backplane is not None:
                 state["forwarder"] = asyncio.create_task(_forward_remote_events(c))
@@ -175,19 +175,7 @@ def build_app() -> FastAPI:
                 result["prompt_registry"] = {"status": "unavailable"}
         return result if ready else JSONResponse(status_code=503, content=result)
 
-    @api.get("/internal/metrics", include_in_schema=False)
-    async def prometheus_metrics(request: Request) -> Response:
-        await require_metrics_reader(request)
-        from app.infrastructure.operational_metrics import registry
-        return Response(registry.prometheus(), media_type="text/plain; version=0.0.4",
-                        headers={"Cache-Control": "no-store"})
-
-    @api.get("/internal/metrics/summary", include_in_schema=False)
-    async def metrics_summary(request: Request) -> JSONResponse:
-        await require_metrics_reader(request)
-        from app.infrastructure.operational_metrics import registry
-        return JSONResponse({"metrics": registry.snapshot(), "alerts": registry.alerts()},
-                            headers={"Cache-Control": "no-store"})
+    register_metrics_routes(api, lambda: container().task_queue)
 
     async def submit_run(request: Request, body: SubmitIntentRequest):
         from app.infrastructure.ag_ui_journal import JournalConflict, JournalForbidden, JournalNotFound
