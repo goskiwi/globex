@@ -19,7 +19,7 @@ async def test_research_is_committed_only_after_final_delivery_and_restored_on_i
     start(adapter,'report','present_research')
     end(adapter,'report','present_research',data)
     assert not adapter.state['researchReports']
-    adapter.finish(data['guidance'],status,None,research_delivery_complete=True)
+    adapter.finish(data['guidance'],status,None,delivery={"kind":"research","status":status})
     assert adapter.state['recommendation'] is None and adapter.state['comparison'] is None
     assert adapter.state['researchReports'][0]['runId']=='r1'
     await journal.append('r1','owner',[e.model_dump(mode='json',by_alias=True,exclude_none=True) for e in events])

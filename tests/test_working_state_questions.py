@@ -76,10 +76,11 @@ def test_selection_by_sku_exclude_and_atomic_failure():
 
 
 def test_total_budget_is_not_unit_cap_and_missing_currency_unverified():
-    work=ShoppingWork(filters=Filters(price_max_major=300),unverified_requirements=['全部商品总预算500元'])
+    work=ShoppingWork(filters=Filters(price_max_major=300),requirements=['全部商品总预算500元'])
     result=compile_search(work)
     assert result['parameters']['price_max_major'] is None
-    assert len(result['unverified_requirements'])==2
+    assert result['requirements']==['全部商品总预算500元']
+    assert len(result['unverified_requirements'])==1
 
 
 @pytest.mark.parametrize('mode',['snapshot','delta'])

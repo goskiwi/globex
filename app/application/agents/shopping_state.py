@@ -61,7 +61,7 @@ class ShoppingWork(StrictModel):
     preferences: list[str] = Field(default_factory=list)
     sort: str | None = None
     ignored_preferences: list[str] = Field(default_factory=list)
-    unverified_requirements: list[str] = Field(default_factory=list)
+    requirements: list[str] = Field(default_factory=list)
     selections: dict[str, Choice] = Field(default_factory=dict)
     comparisons: list[str] = Field(default_factory=list)
     excluded_products: list[str] = Field(default_factory=list)
@@ -78,7 +78,7 @@ class ShoppingUpdate(StrictModel):
     preferences: list[str] | None = Field(default=None, description="用户表达的软偏好，不作为硬过滤；空列表清空")
     sort: str | None = None
     ignored_preferences: list[str] | None = Field(default=None, description="本次不采用的长期偏好原文；[] 恢复全部；不修改长期记忆")
-    unverified_requirements: list[str] | None = None
+    requirements: list[str] | None = Field(default=None, description="用户明确提出、结构化过滤无法表达的要求；这是需求声明，核验结论由研究结果给出")
     selections: list[Choice] = Field(default_factory=list, description="按 SKU 新增或替换数量；不同 SKU 独立保存。必须来自会话检索证据")
     remove_skus: list[str] = Field(default_factory=list)
     comparisons: list[str] | None = Field(default=None, description="用户要求比较的对象或品类名称；不填保留，空列表清空")
@@ -97,7 +97,7 @@ def apply_update(previous: ShoppingWork, update: ShoppingUpdate, source_message_
             **work.filters.model_dump(), **update.filters.model_dump(exclude_unset=True)})
     if 'plan' in update.model_fields_set:
         work.plan = validate_plan(update.plan or [])
-    for key in ('goal', 'preferences', 'sort', 'ignored_preferences', 'unverified_requirements',
+    for key in ('goal', 'preferences', 'sort', 'ignored_preferences', 'requirements',
                 'comparisons', 'excluded_products', 'excluded_skus'):
         if key in update.model_fields_set:
             value = getattr(update, key)
@@ -130,14 +130,14 @@ def compile_search(work: ShoppingWork, preferences=(), currency="CNY") -> dict:
     params['excluded_material_tags'] = list(dict.fromkeys([
         *global_tags, *params['excluded_material_tags']]))
     params["excluded_materials_by_category"] = scoped
-    unverified = [*work.unverified_requirements, *pending]
+    unverified = list(pending)
     if params['price_max_major'] is not None and not work.filters.target_currency:
         unverified.append('预算币种未明确，尚未执行价格上限')
         params['price_max_major'] = None
     if params['landed_budget_major'] is not None and not work.filters.target_currency:
         unverified.append('到手预算币种未明确，尚未执行总价上限')
         params['landed_budget_major'] = None
-    return {'parameters': params, 'unverified_requirements': unverified,
+    return {'parameters': params, 'requirements': list(work.requirements), 'unverified_requirements': unverified,
             'preferences': work.preferences, 'sort': work.sort,
             'long_term_preferences': [{'kind': p.kind, 'statement': p.statement} for p in effective],
             'excluded_products': work.excluded_products, 'excluded_skus': work.excluded_skus}

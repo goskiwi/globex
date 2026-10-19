@@ -48,9 +48,9 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         result, state = await ask(c, '分别请专家研究背包和水杯，本轮只要两份研究，不发布最终购物卡')
         assert model.cursor == 3, '研究交付后不能再调用模型收尾'
         assert result.status == ('partial' if partial else 'completed')
-        assert not result.product_delivery_complete
+        assert result.delivery["kind"]=="research"
         assert '背包研究' in result.final_text and '水杯研究' in result.final_text
-        assert result.research_delivery_complete
+        assert result.delivery["kind"]=="research"
         payload = next(m.artifact['data'] for m in reversed(state['messages'])
                        if isinstance(m, ToolMessage) and m.name == 'present_research')
         candidates = [c for report in payload['reports'] for c in report['items']]
@@ -60,8 +60,8 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         assert candidates[0]['assessment'] == '适合优先考虑便携性的需求，实际适配仍需核验。'
         assert candidates[0]['open_questions'] == ['是否有电脑仓？']
         assert 'description' not in result.final_text and '商品原文' not in result.final_text
-        assert state['task_plan']['tasks']['bag']['reported']
-        assert not state['task_plan']['tasks']['bag'].get('delivered')
+        assert state['task_plan']['tasks']['bag']['delivery']=='research'
+        assert state['task_plan']['tasks']['bag']['delivery']!='products'
         assert not await c.orchestrator._evidence_store.search('buyer', 's', kind='display_batch')
         if not partial:
             followup, _ = await ask(c, '谢谢，暂时不选购')

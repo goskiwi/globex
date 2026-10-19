@@ -153,8 +153,7 @@ class AGUIRuntime:
                 adapter.fail(result.error if getattr(result,"error_code",None) in {"SESSION_VERSION_CHANGED","CONTEXT_CAPACITY_EXCEEDED","PERSISTENCE_FAILED"} else adapter.error or "本轮服务暂时未能完成请求，请重试。", code=getattr(result,"error_code",None))
             else:
                 adapter.finish(result.final_text, result.status, result.stop_reason,
-                               product_delivery_complete=result.product_delivery_complete,
-                               research_delivery_complete=result.research_delivery_complete)
+                               delivery=result.delivery)
         except asyncio.CancelledError:
             adapter.fail("本轮已明确停止" if entry.reason == "stop" else "服务重启或执行中断，已保存的内容仍可恢复。", cancelled=entry.reason == "stop")
         except Exception:

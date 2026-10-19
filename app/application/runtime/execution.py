@@ -1,5 +1,6 @@
 """按实际模型轮次限制执行；图节点数只作异常循环保护。"""
 from typing import Literal
+from app.application.usecases.intents import Delivery
 from typing_extensions import NotRequired
 from dataclasses import dataclass
 
@@ -19,8 +20,7 @@ class ExecutionResult:
     text: str
     status: Literal["completed", "partial", "needs_input", "failed"]
     stop_reason: str | None = None
-    product_delivery_complete: bool = False
-    research_delivery_complete: bool = False
+    delivery: Delivery | None = None
 
 
 class ExecutionState(AgentState):

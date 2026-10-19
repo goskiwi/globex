@@ -2,25 +2,22 @@
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware, hook_config
 from typing_extensions import NotRequired
+from app.application.usecases.intents import Delivery, DELIVERY_KINDS
 from langchain_core.messages import AIMessage, ToolMessage
 from app.application.runtime.results import message_data
 
 
 class DeliveryState(AgentState):
-    product_delivery_complete: NotRequired[bool]
-    delivery_needs_input: NotRequired[bool]
-    research_delivered_tasks: NotRequired[list[str]]
-    research_delivery_status: NotRequired[str | None]
+    delivery: NotRequired[Delivery | None]
 
 
 class FinalDeliveryMiddleware(AgentMiddleware):
     state_schema = DeliveryState
 
     async def abefore_agent(self, state, runtime):
-        return {"product_delivery_complete": False, "delivery_needs_input": False,
-                "research_delivered_tasks": [], "research_delivery_status": None}
+        return {"delivery": None}
     async def awrap_tool_call(self, request, handler):
-        names = {"recommend_products", "compare_products", "show_product_details", "show_shopping_form", "present_research"}
+        names = DELIVERY_KINDS
         if request.tool_call["name"] in names:
             last = next((m for m in reversed(request.state["messages"]) if isinstance(m, AIMessage)), None)
             if last and sum(c["name"] in names for c in last.tool_calls) > 1:
@@ -48,19 +45,19 @@ class FinalDeliveryMiddleware(AgentMiddleware):
                 if not isinstance(payload, dict) or not payload.get('guidance') or not payload.get('task_ids'):
                     raise ValueError('研究交付缺少报告或任务来源')
                 return {'messages': [AIMessage(content=payload['guidance'])],
-                        'research_delivered_tasks': payload['completed_task_ids'],
-                        'research_delivery_status': payload['status'], 'jump_to': 'end'}
+                        'delivery': {'kind':'research', 'status':payload['status']}, 'jump_to': 'end'}
             if receipt.name == "show_shopping_form":
                 payload = message_data(receipt)
                 if not isinstance(payload, dict) or payload.get("status") != "awaiting_input" or not payload.get("form_id"):
                     raise ValueError("澄清交付缺少已保存的表单")
                 return {"messages": [AIMessage(content="请填写下方的问题，提交后我会继续选购。")],
-                        "delivery_needs_input": True, "jump_to": "end"}
+                        "delivery": {"kind":"clarification", "status":"needs_input"}, "jump_to": "end"}
             if receipt.name not in {"compare_products", "recommend_products", "show_product_details"}:
                 continue
             payload = message_data(receipt)
             if not isinstance(payload, dict) or not isinstance(payload.get("guidance"), str) or not payload["guidance"].strip():
                 raise ValueError("最终商品交付缺少整体选购建议")
             return {"messages": [AIMessage(content=payload["guidance"])],
-                    "product_delivery_complete": True, "jump_to": "end"}
+                    "delivery": {"kind": DELIVERY_KINDS[receipt.name],
+                                 "status": payload.get("plan_outcome", {}).get("status", "completed")}, "jump_to": "end"}
         return None

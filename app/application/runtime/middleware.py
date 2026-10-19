@@ -92,7 +92,7 @@ class BusinessToolMiddleware(AgentMiddleware):
                         if observation:
                             receipt = receipt.model_copy(update={'artifact': {**(receipt.artifact or {}),
                                                                             'loop_observation': observation}})
-                    receipt=receipt.model_copy(update={"artifact":{**(receipt.artifact or {}),"data":full}})
+                    receipt=receipt.model_copy(update={"artifact":{**(receipt.artifact or {}),"data":full,"execution_id":event_id}})
                     receipt=project_data(receipt,data,notices=notices)
                     processed.append(receipt)
                     record_evaluation_evidence("tool_result",{"tool":name,"arguments":request.tool_call["args"],

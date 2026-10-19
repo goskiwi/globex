@@ -96,14 +96,14 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                     if step is None or task.filters is not None:
                         raise DelegationInputError('计划任务须指定有效step_id，条件只从计划读取，不在task.filters重复填写')
                     statuses = {s['id']: s['status'] for s in context.task_plan.get('steps', [])}
-                    if any(statuses.get(key) not in {'verified', 'delivered'} for key in step.depends_on):
+                    if any(statuses.get(key) not in {'verified', 'reported', 'delivered'} for key in step.depends_on):
                         raise DelegationInputError('前置研究尚未取得合格候选，不能跳过依赖执行')
                     parent['dependency_research'] = {key: deepcopy(context.task_plan['tasks'][key])
                                                      for key in step.depends_on}
                     definition = step.model_dump()
                     task = task.model_copy(update={'goal': step.goal})
                     filters = step.filters
-                    scoped.unverified_requirements = list(dict.fromkeys([*scoped.unverified_requirements, *step.requirements]))
+                    scoped.requirements = list(dict.fromkeys([*scoped.requirements, *step.requirements]))
                 elif task.step_id is not None:
                     raise DelegationInputError('不存在研究计划，不能使用step_id')
                 if subagent_type == "trade_agent" and filters is not None:
@@ -115,7 +115,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                             changes[field] = list(dict.fromkeys([*getattr(scoped.filters, field), *changes[field]]))
                     scoped.filters = Filters.model_validate({**scoped.filters.model_dump(), **changes})
                 if task.requirements is not None:
-                    scoped.unverified_requirements = list(dict.fromkeys([*scoped.unverified_requirements, *task.requirements]))
+                    scoped.requirements = list(dict.fromkeys([*scoped.requirements, *task.requirements]))
                 if task.preferences is not None:
                     scoped.preferences = task.preferences
                 effective = compile_search(scoped, context.preference_facts, context.currency)

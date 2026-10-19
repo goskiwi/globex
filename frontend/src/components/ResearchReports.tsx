@@ -19,7 +19,7 @@ function factText(value: unknown): string {
 /** 把当前研究证据投影到共用卡片；不查询新库存、不补猜图片或规格。 */
 function card(candidate: ResearchCandidate): ProductCard {
   const {product,sku}=candidate.facts;
-  const currency=sku?.display_currency ?? sku?.currency ?? '';
+  const currency=sku?.display_currency ?? '';
   const quotes=candidate.facts.historical ? [] : candidate.facts.quotes.filter(q=>!q.historical && q.currency===currency
     && q.line.currency===currency && q.line.product_id===candidate.product_id && q.line.sku_id===candidate.sku_id && q.line.quantity===1);
   const read=quotes.length===1 ? quotes[0] : null;
@@ -28,7 +28,7 @@ function card(candidate: ResearchCandidate): ProductCard {
   return {...product,product_id:candidate.product_id,title:product.title ?? candidate.product_id,
     brand:product.brand ?? '',category:product.category ?? '',origin_country:product.origin_country ?? '',
     highlights:product.highlights ?? [],score:0,skus:sku?[sku]:[],default_sku_id:sku?.sku_id,
-    price_major:sku?.display_price_major ?? sku?.price_major ?? Number.NaN,
+    price_major:sku?.display_price_major ?? Number.NaN,
     currency,landed_price:quote,recommendation_reason:candidate.assessment};
 }
 

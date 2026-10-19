@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from app.application.agents.handoff import AgentSubmission, build_submission_tool
+from app.application.agents.handoff import ResearchSubmission, build_submission_tool
 from app.application.tools.research_delivery_tool import _report
 from app.application.usecases.research_report import project_research_report, research_summary
 from app.domain.catalog.exchange_rate import ExchangeRateTable
@@ -61,10 +61,10 @@ def test_assessment_is_presented_separately_without_replacing_facts_or_price_com
 
 
 def test_submission_requires_current_assessment_without_filling_old_payload():
-    schema = convert_to_openai_tool(build_submission_tool())['function']['parameters']
+    schema = convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
     assert 'assessment' in schema['properties']['candidates']['items']['required']
     with pytest.raises(ValidationError) as failure:
-        AgentSubmission(status='completed', candidates=[{'product_id': 'P1022'}])
+        ResearchSubmission(status='completed', candidates=[{'product_id': 'P1022'}])
     assert any(e['loc'] == ('candidates', 0, 'assessment') and e['type'] == 'missing'
                for e in failure.value.errors())
 
@@ -131,7 +131,7 @@ def test_tied_prices_keep_all_lowest_candidates_and_full_read_facts():
 @pytest.mark.parametrize('field,value', [('summary', '最便宜'), ('unknowns', ['没电脑仓']),
                                          ('reason', '头戴式'), ('evidence_fields', ['weight_kg'])])
 def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
-    schema = convert_to_openai_tool(build_submission_tool())['function']['parameters']
+    schema = convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
     assert 'summary' not in schema['properties'] and 'unknowns' not in schema['properties']
     properties = schema['properties']['candidates']['items']['properties']
     assert 'reason' not in properties and 'evidence_fields' not in properties
@@ -142,13 +142,13 @@ def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
     else:
         payload[field] = value
     with pytest.raises(ValidationError):
-        AgentSubmission.model_validate(payload)
+        ResearchSubmission.model_validate(payload)
 
 
 def test_model_cannot_inject_facts_or_duplicate_candidate():
     candidate = {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
     with pytest.raises(ValidationError):
-        AgentSubmission(status='completed', candidates=[{**candidate, 'facts': {'product': {'weight_kg': .01}}}])
-    assert AgentSubmission(status='completed', candidates=[candidate]).candidates[0].product_id == 'P1022'
+        ResearchSubmission(status='completed', candidates=[{**candidate, 'facts': {'product': {'weight_kg': .01}}}])
+    assert ResearchSubmission(status='completed', candidates=[candidate]).candidates[0].product_id == 'P1022'
     with pytest.raises(ValidationError, match='不能重复'):
-        AgentSubmission(status='completed', candidates=[candidate, candidate])
+        ResearchSubmission(status='completed', candidates=[candidate, candidate])

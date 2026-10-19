@@ -1,3 +1,4 @@
+from app.application.agents.handoff import ResearchSubmission
 """模块一：真实 LangGraph 主子图、结构化交付和交易证据，模型为确定性脚本。"""
 import asyncio
 import json
@@ -246,7 +247,7 @@ async def test_parallel_results_do_not_share_evidence_and_failure_keeps_other_re
         def build(self):
             answer = submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
             return create_agent(ScriptedModel(responses=[call("read_scope", {}), answer, answer, answer]),
-                tools=[read_scope, build_submission_tool()], middleware=[HandoffMiddleware()],
+                tools=[read_scope, build_submission_tool(ResearchSubmission)], middleware=[HandoffMiddleware()],
                 context_schema=HandoffContext)
 
     dispatch = build_task_dispatch_tool(Factory(), Factory(), bus)

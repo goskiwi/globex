@@ -3,7 +3,7 @@ import type { WorkspaceRequest } from './BuyerWorkspace';
 import './contextWorkspace.css';
 
 type Options={sessionId:string;busy:boolean;pending:boolean;hasMessages:boolean;request:WorkspaceRequest};
-type View={revision:number;strategy?:string;summary?:string;working_notice?:string;working?:{goal:string;latest_request:string;filters:Record<string,string|number|string[]|null>;preferences:string[];sort:string|null;selections:Record<string,{product_id:string;sku_id:string;quantity:number}>;comparisons:string[];unverified_requirements:string[]};statistics?:{status?:string;before_tokens?:number;after_tokens?:number}};
+type View={revision:number;strategy?:string;summary?:string;working_notice?:string;working?:{goal:string;latest_request:string;filters:Record<string,string|number|string[]|null>;preferences:string[];sort:string|null;selections:Record<string,{product_id:string;sku_id:string;quantity:number}>;comparisons:string[];requirements:string[]};statistics?:{status?:string;before_tokens?:number;after_tokens?:number}};
 // 在 App 会话层调用，切到其它页面时仍继续恢复和轮询整理操作。
 export function useContextWorkspace({sessionId,busy,pending,hasMessages,request}:Options){
  const [view,setView]=useState<View|null>(null),[operation,setOperation]=useState(''),[checking,setChecking]=useState(true),[submitting,setSubmitting]=useState(false);
@@ -82,7 +82,7 @@ export default function ContextWorkspace({state}:{state:ReturnType<typeof useCon
     {view.working.sort&&<p>排序意图（待核验）：{view.working.sort}</p>}
     {Object.values(view.working.selections).map(c=><p key={c.sku_id}>已选商品：{c.sku_id} × {c.quantity}</p>)}
     {!!view.working.comparisons.length&&<p>比较商品：{view.working.comparisons.join('、')}</p>}
-    {!!view.working.unverified_requirements.length&&<p>待核验：{view.working.unverified_requirements.join('；')}</p>}
+    {!!view.working.requirements.length&&<p>明确要求：{view.working.requirements.join('；')}</p>}
    </>}
    {!view?.working?.goal&&<p>尚未记录任务需求。你可以继续补充，完整对话会保留。</p>}
    <small>这是本次选购的工作记录。价格与库存以重新查询为准；需要修改需求，直接告诉 Globex。</small>

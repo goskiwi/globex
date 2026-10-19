@@ -15,7 +15,7 @@ const report={task_id:'bag',goal:'通勤背包研究',status:'partial',product_c
     facts:{product:{product_id:'P1003',title:'Wanderlite 折叠旅行双肩包 35L',weight_kg:0.38,
       description:'完整目录原文仍保留，防泼水且可折叠。',highlights:['支持折叠'],
       dimensions_cm:{length:50},material_tags:['尼龙'],rating_summary:{average:4.6,review_count:217},ships_to:['CN']},
-      sku:{sku_id:'P1003-S1',spec:'石墨黑',price_major:11958.33,currency:'JPY',stock:5},quotes:[],historical:false}}]};
+      sku:{sku_id:'P1003-S1',spec:'石墨黑',price_major:11958.33,currency:'JPY',display_price_major:574,display_currency:'CNY',stock:5},quotes:[],historical:false}}]};
 const delivery={runId:'r',guidance:'背包研究已交回，电脑仓资料尚未核实。',reports:[report],status:'partial',task_ids:['bag'],completed_task_ids:[]};
 
 it('只读取当前结构化研究，不从旧正文构造候选',()=>{
@@ -55,7 +55,7 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     expect(section.closest('.assistant-turn')?.getAttribute('data-message-id')).toBe(`${firstRun}:final:answer`);
     expect(section.querySelector('.research-analysis')?.textContent).toContain(assessment);
     expect(section.querySelector('.product-card')?.textContent).not.toContain(assessment);
-    expect(section.textContent).toContain('11,958.33');
+    expect(section.textContent).toContain('¥574.00');
     expect(section.textContent).toContain('部分完成');
     expect(section.querySelector('.answer-collapsible')).toBeNull();
     expect(section.querySelectorAll('.product-card[data-card-mode="research"]')).toHaveLength(1);
@@ -102,4 +102,15 @@ it('研究卡片仅展示唯一匹配规格、数量和币种的报价，不猜�
   expect(renderToStaticMarkup(<ResearchReports delivery={data}/>)).not.toContain('¥599.00');
   candidate.facts.quotes=[{...quote,line:{...quote.line,quantity:2}}];
   expect(renderToStaticMarkup(<ResearchReports delivery={data}/>)).not.toContain('¥599.00');
+});
+
+it('跨币种研究卡复用读取时显示金额，保留已有的同规格到手报价',()=>{
+ const data=structuredClone(delivery) as ResearchDelivery;
+ const c=data.reports[0].items[0];
+ c.facts.sku={sku_id:c.sku_id!,spec:'Grey',stock:30,price_major:54.94,currency:'SGD',display_price_major:291.18,display_currency:'CNY'};
+ c.facts.quotes=[{ship_to:'CN',currency:'CNY',historical:false,line:{product_id:c.product_id,sku_id:c.sku_id!,title:'合成跨币种报价',quantity:1,
+  unit_price_minor:29118,source_unit_price_minor:5494,source_currency:'SGD',currency:'CNY',subtotal_minor:29118,freight_minor:2500,tariff_minor:0,total_amount_minor:31618}}];
+ const html=renderToStaticMarkup(<ResearchReports delivery={data}/>);
+ expect(html).toContain('¥291.18');expect(html).toContain('¥316.18');
+ expect(html).not.toContain('到手价待目的地与规格确认');
 });

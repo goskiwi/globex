@@ -283,9 +283,6 @@ class CatalogSearchUseCase:
         display = ProductSearchSpec(product_id=product_id, target_currency=spec.target_currency, ship_to=spec.ship_to)
         card = self.product_card(1.0, product, display, primary=primary, skus=product.skus).to_dict()
         for raw, sku in zip(card["skus"], product.skus):
-            converted = self._tariff.rates.convert(sku.price, spec.target_currency)
-            raw["display_price_major"] = converted.to_major_units()
-            raw["display_currency"] = spec.target_currency
             raw["constraint_issues"] = self.sku_constraint_issues(product, sku, spec)
             if landed_budget_major is not None and spec.ship_to:
                 try:

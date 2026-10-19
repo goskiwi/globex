@@ -6,7 +6,7 @@ from app.application.runtime.execution import ExecutionMiddleware, graph_step_li
 from typing import Any
 
 from langchain.agents import create_agent
-from app.application.agents.handoff import HANDOFF_POLICY, build_submission_tool
+from app.application.agents.handoff import HANDOFF_POLICY, build_submission_tool, TradeSubmission
 from app.application.runtime.handoff import HandoffContext, HandoffMiddleware
 from langchain_core.tools import BaseTool
 
@@ -71,7 +71,7 @@ class TradeAgentFactory:
         if self.capability_registry is not None:
             tools.extend(as_langchain_tool(fn) for fn in build_capability_tools(
                 self.capability_registry,names,self._bus,self.buyer_skill_store))
-        tools.append(build_submission_tool())
+        tools.append(build_submission_tool(TradeSubmission))
         system_prompt=prompts["system_prompt"]+"\n"+HANDOFF_POLICY+(
             CAPABILITY_POLICY if self.capability_registry is not None else "")
         skills=(SkillReferenceMiddleware(self.capability_registry,self.buyer_skill_store,names)
@@ -88,7 +88,7 @@ class TradeAgentFactory:
                 self._settings, self._throttle, self._circuit_registry, self._bus,
                 self._loop_detector,
             ),*([skills] if skills is not None else []),
-                HandoffMiddleware(), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
+                HandoffMiddleware(TradeSubmission, self._bus), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, budget_lite_model=self._settings.llm_fallback_model,
                                     delivery_tools=("SubagentResult",)),
                 context, ],

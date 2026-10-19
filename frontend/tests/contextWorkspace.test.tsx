@@ -8,7 +8,7 @@ function Workspace(props:Parameters<typeof useContextWorkspace>[0]){
  return <EventTimeline events={[]}><ContextWorkspace state={useContextWorkspace(props)}/></EventTimeline>;
 }
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
-function work(goal:string){return {goal,latest_request:'',filters:{},preferences:[],sort:null,selections:{},comparisons:[],unverified_requirements:[]};}
+function work(goal:string){return {goal,latest_request:'',filters:{},preferences:[],sort:null,selections:{},comparisons:[],requirements:[]};}
 it('摘要显示、提交版本和幂等标识，审批时不允许整理',async()=>{
  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
  const request=vi.fn(async(path:string)=>path==='/context/compact'?{operation_id:'op',status:'completed',message:'已整理'}:{revision:3,working:{...work('通勤包'),filters:{landed_budget_major:300}},summary:'历史需求已保留'});

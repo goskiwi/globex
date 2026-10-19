@@ -1,3 +1,4 @@
+from app.application.agents.handoff import ResearchSubmission
 """研究链路反例：证据不冒充选择，当前轮可整理，收尾仍可交付。"""
 import json
 from types import SimpleNamespace
@@ -75,7 +76,7 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
     async def recommend_products():
         """提交已有选择，不执行交易。"""
         return ToolResult({'guidance': '已有候选满足用途，缺少的第四款尚未确认。', 'hits': []})
-    delivery = as_langchain_tool(recommend_products) if main else build_submission_tool()
+    delivery = as_langchain_tool(recommend_products) if main else build_submission_tool(ResearchSubmission)
     def handler(request):
         body = json.loads(request.content)
         requests.append(body)
@@ -99,7 +100,7 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
         assert [t['function']['name'] for t in requests[1]['tools']] == [delivery.name]
         assert result['execution_stop'] == 'model_call_limit'
         if main:
-            assert result['product_delivery_complete'] is True
+            assert result['delivery']['kind']=='recommendation'
             assert result['messages'][-1].content.startswith('已有候选')
         else:
             assert result['handoff_result']['status'] == 'partial'
@@ -144,7 +145,7 @@ async def test_closing_form_is_needs_input_not_failed():
                     FinalDeliveryMiddleware()],checkpointer=InMemorySaver())
     runner,session=root(graph,TradeEventBus())
     output=await runner._reply('handoff',session,[HumanMessage(content='需要补充用途')])
-    assert output.status=='needs_input' and not output.product_delivery_complete
+    assert output.status=='needs_input' and output.delivery=={'kind':'clarification','status':'needs_input'}
     assert model.cursor==2 and (await graph.aget_state(session.config)).next==()
 
 
@@ -175,7 +176,7 @@ def research_receipt(identifier, *, description='目录明确记载防水卷口'
         'product': {'product_id': identifier, 'title': identifier + ' 正确商品名', 'brand': '真实品牌',
                     'weight_kg': .38, 'description': description,
                     'dimensions_cm': {'length': 50}, 'rating_summary': {'average': 4.6, 'review_count': 217}},
-        'sku': {'sku_id': identifier + '-S1', 'spec': '雾灰', 'stock': 8, 'price_major': 129, 'currency': 'CNY'},
+        'sku': {'sku_id': identifier + '-S1', 'spec': '雾灰', 'stock': 8, 'price_major': 129, 'currency': 'CNY', 'display_price_major':129, 'display_currency':'CNY'},
         'quotes': [{'ship_to': 'CN', 'currency': currency, 'historical': False, 'observed_at': '2026-10-18',
                     'result_ref': 'ctx_' + identifier,
                     'line': {'product_id': identifier, 'sku_id': identifier + '-S1',
@@ -277,7 +278,7 @@ def test_partial_run_only_publishes_a_completed_delivery(completed):
     target, _ = adapter()
     emit(target, 'recommendation.result', {'hits': [{'product_id': 'P1001'}]})
     target.finish('研究未完整完成，已有选择见卡片。', 'partial', 'model_call_limit',
-                  product_delivery_complete=completed)
+                  delivery={"kind":"recommendation","status":"completed"} if completed else None)
     assert bool(target.state['recommendation']) is completed
 
 
@@ -298,7 +299,7 @@ async def test_model_that_never_submits_cannot_keep_researching():
     output = await runner._reply('handoff', session, [HumanMessage(content='继续研究')])
     assert len(executed) == 2 and model.cursor == 3
     assert output.status == 'partial' and output.stop_reason == 'model_call_limit'
-    assert not output.product_delivery_complete
+    assert output.delivery is None
     assert 'ctx_original' in output.text
     snapshot = await graph.aget_state(session.config)
     assert snapshot.next == ()

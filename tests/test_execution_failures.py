@@ -52,7 +52,7 @@ async def test_actual_nested_validation_then_corrected_call_retains_two_receipts
         picks[1]['quantity']=1
         completed=await call_tool(graph,**arguments)
     assert completed.status=='success' and len(executions)==1
-    adapter.finish('已交付','completed',None,product_delivery_complete=True)
+    adapter.finish('已交付','completed',None,delivery={"kind":"recommendation","status":"completed"})
     steps=adapter.state['process']['steps']
     assert len(steps)==2 and steps[0]['status']=='failed' and steps[1]['status']=='completed'
     assert steps[0]['id']!=steps[1]['id'] and '已交付2款' in steps[1]['summary']

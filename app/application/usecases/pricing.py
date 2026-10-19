@@ -22,6 +22,14 @@ class PricingService:
         self.product_repo = product_repo
         self.tariff = tariff or TariffSchedule(ExchangeRateTable())
 
+    def sku_snapshot(self, sku, currency):
+        """已读规格统一保留原币事实与同次读取的显示金额。"""
+        display = self.tariff.rates.convert(sku.price, currency)
+        return {"sku_id": sku.sku_id, "spec": sku.spec,
+                "price_major": sku.price.to_major_units(), "currency": sku.price.currency,
+                "stock": sku.stock, "display_price_major": display.to_major_units(),
+                "display_currency": currency}
+
     def price_sku(self, product, sku, quantity, ship_to, currency):
         QuoteItem(product.product_id, sku.sku_id, quantity)
         if ship_to not in product.ships_to:

@@ -221,6 +221,15 @@ class AGUIRunAdapter:
         if event.type == "tool.lifecycle":
             from app.application.runtime.events import ToolEvent
             self.on_agent_event(ToolEvent(**payload))
+        elif event.type == "handoff.result":
+            identifier = self._id("tool", payload["tool_call_id"])
+            accepted = payload["decision"] == "accepted"
+            data = payload.get("result") or {}
+            status = step_status("SubagentResult", data, accepted)
+            summary = (result_summary("SubagentResult", {}, data, True) if accepted else
+                       "提交未被接纳：" + "；".join(e["message"] for e in payload["errors"]))
+            self._progress(identifier, "提交任务结果", status, summary)
+            self.snapshot()
         elif event.type == "ui.surface":
             form = payload.get("form")
             if (isinstance(form, dict) and form.get("session_id") == self.request.thread_id
@@ -266,7 +275,7 @@ class AGUIRunAdapter:
         self._tool_open.clear()
         self._tool_arguments.clear()
 
-    def finish(self, final_text: str, status: str, stop_reason: str | None, *, product_delivery_complete: bool = False, research_delivery_complete: bool = False) -> None:
+    def finish(self, final_text: str, status: str, stop_reason: str | None, *, delivery: dict | None = None) -> None:
         if self._completed:
             return
         self._completed = True
@@ -277,7 +286,7 @@ class AGUIRunAdapter:
             *self.request.messages,
             AssistantMessage(id=self._id("final", "answer"), content=final_text),
         ]))
-        if status in {"completed", "partial"} and product_delivery_complete and not self.state["toolApprovals"] and self._pending_delivery is not None:
+        if status in {"completed", "partial"} and delivery is not None and delivery["kind"] in {"recommendation", "comparison", "product_view"} and not self.state["toolApprovals"] and self._pending_delivery is not None and self._pending_delivery[0] == delivery["kind"]:
             kind, payload = self._pending_delivery
             if kind == "product_view":
                 self.state["productViews"] = [{**payload, "runId": self.request.run_id}]
@@ -290,14 +299,14 @@ class AGUIRunAdapter:
                 name = next(name for name, value in DELIVERY_TOOLS.items() if value==kind)
                 title = {'recommendation':'交付最终推荐','comparison':'交付比较结果','product_view':'展示商品详情'}[kind]
                 self._progress(identifier,title,'completed',delivery_summary(name,payload,delivered=True))
-        if status in {"completed", "partial"} and research_delivery_complete and not self.state["toolApprovals"] and self._pending_research is not None:
+        if status in {"completed", "partial"} and delivery is not None and delivery["kind"] == "research" and not self.state["toolApprovals"] and self._pending_research is not None:
             self.state["researchReports"] = [{**self._pending_research, "runId": self.request.run_id}]
         self._pending_research = None
         self._pending_delivery = None
         self.state["status"] = "awaiting_confirmation" if self.state["toolApprovals"] else status
         self.state["executionStatus"] = status
         self.state["stopReason"] = stop_reason
-        self.state["productDeliveryComplete"] = product_delivery_complete
+        self.state["delivery"] = delivery
         self.state['process']['status'] = 'waiting_confirmation' if self.state['toolApprovals'] else {'failed':'failed','needs_input':'waiting_input'}.get(status,status)
         for entry in self.state['process']['steps']:
             if entry['status']=='running':

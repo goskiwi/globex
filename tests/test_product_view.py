@@ -88,7 +88,7 @@ def test_view_commit_is_explicit_and_does_not_replace_recommendation(complete):
     target.on_trade_event(TradeEvent('s1','product_view.result',{'purpose':'product_view','guidance':'查看资料',
         'hits':[{'product_id':'P3020'}],'result_ref':'ctx_view'},''))
     assert target.state['productViews']==[]
-    target.finish('查看资料','completed',None,product_delivery_complete=complete)
+    target.finish('查看资料','completed',None,delivery={"kind":"product_view","status":"completed"} if complete else None)
     assert bool(target.state['productViews']) is complete
     assert target.state['recommendation']==previous['recommendation'] and target.state['deliveredRunId']=='old'
 
@@ -120,7 +120,7 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
     container=await _container(tmp_path,monkeypatch,model)
     try:
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','商品价100元人民币，看看颈枕'))
-        assert result.product_delivery_complete and result.final_text==guidance and model.cursor==3
+        assert (result.delivery["kind"]=="product_view") and result.final_text==guidance and model.cursor==3
         state=await container.orchestrator._sessions._agents['s'].graph.aget_state({'configurable':{'thread_id':'s'}})
         assert state.values['shopping_work']['filters']['price_max_major']==100
         assert not await container.orchestrator._evidence_store.search('b','s',kind='display_batch')

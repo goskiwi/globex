@@ -2,6 +2,7 @@
 """LangGraph 主代理装配与会话执行权管理。"""
 from __future__ import annotations
 from app.application.runtime.execution import ExecutionMiddleware, graph_step_limit
+from app.application.usecases.intents import DELIVERY_KINDS
 
 import json
 from collections import OrderedDict
@@ -123,11 +124,6 @@ class MainAgentFactory:
         tools.extend(as_langchain_tool(function) for function in functions)
 
         system_prompt = prompts["system_prompt"]
-        if self.shopping_form_store is not None:
-            system_prompt += (
-                "\n缺少影响选择的关键条件或买家明确要求时调用 show_shopping_form。"
-                "问题由你生成；表单不写长期记忆，也不能批准订单。调用后结束本轮。"
-            )
         if self._capability_registry is not None:
             names = {tool.name for tool in tools}
             system_prompt += "\n\n" + CAPABILITY_POLICY
@@ -162,7 +158,7 @@ class MainAgentFactory:
                 GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, main=True,
                                     budget_lite_model=self._settings.llm_fallback_model,
-                                    delivery_tools=("recommend_products", "compare_products", "show_product_details", "show_shopping_form", "present_research")),
+                                    delivery_tools=tuple(DELIVERY_KINDS)),
                 FinalDeliveryMiddleware(),
                 *([skill_source] if skill_source is not None else []),
                 PreferenceStateMiddleware(self._preference_store, self._preference_selector,

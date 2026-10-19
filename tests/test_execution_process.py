@@ -105,7 +105,7 @@ def test_pending_delivery_does_not_claim_published_before_commit():
     end(a,'rec','recommend_products',payload)
     assert '已装配' in a.state['process']['steps'][0]['summary']
     assert a.state['recommendation'] is None
-    a.finish('建议','completed',None,product_delivery_complete=True)
+    a.finish('建议','completed',None,delivery={"kind":"recommendation","status":"completed"})
     assert '已交付' in a.state['process']['steps'][0]['summary']
     assert a.state['process']['steps'][0]['label']=='交付最终推荐'
     assert a.state['process']['status']=='completed'

@@ -99,7 +99,7 @@ def test_comparison_projection_survives_later_search_and_restores():
     adapter.on_trade_event(TradeEvent("s","comparison.result",result,""))
     adapter.on_trade_event(TradeEvent("s","tool.result",{"tool":"product_search_tool","hits":[]},""))
     assert adapter.state["comparison"] is None
-    adapter.finish("已交付比较", "completed", None, product_delivery_complete=True)
+    adapter.finish("已交付比较", "completed", None, delivery={"kind":"comparison","status":"completed"})
     assert adapter.state["comparison"] == result and adapter.state["recommendation"] is None
     restored = AGUIRunAdapter(request, lambda e: None, authoritative_state=adapter.state)
     assert restored.state["comparison"] == result

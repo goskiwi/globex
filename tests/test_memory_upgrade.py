@@ -97,19 +97,16 @@ async def test_semantic_tools_require_ids_and_permission_checks_target_before_as
     finally:ShoppingContext.reset(token)
 
 
-def test_default_prompt_memory_signatures_match_required_tool_arguments(tmp_path):
-    import re
-    import yaml
-    from pathlib import Path
+async def test_memory_tool_rejects_missing_version_without_writing(tmp_path):
     from app.application.runtime.tools import as_langchain_tool
     from app.application.tools.update_preference_tool import build_update_preference_tool
     from app.application.tools.forget_preference_tool import build_forget_preference_tool
     from app.infrastructure.eventbus import TradeEventBus
-    path=Path(__file__).resolve().parents[1]/"app/application/prompts/globex.yml"
-    prompt=yaml.safe_load(path.read_text())["main_agent"]["system_prompt"]
-    for builder in (build_update_preference_tool,build_forget_preference_tool):
-        tool=as_langchain_tool(builder(make(tmp_path),TradeEventBus()))
-        match=re.search(rf"{tool.name}\(([^)]+)\)",prompt)
-        assert match is not None
-        documented={part.strip() for part in match[1].split(",")}
-        assert set(tool.tool_call_schema.model_json_schema()["required"])<=documented
+    store = make(tmp_path)
+    before = await store.list_by_buyer('a')
+    for builder in (build_update_preference_tool, build_forget_preference_tool):
+        tool = as_langchain_tool(builder(store, TradeEventBus()))
+        result = await tool.ainvoke({'type':'tool_call', 'name':tool.name, 'id':'missing-version',
+                                    'args':{'statement':'合成偏好', 'memory_id':'memory-id'}})
+        assert result.status == 'error' and 'expected_version' in result.content
+        assert await store.list_by_buyer('a') == before

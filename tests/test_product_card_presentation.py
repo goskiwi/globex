@@ -37,8 +37,11 @@ async def test_catalog_presentation_preserves_snapshot_fields_and_labels_illustr
     result = await usecase.execute(ProductSearchSpec(normalized_query=source["title"], ship_to="CN"))
     card = result["hits"][0]
 
-    for field in ("description", "rating_summary", "ships_to", "dimensions_cm", "package_dimensions_cm", "updated_at", "skus"):
+    for field in ("description", "rating_summary", "ships_to", "dimensions_cm", "package_dimensions_cm", "updated_at"):
         assert card[field] == source[field], f"展示字段 {field} 必须来自目录，不能由 UI 补造"
+    for projected, original in zip(card['skus'], source['skus']):
+        assert {key: projected[key] for key in original} == original
+        assert projected['display_currency'] == card['currency']
     assert card["rating_is_live"] is False
     assert card["image_url"] == f"/products/{filename}"
     assert card["image_kind"] == "illustration"
@@ -90,7 +93,7 @@ async def test_default_sku_and_landed_quote_use_available_variant_without_rewrit
     assert card["source_price_major"] == 10
     assert card["source_currency"] == "USD"
     assert card["skus"] == [
-        {"sku_id": "P8801-S2", "spec": "可售大号", "price_major": 10, "currency": "USD", "stock": 7},
+        {"sku_id": "P8801-S2", "spec": "可售大号", "price_major": 10, "currency": "USD", "stock": 7, "display_price_major": 71.0, "display_currency":"CNY"},
     ]
     assert card["landed_price"]["subtotal_minor"] / 100 == pytest.approx(card["price_major"])
     assert card["landed_price"]["currency"] == card["currency"]

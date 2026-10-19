@@ -57,7 +57,7 @@ async def test_explicit_exception_is_kept_in_delegation():
 async def test_scope_cannot_drop_inherited_material_or_unverified_requirements():
     token=ShoppingContext.set(ShoppingContextSnapshot("s","b","zh-CN","CNY"))
     factory=RecordingFactory()
-    work=ShoppingWork(filters=Filters(excluded_material_tags=["金属"]),unverified_requirements=["不含尼龙"])
+    work=ShoppingWork(filters=Filters(excluded_material_tags=["金属"]),requirements=["不含尼龙"])
     try:
         await build_task_dispatch_tool(factory,factory,TradeEventBus())("search_agent",
             {"goal":"研究","filters":{"excluded_material_tags":[]},"requirements":["防水"]},
@@ -65,7 +65,7 @@ async def test_scope_cannot_drop_inherited_material_or_unverified_requirements()
                 "messages":[HumanMessage(name="b",content="我要防水的背包")]},tool_call_id="task"))
         effective=factory.seen[0]["parent_context"]["effective_search"]
         assert effective["parameters"]["excluded_material_tags"]==["金属"]
-        assert effective["unverified_requirements"]==["不含尼龙","防水"]
+        assert effective["requirements"]==["不含尼龙","防水"]
         assert "filters" not in factory.seen[0]["delegated_task"]
     finally:
         ShoppingContext.reset(token)

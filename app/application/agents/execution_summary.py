@@ -6,7 +6,7 @@ TOOL_LABELS = {
     'show_product_details': '准备商品详情', 'update_shopping_state': '更新选购条件',
     'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐',
     'compare_products': '准备比较结果', 'show_shopping_form': '补充选购需求',
-    'SubagentResult': '提交研究结果', 'category_insight_tool': '查询选购知识',
+    'SubagentResult': '提交任务结果', 'category_insight_tool': '查询选购知识',
     'present_research': '交付研究报告',
     'web_search_tool': '核实外部资料', 'task_dispatch': '委派专家任务',
     'remember_preference_tool': '保存购物偏好', 'forget_preference_tool': '删除购物偏好',
@@ -201,7 +201,7 @@ def result_summary(name, arguments, data, success, *, failure=None):
                 if remaining else f'已交付{total}份完整研究报告')
     if name in {'task_dispatch','SubagentResult'} and isinstance(data,dict):
         captions = {'completed': '任务已完成', 'partial': '任务部分完成',
-                    'needs_input': '需要补充信息', 'failed': '任务未完成'}
+                    'needs_input': '需要补充信息', 'failed': '任务未完成', 'submitted':'提交已接收，等待业务校验'}
         parts = [captions.get(text(data.get('status')), '已返回任务结果')]
         if isinstance(data.get('candidates'), list):
             parts.append(f'交回{len(data["candidates"])}个研究候选')

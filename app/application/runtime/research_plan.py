@@ -25,8 +25,7 @@ class ResearchTask(TypedDict):
     required_gaps: list[str]
     gaps: list[str]
     stale: NotRequired[bool]
-    delivered: NotRequired[bool]
-    reported: NotRequired[bool]
+    delivery: NotRequired[Literal["research", "products"]]
 
 
 class ResearchPlan(TypedDict, total=False):
@@ -37,7 +36,7 @@ class ResearchPlan(TypedDict, total=False):
 
 
 def condition_identity(policy):
-    return {k: policy.get(k) for k in ('parameters', 'unverified_requirements', 'excluded_products', 'excluded_skus')}
+    return {k: policy.get(k) for k in ('parameters', 'requirements', 'unverified_requirements', 'excluded_products', 'excluded_skus')}
 
 
 def dependent_steps(steps, changed):
@@ -61,11 +60,12 @@ def project_plan(work: ShoppingWork, policy: dict, saved: ResearchPlan) -> Resea
     statuses = {}
     for step in work.plan:
         value = tasks.get(step.id)
-        if value and any(statuses[key] not in {'verified', 'delivered'} for key in step.depends_on):
+        if value and any(statuses[key] not in {'verified', 'reported', 'delivered'} for key in step.depends_on):
             value['stale'] = True
-        status = ('pending' if not value or value['stale'] else
-                  'delivered' if value.get('delivered') else
-                  'verified' if value['status'] == 'completed' and value.get('qualified_skus') and not value.get('required_gaps') else 'blocked')
+        ready = bool(value and value['status'] == 'completed' and value.get('qualified_skus') and not value.get('required_gaps'))
+        status = ('pending' if not value or value['stale'] else 'blocked' if not ready else
+                  'delivered' if value.get('delivery') == 'products' else
+                  'reported' if value.get('delivery') == 'research' else 'verified')
         steps.append({**step.model_dump(), 'status': status,
                       'gaps': (value.get('gaps', []) if value and not value['stale'] else []),
                       'evidence_refs': (value.get('evidence_refs', []) if value and not value['stale'] else [])})
@@ -98,7 +98,7 @@ def plan_delivery(plan: ResearchPlan, picks, cards):
                  and all(not issues[p.sku_id] for p in picks if p.task_id == key)}
     steps = deepcopy(plan.get('steps', []))
     for step in steps:
-        if step['id'] in delivered and step['status'] in {'verified', 'delivered'}:
+        if step['id'] in delivered and step['status'] in {'verified', 'reported', 'delivered'}:
             step['status'] = 'delivered'
     missing = list(dict.fromkeys([s['goal'] for s in steps if s['status'] != 'delivered']
         + [tasks[key]['scope']['goal'] for key in requested - delivered]))
@@ -125,10 +125,9 @@ def record_research(plan: ResearchPlan, work: ShoppingWork, data: dict) -> None:
     }
 
 
-def apply_delivery(plan: ResearchPlan, outcome: dict) -> ResearchPlan:
+def apply_delivery(plan: ResearchPlan, task_ids, kind, work, policy) -> ResearchPlan:
+    """接纳交付时立即投影计划，不依赖下一轮模型钩子补状态。"""
     updated = deepcopy(plan)
-    for key in outcome['delivered_tasks']:
-        updated['tasks'][key]['delivered'] = True
-    updated['steps'] = outcome['steps']
-    updated['status'] = outcome['status']
-    return updated
+    for key in task_ids:
+        updated['tasks'][key]['delivery'] = kind
+    return project_plan(work, policy, updated)

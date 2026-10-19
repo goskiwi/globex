@@ -3,7 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from app.application.agents.handoff import AgentSubmission, build_submission_tool
+from app.application.agents.handoff import ResearchSubmission, build_submission_tool
 from app.application.runtime.handoff import TaskEvidence
 from app.application.runtime.tools import as_langchain_tool
 from app.application.tools.recommendation_tools import build_quote_tool, QuoteInput
@@ -28,7 +28,7 @@ def card():
 
 
 def deliver(evidence, sku='P1003-S2'):
-    submission=AgentSubmission(status='completed',candidates=[
+    submission=ResearchSubmission(status='completed',candidates=[
         {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
     assert not evidence.validate(submission)
     return evidence.delivered(submission).candidates[0].facts
@@ -121,11 +121,11 @@ def test_optional_phone_is_plain_optional_text_without_format_conversion():
 
 
 def test_unknown_research_attributes_are_not_unmet_user_constraints():
-    result=AgentSubmission(status='completed',candidates=[{'product_id':'P1003',
+    result=ResearchSubmission(status='completed',candidates=[{'product_id':'P1003',
         'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'open_questions':['电脑隔层？']}])
     assert result.status=='completed' and not result.unmet_constraints
     with pytest.raises(ValidationError):
-        AgentSubmission(status='completed',unmet_constraints=['买家要求防水，未核验'])
+        ResearchSubmission(status='completed',unmet_constraints=['买家要求防水，未核验'])
 
 
 async def test_delegation_keeps_prior_conditions_and_current_source_without_substring_gate():
@@ -136,14 +136,14 @@ async def test_delegation_keeps_prior_conditions_and_current_source_without_subs
     from types import SimpleNamespace
     token=ShoppingContext.set(ShoppingContextSnapshot('s','b','zh-CN','CNY'))
     factory=RecordingFactory()
-    work=ShoppingWork(filters=Filters(ship_to='CN'),unverified_requirements=['不要防水款'])
+    work=ShoppingWork(filters=Filters(ship_to='CN'),requirements=['不要防水款'])
     runtime=SimpleNamespace(state={'shopping_work':work.model_dump(),
         'messages':[HumanMessage(content='继续研究，条件不变',name='b')]},tool_call_id='task')
     tool=build_task_dispatch_tool(factory,factory,TradeEventBus())
     try:
         result=await tool('search_agent',{'goal':'研究','requirements':['不要防水款']},runtime=runtime)
         assert result.ok
-        assert factory.seen[0]['parent_context']['effective_search']['unverified_requirements']==['不要防水款']
+        assert factory.seen[0]['parent_context']['effective_search']['requirements']==['不要防水款']
         assert factory.seen[0]['parent_context']['latest_user_request']=='继续研究，条件不变'
         assert 'research_dimensions' not in factory.seen[0]['delegated_task']
     finally:
@@ -159,7 +159,7 @@ def test_delegation_rejects_removed_research_dimensions_without_alias():
 @pytest.mark.parametrize('sku', ['', ' ', '\t\n'])
 def test_blank_sku_is_rejected_not_converted_to_product_only(sku):
     with pytest.raises(ValidationError):
-        AgentSubmission(status='completed',candidates=[
+        ResearchSubmission(status='completed',candidates=[
             {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
 
 
@@ -170,7 +170,7 @@ def test_known_sku_and_product_only_candidates_have_real_facts():
         facts=deliver(evidence,sku)
         assert facts['product']['product_id']=='P1003'
         assert facts['sku'] is None if sku is None else facts['sku']['sku_id']==sku
-    schema=convert_to_openai_tool(build_submission_tool())['function']['parameters']
+    schema=convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
     sku_schema=schema['properties']['candidates']['items']['properties']['sku_id']
     assert any(branch.get('minLength')==1 for branch in sku_schema['anyOf'])
 

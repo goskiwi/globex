@@ -16,7 +16,9 @@ from app.application.runtime.research_plan import (
     ResearchPlan, project_plan, dependent_steps, record_research, apply_delivery,
 )
 
-DELIVERIES = {'recommend_products', 'compare_products', 'present_research'}
+from app.application.usecases.intents import DELIVERY_KINDS
+
+DELIVERIES = frozenset(DELIVERY_KINDS)
 
 
 
@@ -48,7 +50,7 @@ class TaskPlanMiddleware(AgentMiddleware):
         # 无计划且只做直接查询时，不额外制造计划步骤。
         hint = {'steps': plan['steps'], 'research': {key: {
             'goal': value['scope']['goal'],
-            **{k: value[k] for k in ('status', 'qualified_skus', 'required_gaps', 'gaps', 'stale', 'delivered', 'reported') if k in value}}
+            **{k: value[k] for k in ('status', 'qualified_skus', 'required_gaps', 'gaps', 'stale', 'delivery') if k in value}}
             for key, value in plan['tasks'].items()}}
         result = {'task_plan': plan}
         if plan['steps'] or plan['tasks'] or any(m.name == 'task_plan' for m in state['messages']):
@@ -80,22 +82,19 @@ class TaskPlanMiddleware(AgentMiddleware):
         token = ShoppingContext.set(replace(context, task_plan=plan))
         try:
             output = await handler(request)
-            if request.tool_call['name'] == 'present_research':
-                for receipt in tool_receipts(output):
-                    data = (receipt.artifact or {}).get('data', {})
-                    if receipt.status == 'success' and isinstance(data, dict):
-                        updated = deepcopy(plan)
-                        for key in data['completed_task_ids']:
-                            updated['tasks'][key]['reported'] = True
-                        return Command(update={'messages': [receipt], 'task_plan': updated})
-            if request.tool_call['name'] in DELIVERIES:
-                for receipt in tool_receipts(output):
-                    data = (receipt.artifact or {}).get('data', {})
-                    if receipt.status == 'success' and isinstance(data, dict) and data.get('plan_outcome'):
-                        updated = apply_delivery(plan, data['plan_outcome'])
-                        if isinstance(output, Command):
-                            return Command(update={**output.update, 'task_plan': updated})
-                        return Command(update={'messages': [output], 'task_plan': updated})
+            for receipt in tool_receipts(output):
+                data = (receipt.artifact or {}).get('data', {})
+                if receipt.status != 'success' or not isinstance(data, dict):
+                    continue
+                if receipt.name == 'present_research':
+                    updated = apply_delivery(plan, data['completed_task_ids'], 'research', work, context.effective_search)
+                elif data.get('plan_outcome'):
+                    updated = apply_delivery(plan, data['plan_outcome']['delivered_tasks'], 'products', work, context.effective_search)
+                else:
+                    continue
+                if isinstance(output, Command):
+                    return Command(update={**output.update, 'task_plan': updated})
+                return Command(update={'messages': [receipt], 'task_plan': updated})
             return output
         finally:
             ShoppingContext.reset(token)

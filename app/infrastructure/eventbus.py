@@ -59,6 +59,7 @@ EVENT_TYPES = (
     "tool.invoke",
     "tool.result",
     "tool.lifecycle",
+    "handoff.result",
     "plan.update",
     "context.compressed",
     "model.fallback",

@@ -1,3 +1,4 @@
+from app.application.agents.handoff import ResearchSubmission
 """执行限制与部分交付：真实原生图、并行工具、checkpoint 和交易底座。"""
 import asyncio
 import json
@@ -61,7 +62,7 @@ async def test_real_budget_denial_is_stop_not_submission_correction(tmp_path):
     def forbidden(request):
         calls.append(1);raise AssertionError('不得请求模型')
     model=await client_model(tmp_path,forbidden)
-    graph=create_agent(model,tools=[build_submission_tool()],middleware=[HandoffMiddleware()],
+    graph=create_agent(model,tools=[build_submission_tool(ResearchSubmission)],middleware=[HandoffMiddleware()],
                        context_schema=HandoffContext)
     factory=SimpleNamespace(build=lambda:graph)
     dispatch=build_task_dispatch_tool(factory,factory,TradeEventBus())

@@ -202,7 +202,7 @@ async def test_explicit_comparison_order_survives_persistence_and_restart(tmp_pa
             cards.extend(result['hits'])
             orchestrator._bus.publish(session, 'tool.result', {'tool':'product_search_tool', **result})
         orchestrator._bus.publish(session, 'comparison.result', {'hits':list(reversed(cards))})
-        return ExecutionResult('已完成对比', 'completed', product_delivery_complete=True)
+        return ExecutionResult('已完成对比', 'completed', delivery={"kind":"comparison","status":"completed"})
     orchestrator._reply = reply
     await orchestrator.handle_intent(SubmitIntentInput('session-test','buyer-test','zh-CN','CNY','对比P1001-S2和P1003-S1'))
     restarted = ContextEvidenceStore(store.path)

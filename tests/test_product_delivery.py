@@ -44,7 +44,7 @@ def test_only_explicit_successful_delivery_is_published(kind):
     emit(target,kind+'.result',chosen)
     assert target.state[kind] is None, '工具未完成整轮交付前不发布卡片'
     emit(target,'tool.result',{'tool':'product_search_tool','hits':[{'product_id':'C'}]})
-    target.finish('已交付','completed',None,product_delivery_complete=True)
+    target.finish('已交付','completed',None,delivery={"kind":kind,"status":"completed"})
     assert target.state[kind]==chosen
     chosen['hits'].clear()
     assert target.state[kind]['hits']==[{'product_id':'B'}]
@@ -85,7 +85,7 @@ async def test_followup_carries_committed_cards_and_replacement_archives_once(tm
         target.start()
         if selection:
             target.on_trade_event(TradeEvent('s1','recommendation.result',{'hits':[{'product_id':selection}], 'preferred_sku_id':None, 'dimensions':['用途'], 'max_items':12},''))
-        target.finish('已回答','completed',None,product_delivery_complete=bool(selection))
+        target.finish('已回答','completed',None,delivery={"kind":"recommendation","status":"completed"} if selection else None)
         await journal.append(identifier,'owner',[e.model_dump(mode='json',by_alias=True,exclude_none=True) for e in events])
         return target
     await run('r1','A')
@@ -136,7 +136,7 @@ async def test_limited_main_can_deliver_three_verified_cards_and_preserve_partia
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY',
             '请推荐四款通勤背包，找不齐就说明缺口，不下单。'))
         assert result.status=='partial' and result.stop_reason=='model_call_limit'
-        assert result.product_delivery_complete and '第四款尚未确认' in result.final_text
+        assert result.delivery["kind"]=="recommendation" and '第四款尚未确认' in result.final_text
         delivered=await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
         assert len(delivered)==1 and len(delivered[0]['data']['hits'])==3
     finally:

@@ -13,7 +13,7 @@ from langchain.agents.middleware import AgentMiddleware, hook_config
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import ValidationError
 
-from app.application.agents.handoff import AgentSubmission, SubagentResult
+from app.application.agents.handoff import ResearchSubmission, SubagentResult
 from app.application.runtime.errors import ExecutionStopped, raise_if_tool_stopped
 from app.application.runtime.results import message_data
 from app.infrastructure.context_products import PRODUCT_EVIDENCE_KINDS
@@ -159,7 +159,7 @@ class TaskEvidence:
 
     def stopped_result(self, reason):
         """停止时交回证据与缺口；检索命中不能自动升级为已筛选候选。"""
-        return self.delivered(AgentSubmission(
+        return self.delivered(ResearchSubmission(
             status="partial" if self.successful_tools else "failed",
             issues=[reason]))
 
@@ -199,13 +199,18 @@ class TaskEvidence:
     def delivered(self, submission):
         """只关联本子任务实际读取的商品与引用；模型不能填写或覆盖事实。"""
         payload = submission.model_dump()
+        payload["candidates"] = [c.model_dump() for c in submission.selected_candidates]
         for candidate in payload["candidates"]:
             key = (candidate["product_id"], candidate.get("sku_id"))
             candidate["facts"] = deepcopy(self.facts[key])
             candidate["facts"]["quotes"] = [deepcopy(value) for quote_key,value in self.quotes.items()
                 if key[1] is not None and quote_key[:2] == key]
         from app.application.usecases.research_report import research_summary
-        return SubagentResult(**payload, summary=research_summary(submission.status, payload['candidates']),
+        from app.application.agents.handoff import TradeSubmission
+        summary = ({'completed':'交易任务完成', 'partial':'交易任务部分完成', 'needs_input':'交易任务需要补充信息',
+                    'failed':'交易任务未完成'}[submission.status] if isinstance(submission, TradeSubmission)
+                   else research_summary(submission.status, payload['candidates']))
+        return SubagentResult(**payload, summary=summary,
             evidence_refs=sorted(self.refs),
             observed_product_count=len(self.products),
             observed_sku_count=sum(len(skus) for skus in self.products.values()))
@@ -213,7 +218,7 @@ class TaskEvidence:
     def validate(self, result):
         errors = []
         # 校验所选对象与规格，事实正文来自已读字段，不由模型重新填写。
-        for index, candidate in enumerate(result.candidates):
+        for index, candidate in enumerate(result.selected_candidates):
             if candidate.product_id not in self.products:
                 errors.append(issue("candidate_unverified", f"candidates.{index}.product_id",
                                     "该候选没有实际读取证据，请移除，或将缺口交回主 Agent。"))
@@ -250,6 +255,9 @@ class HandoffState(AgentState):
 class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
     state_schema = HandoffState
     max_corrections = 2
+
+    def __init__(self, schema=ResearchSubmission, bus=None):
+        self.schema, self.bus = schema, bus
 
     async def awrap_tool_call(self, request, handler):
         result = await handler(request)
@@ -315,7 +323,7 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
                 else:
                     # 按 call_id 读取经现有工具中间件处理后的候选，避免绕过内容过滤。
                     payload = message_data(receipt)
-                    result = AgentSubmission.model_validate(payload)
+                    result = self.schema.model_validate(payload["submission"])
                     errors = evidence.validate(result)
             except ValidationError as error:
                 result = None
@@ -329,16 +337,29 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
         replacements = [m.model_copy(update={"status": "error" if errors else "success",
             "content": json.dumps({"accepted": not errors, "errors": errors}, ensure_ascii=False)})
             for m in state["messages"] if isinstance(m, ToolMessage) and m.tool_call_id in call_ids]
+        reason = state.get("execution_stop")
+        if not errors and reason and result.status == "completed":
+            result = result.model_copy(update={"status": "partial", "issues": [*result.issues, reason]})
+        accepted = evidence.delivered(result).model_dump() if not errors else None
+        bus = self.bus
+        for receipt in state["messages"]:
+            if isinstance(receipt, ToolMessage) and receipt.tool_call_id in call_ids:
+                execution_id = (receipt.artifact or {}).get("execution_id")
+                if execution_id and bus is not None:
+                    bus.publish(context.evidence.session_id, "handoff.result", {
+                        "tool_call_id": execution_id,
+                        "decision": "rejected" if errors else "accepted",
+                        "status": "failed" if errors else result.status,
+                        "result": accepted,
+                        "errors": errors,
+                    })
         if errors:
             update = self._reject(state, errors, replacements)
             if update["jump_to"] == "model":
                 # 此节点本身就在模型前，沿默认边进入模型，不能跳回自身。
                 update.pop("jump_to")
             return update
-        reason = state.get("execution_stop")
-        if reason and result.status == "completed":
-            result = result.model_copy(update={"status": "partial", "issues": [*result.issues, reason]})
-        return {"handoff_result": evidence.delivered(result).model_dump(), "handoff_submission": [],
+        return {"handoff_result": accepted, "handoff_submission": [],
                 "handoff_feedback": [], "messages": replacements, "jump_to": "end"}
 
     async def awrap_model_call(self, request, handler):

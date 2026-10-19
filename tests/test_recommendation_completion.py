@@ -32,10 +32,10 @@ async def test_failed_recommendation_can_correct_and_success_stops_then_new_turn
     result = await graph.ainvoke({"messages": [HumanMessage(content="推荐商品")]}, config)
     assert model.i == 2 and len(attempts) == 2
     assert result["messages"][-1].content == "通勤更看重轻便时，我推荐这款；需要防雨时再看另一款。"
-    assert result['product_delivery_complete'] is True
+    assert result['delivery']['kind']=='recommendation'
     result = await graph.ainvoke({"messages": [HumanMessage(content="再问一个问题")]}, config)
     assert model.i == 3 and result["messages"][-1].content == "下一轮正常咨询"
-    assert result['product_delivery_complete'] is False
+    assert result['delivery'] is None
 
 
 @pytest.mark.asyncio

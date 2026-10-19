@@ -86,7 +86,7 @@ def test_final_recommendation_is_not_replaced_by_later_search():
     adapter.on_trade_event(TradeEvent("s", "recommendation.result", recommendation, ""))
     adapter.on_trade_event(TradeEvent("s", "tool.result", {"tool": "product_search_tool", "hits": [{"product_id": "P1003"}]}, ""))
     assert adapter.state["recommendation"] is None
-    adapter.finish("已交付推荐", "completed", None, product_delivery_complete=True)
+    adapter.finish("已交付推荐", "completed", None, delivery={"kind":"recommendation","status":"completed"})
     assert adapter.state["recommendation"] == recommendation
     assert "products" not in adapter.state
 

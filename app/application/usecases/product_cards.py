@@ -112,16 +112,7 @@ def assemble_product_card(score: float, product: Product, spec: ProductSearchSpe
         source_price_major=primary.price.to_major_units(),
         source_currency=primary.price.currency,
         highlights=[f"{h.label}：{h.detail}" if h.detail else h.label for h in product.highlights],
-        skus=[
-            {
-                "sku_id": sku.sku_id,
-                "spec": sku.spec,
-                "price_major": sku.price.to_major_units(),
-                "currency": sku.price.currency,
-                "stock": sku.stock,
-            }
-            for sku in skus
-        ],
+        skus=[pricing.sku_snapshot(sku, spec.target_currency) for sku in skus],
         score=score,
         landed_price=landed_price,
         source_platform=product.source_platform,

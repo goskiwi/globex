@@ -1,3 +1,4 @@
+from app.application.agents.handoff import ResearchSubmission
 """实际导出 Schema、工具执行和委派条件必须使用同一份输入定义。"""
 import json
 from dataclasses import replace
@@ -29,7 +30,7 @@ def test_delegation_and_submission_have_no_duplicate_input_channels():
         DelegatedTask(goal='研究',search_filters={'price_max_major':300})
     with pytest.raises(ValidationError):
         DelegatedTask(goal='研究',hard_constraints=['预算300'],expected_output='价格')
-    schema=convert_to_openai_tool(build_submission_tool())['function']['parameters']
+    schema=convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
     assert 'evidence_refs' not in schema['properties'] and 'notes' not in schema['properties']
     assert 'facts' not in schema['properties']['candidates']['items'].get('properties',{})
     assert schema['additionalProperties'] is False

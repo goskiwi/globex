@@ -156,7 +156,7 @@ class MainAgentOrchestrator:
                         await finalizer.record_conversation(intent, text,
                             int((time.monotonic() - started_at) * 1000), trace, cancelled=True)
                     raise
-            delivered = recommendation if result.product_delivery_complete else None
+            delivered = recommendation if result.delivery and result.delivery["kind"] in {"recommendation", "comparison"} else None
             try:
                 saved = await finalizer.finish(intent, result.final_text, delivered, persistence_guard)
             except RunPersistenceError as error:
@@ -219,8 +219,7 @@ class MainAgentOrchestrator:
                     execution = ExecutionResult(final_text, "needs_input")
                 final_text = self._guard_final_text(session_id, final_text)
                 return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
-                                          product_delivery_complete=execution.product_delivery_complete,
-                                      research_delivery_complete=execution.research_delivery_complete)
+                                          delivery=execution.delivery)
             if pending:
                 event = approval_event(pending)
                 observer = self._native_observer.get()
@@ -265,8 +264,7 @@ class MainAgentOrchestrator:
                 final_text = "这次长期记忆变更还未执行，请在下方确认或拒绝。"
                 execution = ExecutionResult(final_text, "needs_input")
             return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
-                                      product_delivery_complete=execution.product_delivery_complete,
-                                      research_delivery_complete=execution.research_delivery_complete)
+                                      delivery=execution.delivery)
         except ContextCapacityError:
             text = "本次比较的内容超过安全上下文容量。原始记录已保留，请缩小商品范围或分批比较。"
             final_text = text
