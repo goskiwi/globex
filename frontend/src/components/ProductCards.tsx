@@ -81,9 +81,12 @@ function ProductCards(props: ProductCardsProps) {
       const recommendation = props.mode === "recommendation" ? props : null;
       const saved = recommendation?.favoriteIds.has(product.product_id) ?? false;
       const selected = recommendation?.comparedIds.has(comparisonKey(product)) ?? false;
-      const primary = props.mode === 'view' ? initialOffer(group)?.sku
+      const focused = props.mode === 'view' ? initialOffer(group) : undefined;
+      const primary = props.mode === 'view' ? focused?.sku
         : product.skus.find(sku=>sku.sku_id===product.default_sku_id);
-      const landed = props.mode !== "view" ? comparisonQuote(product) : null;
+      const landed = props.mode === 'view'
+        ? focused ? comparisonQuote({...focused.product, default_sku_id:focused.sku.sku_id}) : null
+        : comparisonQuote(product);
       const price = viewPrice(group);
       return <article className={`product-card ${selected ? "selected" : ""}`} key={group.key}
         data-card-mode={props.mode} style={{ animationDelay: `${Math.min(index, 5) * 55}ms` }}>

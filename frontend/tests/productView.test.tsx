@@ -78,3 +78,27 @@ it('查看指定非默认规格时金额与抽屉起点保持同一SKU，全部�
     expect(initialOffer(opened)?.sku.sku_id).toBe('P3004-S2');expect(opened.records[0].skus).toHaveLength(2);
   }finally{await act(async()=>root.unmount());host.remove();}
 });
+
+it('查看卡与抽屉使用同一匹配规格报价，不因只读模式丢失已核实到手价',async()=>{
+  const {renderToStaticMarkup}=await import('react-dom/server');
+  const {default:ProductCards}=await import('../src/components/ProductCards');
+  const base={product_id:'P3004',title:'指定规格',brand:'测试',category:'旅行装备',origin_country:'CN',
+    price_major:107.99,currency:'CNY',highlights:[],score:1,default_sku_id:'P3004-S2',requested_sku_ids:['P3004-S2','P3004-S1'],
+    skus:[{sku_id:'P3004-S1',spec:'石墨黑',price_major:98.97,currency:'CNY',stock:2},
+      {sku_id:'P3004-S2',spec:'雾灰',price_major:107.99,currency:'CNY',stock:3}],
+    landed_price:{ship_to:'CN',currency:'CNY',subtotal_minor:10799,freight_minor:2500,tariff_minor:0,total_amount_minor:13299,
+      items:[{product_id:'P3004',sku_id:'P3004-S2',title:'指定规格',quantity:1,unit_price_minor:10799,currency:'CNY',
+        source_unit_price_minor:10799,source_currency:'CNY',subtotal_minor:10799,freight_minor:2500,tariff_minor:0,total_amount_minor:13299}]}};
+  const matching=renderToStaticMarkup(<ProductCards mode="view" products={[base]} onDetail={()=>{}}/>);
+  expect(matching).toContain('132.99');expect(matching).toContain('配送至');expect(matching).not.toContain('到手价待目的地与规格确认');
+  const line=base.landed_price.items[0];
+  for(const wrong of [
+    {...base,landed_price:undefined},
+    {...base,landed_price:{...base.landed_price,items:[{...line,sku_id:'P3004-S1'}]}},
+    {...base,landed_price:{...base.landed_price,items:[{...line,quantity:2}]}},
+    {...base,landed_price:{...base.landed_price,currency:'USD'}},
+  ]){
+    const html=renderToStaticMarkup(<ProductCards mode="view" products={[wrong]} onDetail={()=>{}}/>);
+    expect(html).toContain('到手价待目的地与规格确认');expect(html).not.toContain('132.99');
+  }
+});
