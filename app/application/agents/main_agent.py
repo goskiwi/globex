@@ -94,7 +94,12 @@ class MainAgentFactory:
     def build(self) -> GraphSession:
         prompts = load_prompts()["main_agent"]
         tools = [*self._search_factory.build_tools(), *self._trade_factory.build_tools()]
-        from app.application.tools.recommendation_tools import build_recommendation_tool, RecommendationInput, build_comparison_tool, ComparisonInput
+        from app.application.tools.product_details_tool import build_product_details_tool
+        tools.append(as_langchain_tool(build_product_details_tool(self._search_factory.catalog_search,
+            self._bus, self._search_factory.evidence_store)))
+        from app.application.tools.recommendation_tools import build_recommendation_tool, RecommendationInput, build_comparison_tool, ComparisonInput, build_quote_tool
+        tools.append(as_langchain_tool(build_quote_tool(self._search_factory.catalog_search.pricing,
+            self._search_factory.evidence_store, self._bus)))
         from app.application.tools.product_view_tool import build_product_view_tool, ProductViewInput
         tools.append(as_langchain_tool(build_product_view_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=ProductViewInput))

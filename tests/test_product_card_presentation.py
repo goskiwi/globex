@@ -92,11 +92,12 @@ async def test_default_sku_and_landed_quote_use_available_variant_without_rewrit
     assert card["currency"] == "CNY"
     assert card["source_price_major"] == 10
     assert card["source_currency"] == "USD"
-    assert card["skus"] == [
+    assert [{k:v for k,v in sku.items() if k != 'landed_price'} for sku in card["skus"]] == [
         {"sku_id": "P8801-S2", "spec": "可售大号", "price_major": 10, "currency": "USD", "stock": 7, "display_price_major": 71.0, "display_currency":"CNY"},
     ]
     assert card["landed_price"]["subtotal_minor"] / 100 == pytest.approx(card["price_major"])
     assert card["landed_price"]["currency"] == card["currency"]
+    assert card['skus'][0]['landed_price'] == card['landed_price']
     details = await catalog.product_details(product.product_id, spec)
     assert [sku["sku_id"] for sku in details["hits"][0]["skus"]] == ["P8801-S1", "P8801-S2"]
     assert details["hits"][0]["skus"][0]["constraint_issues"] == ["out_of_stock"]

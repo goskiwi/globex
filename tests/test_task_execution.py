@@ -19,6 +19,15 @@ from app.infrastructure.eventbus import TradeEventBus,observe_run_events
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 
 
+def expose_unfiltered_research_source(container, monkeypatch):
+    """故意向测试专家开放不适格源，验证下游不会依赖搜索过滤而漏检。"""
+    from app.application.tools.product_details_tool import build_product_details_tool
+    factory = container.orchestrator._sessions._main_factory._search_factory
+    tools = [*factory.build_tools(), as_langchain_tool(build_product_details_tool(
+        factory.catalog_search, factory._bus, factory.evidence_store))]
+    monkeypatch.setattr(factory, 'build_tools', lambda: tools)
+
+
 async def ask(c, text, **kwargs):
     result=await c.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY',text,**kwargs))
     assert result.error is None,result
@@ -29,7 +38,7 @@ async def ask(c, text, **kwargs):
 @pytest.mark.parametrize('partial', [False, True])
 async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_path, monkeypatch, partial):
     child_models = iter([ScriptedModel(responses=[
-        call('get_product_details', {'product_id': product}),
+        call('product_search_tool', {'product_id': product}),
         submission(candidates=[{'product_id': product, 'sku_id': product + '-S1',
             'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'caveats': ['是否有电脑仓？']}],unmet_requirements=['必须核验明确附加要求'] if partial and product == 'P1008' else [])]) for product in ('P1003', 'P1008')])
     steps = [{'id':key,'goal':goal,'requirements':['必须核验明确附加要求'] if partial and key=='cup' else []} for key,goal in [('bag', '背包研究'), ('cup', '水杯研究')]]
@@ -112,6 +121,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','step_id':'bag'}}),
         recommend(),AIMessage(content='有条件尚未满足')])
     c=await _container(tmp_path,monkeypatch,model)
+    expose_unfiltered_research_source(c, monkeypatch)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     deliveries=[]
     try:
@@ -279,6 +289,7 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
         call('compare_products',{'entries':[pick(),pick('P1003-S2')],'preferred_sku_id':None,
                                  'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}),AIMessage(content='研究仍有缺口')])
     c=await _container(tmp_path,monkeypatch,model)
+    expose_unfiltered_research_source(c, monkeypatch)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:
         _,state=await ask(c,'找100元内背包；超预算的可以明确作为对照')
@@ -317,7 +328,7 @@ def research(step=None):
 
 def research_responses(count):
     return [response for _ in range(count) for response in (
-        call('get_product_details', {'product_id': 'P1003'}),
+        call('product_search_tool', {'product_id': 'P1003'}),
         submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]))]
 
 

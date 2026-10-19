@@ -19,8 +19,6 @@ from app.application.tools.capability_tools import build_capability_tools, CAPAB
 from app.application.tools.category_insight_tool import build_category_insight_tool
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
 from app.application.tools.product_search_tool import build_product_search_tool
-from app.application.tools.product_details_tool import build_product_details_tool
-from app.application.tools.recommendation_tools import build_quote_tool
 from app.application.tools.web_search_tool import build_web_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.infrastructure.eventbus import TradeEventBus
@@ -61,8 +59,6 @@ class SearchAgentFactory:
 
     def build_tools(self) -> list[BaseTool]:
         functions = [
-            build_product_details_tool(self._catalog_search, self._bus, self.evidence_store),
-            build_quote_tool(self._catalog_search.pricing, self.evidence_store, self._bus),
             build_product_search_tool(
                 self._catalog_search,
                 self._bus,

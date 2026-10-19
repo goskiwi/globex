@@ -201,3 +201,28 @@ async def test_structured_knowledge_archive_roundtrip_preserves_content_and_sour
         assert json.loads(''.join(pieces)) == payload
     finally:
         ShoppingContext.reset(token)
+
+
+async def test_current_research_evidence_stays_visible_until_request_capacity_pressure(tmp_path):
+    """商品小配额不能把当前任务刚读的完整资料变成历史，诱发重新查询。"""
+    token = ShoppingContext.set(ShoppingContextSnapshot('s', 'b', 'zh-CN', 'CNY'))
+    try:
+        messages = [HumanMessage(name='b', id='request', content='比较这些目录候选')]
+        for index in range(4):
+            payload = {'hits': [{'product_id': f'P{8000+index}', 'description': '完整描述与已核验限制。'*100,
+                'skus': [{'sku_id': f'P{8000+index}-S1', 'price_major': 39, 'currency': 'CNY', 'stock': 30}]}],
+                'observed_at': '2026-10-19T08:00:00+00:00'}
+            messages += [AIMessage(content='', tool_calls=[{'id': f'call{index}', 'name': 'product_search_tool', 'args': {}}]),
+                ToolMessage(id=f'read{index}', tool_call_id=f'call{index}', name='product_search_tool',
+                    content=json.dumps(payload, ensure_ascii=False), artifact={'data': payload})]
+        middleware = policy(tmp_path, product_tokens=100, target_tokens=48000)
+        state = {'messages': messages, 'read_tool_messages': [f'read{i}' for i in range(4)]}
+        updates = await middleware.compact_checkpoint(state)
+        assert updates['context_statistics']['request_parts_after']['total_tokens'] < 48000
+        assert updates['context_statistics']['archived_result_count'] == 0
+        # 下一轮成为历史后仍按原规则整理，完整证据留在资料库。
+        state['messages'] += [HumanMessage(name='b', id='next', content='新的独立问题')]
+        archived = await middleware.compact_checkpoint(state)
+        assert archived['context_statistics']['archived_result_count'] > 0
+    finally:
+        ShoppingContext.reset(token)

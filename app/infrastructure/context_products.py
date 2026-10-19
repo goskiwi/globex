@@ -89,7 +89,7 @@ def product_page(result, *, offset=0, limit=5, token_limit=3000, product_id='', 
     page = {'hits': [], 'total': len(hits), 'offset': offset, 'next_offset': None,
             'result_ref': result.get('result_ref'), 'historical': True,
             'available_field_groups': ['all', *FIELD_GROUPS]}
-    for key in ('query_conditions', 'observed_at'):
+    for key in ('query_conditions', 'observed_at', 'catalogue_coverage'):
         if key in result:
             page[key] = result[key]
     for index in range(offset, min(len(hits), offset + limit)):

@@ -90,6 +90,16 @@ def assemble_product_card(score: float, product: Product, spec: ProductSearchSpe
                           primary: Sku, skus: list[Sku], pricing: PricingService) -> ProductCard:
     media = product_media(product.product_id, product.title)
     primary_in_target = pricing.tariff.rates.convert(primary.price, spec.target_currency)
+    snapshots = []
+    for sku in skus:
+        snapshot = pricing.sku_snapshot(sku, spec.target_currency)
+        if spec.ship_to:
+            try:
+                line = pricing.price_sku(product, sku, 1, spec.ship_to, spec.target_currency)
+                snapshot['landed_price'] = pricing.assemble([line], spec.ship_to, spec.target_currency)
+            except ValueError as err:
+                snapshot['landed_price'] = {'unavailable_reason': str(err)}
+        snapshots.append(snapshot)
     landed_price: Optional[dict] = None
     if spec.ship_to:
         try:
@@ -112,7 +122,7 @@ def assemble_product_card(score: float, product: Product, spec: ProductSearchSpe
         source_price_major=primary.price.to_major_units(),
         source_currency=primary.price.currency,
         highlights=[f"{h.label}：{h.detail}" if h.detail else h.label for h in product.highlights],
-        skus=[pricing.sku_snapshot(sku, spec.target_currency) for sku in skus],
+        skus=snapshots,
         score=score,
         landed_price=landed_price,
         source_platform=product.source_platform,

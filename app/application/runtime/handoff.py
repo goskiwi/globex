@@ -66,6 +66,8 @@ class TaskEvidence:
                 facts = {"result_ref":result_ref, "historical":historical,
                          "observed_at":observed_at, "product":common,
                          "sku":deepcopy(sku)}
+                if sku:
+                    facts['sku'].pop('landed_price', None)
                 self.facts[key] = facts
                 if sku:
                     issues = list(sku.get('constraint_issues', []))
@@ -85,6 +87,8 @@ class TaskEvidence:
                 if sku:
                     self.identifiers.add(sku["sku_id"])
             self._quotes(card.get("landed_price") or {}, result_ref, historical, observed_at)
+            for sku in card.get('skus', []):
+                self._quotes(sku.get('landed_price') or {}, result_ref, historical, observed_at)
 
     def _quotes(self, quote, result_ref, historical, observed_at):
         for line in quote.get("items", []):

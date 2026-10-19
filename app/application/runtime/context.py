@@ -205,18 +205,6 @@ class RequestContextMiddleware(AgentMiddleware):
                 candidates.append((index, message, payload))
         protected = {m.id for _, m, p in [c for c in candidates if 'hits' in c[2]][-2:]}
         protected.update(m.id for m in messages if isinstance(m, ToolMessage) and m.id not in read)
-        # 详情读取代表本轮正在核对的候选；普通两批保护会让稍早的详情被回收后再读。
-        # 沿用既有候选交付上限保留最近的不同观察，同身份的旧重复及旧轮次仍可归档。
-        from app.application.tools.recommendation_tools import MAX_DECISION_ITEMS
-        detail_identities = set()
-        for index, message, payload in reversed(candidates):
-            if index < latest_turn or message.name != 'get_product_details':
-                continue
-            identities = {result_identity(hit, payload.get('query_conditions', {}))
-                          for hit in payload.get('hits', [])}
-            if identities and not identities.issubset(detail_identities) and len(detail_identities | identities) <= MAX_DECISION_ITEMS:
-                protected.add(message.id)
-                detail_identities.update(identities)
         newest={}
         for _,message,payload in reversed(candidates):
             for hit in payload.get('hits',[]):
@@ -254,6 +242,9 @@ class RequestContextMiddleware(AgentMiddleware):
                         total -= max(0, token_estimate(payload) - token_estimate(replacement))
                         current = await frame.render(messages)
                 continue
+            # 当前请求的研究资料由完整请求容量决定，不因历史商品小配额提前卸载。
+            if index >= latest_turn and not force and current.counts['total_tokens'] <= target:
+                continue
             if (message.id in protected or message.id not in read
                     or not pressure or (not force and not eager and total <= low_target and message.id not in oversized
                                         and current.counts["total_tokens"] <= target)):
@@ -264,9 +255,10 @@ class RequestContextMiddleware(AgentMiddleware):
                 reference = await self.store.save(context.buyer_id, context.shopping_session_id,
                     "products" if 'hits' in payload else 'tool_archive', payload)
             replacement = {
-                "result_ref": reference, "historical": True, "archived": True,
+                "result_ref": reference, "historical": index < latest_turn, "archived": True,
                 "query_conditions": payload.get("query_conditions", {}),
-                "notice": "旧结果已读取并归档；使用 conversation_fact_lookup 回查，当前价格和库存需重新核验。",
+                "observed_at": payload.get('observed_at'),
+                "notice": "正文已卸载，使用 conversation_fact_lookup 回查；报价以原观察时间和条件为准。",
             }
             if 'hits' in payload:
                 replacement['identities'] = [{'product_id': hit['product_id'],

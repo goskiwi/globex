@@ -59,7 +59,14 @@ async def test_formal_runner_scores_cross_platform_duplicates_by_canonical_entit
     aggregate = await run_dataset(CatalogSearchUseCase(repo), repo, cases, top_k=2)
 
     assert aggregate.precision == 1.0
-    assert aggregate.canonical_duplicate_rate == 0.5
+    assert aggregate.canonical_duplicate_rate == 0
+    # 正常检索去重后仍单独验证评测器能识别上游重复，不能靠改期望隐藏重复。
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    duplicated = SimpleNamespace(execute=AsyncMock(return_value={
+        'hits': [{'product_id': 'P-A'}, {'product_id': 'P-B'}]}))
+    repeated = await run_dataset(duplicated, repo, cases, top_k=2)
+    assert repeated.canonical_duplicate_rate == 0.5 and repeated.recall == 1
 
 
 async def test_formal_runner_keeps_split_and_constraint_dimensions_for_reports():

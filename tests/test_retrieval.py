@@ -244,11 +244,13 @@ class TestTwoStageRecall:
         reasons = {item["reason"] for item in result["filtered_out"]}
         assert reasons == {"ship_to_unavailable"}, "不可达目的国应标注为 ship_to_unavailable"
 
-    async def test_no_filtered_out_key_without_hard_constraints(self, indexed):
+    async def test_without_buyer_constraints_still_explains_stock_rejections(self, indexed):
         repo, embedder, index = indexed
         usecase = CatalogSearchUseCase(repo, embedder=embedder, vector_index=index)
         result = await usecase.execute(ProductSearchSpec(normalized_query="露营灯"))
-        assert "filtered_out" not in result, "无硬约束时不应污染工具返回"
+        assert all(sku["stock"] > 0 for hit in result["hits"] for sku in hit["skus"])
+        for rejected in result.get("filtered_out", []):
+            assert all(set(sku["reasons"]) == {"out_of_stock"} for sku in rejected["skus"])
 
     async def test_landed_price_inlined_with_ship_to(self, indexed):
         repo, embedder, index = indexed
@@ -311,3 +313,25 @@ class TestTwoStageRecall:
         body = json.loads(response.text)
         assert body.get("filtered_out"), "测试前提：本次检索应有被硬约束挡掉的候选"
         assert result_event.payload["filtered_out"] == body["filtered_out"]
+
+
+@pytest.mark.parametrize('copies', [3, 40])
+async def test_semantic_results_count_models_instead_of_platform_copies(copies):
+    from types import SimpleNamespace
+    items = [Product(product_id=f'P{9000+i}', title='通勤背包', brand='测试', category='旅行装备',
+        origin_country='CN', description='通勤背包', canonical_product_id='same-model' if i < copies else 'another-model',
+        skus=[Sku(f'P{9000+i}-S1', '黑色', Money.from_major_units(100+i, 'CNY'), 5)]) for i in range(copies+1)]
+    class Index:
+        async def search(self, embedding, *, top_n):
+            return [SimpleNamespace(product_id=p.product_id, score=1-i*.01) for i,p in enumerate(items[:top_n])]
+    catalog = CatalogSearchUseCase(InMemoryProductRepository(items), AxisEmbeddingClient(), Index())
+    result = await catalog.execute(ProductSearchSpec(normalized_query='通勤背包', top_k=2))
+    assert [h['product_id'] for h in result['hits']] == ['P9000', f'P{9000+copies}']
+    assert result['total_candidates'] == 2
+    assert result['catalogue_coverage'] == {'eligible_model_count': 2, 'eligible_listing_count': copies+1,
+        'returned_model_count': 2, 'unseen_model_count': 0}
+    partial = await catalog.execute(ProductSearchSpec(normalized_query='通勤背包', top_k=1))
+    assert partial['catalogue_coverage']['unseen_model_count'] == 1
+    # 买家指定跨平台对象时仍逐项返回，不能用语义召回去重吞掉明确身份。
+    exact = await catalog.execute(ProductSearchSpec(normalized_query='P9000 P9001', top_k=2))
+    assert [h['product_id'] for h in exact['hits']] == ['P9000', 'P9001']

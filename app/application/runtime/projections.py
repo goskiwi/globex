@@ -59,6 +59,6 @@ def share_identical_products(messages, *, compact_rules=False):
     return prepared
 
 
-EVIDENCE_RULES = ('archived=true 表示历史结果已归档，按 result_ref 回查，不能当作当前报价。'
+EVIDENCE_RULES = ('archived=true 表示正文已卸载，按 result_ref 回查；historical=true 的历史资料不能当作当前报价。'
     'same_business_fields_as 只引用本次输入内完整的相同商品业务字段，不继承引用对象的score；本批分数、顺序、查询条件、观察时间保持各自来源。'
     '最新用户消息后的权威工具结果才是当前核验，不同 SKU、目的地、币种与数量不得混用；缺失字段说明未知。')

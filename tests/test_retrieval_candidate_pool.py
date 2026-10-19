@@ -57,7 +57,7 @@ async def test_expanded_recall_is_filtered_then_coarse_limited_not_sent_whole():
     assert [call.kwargs['top_n'] for call in index.search.await_args_list] == [32, 64, 128, 256]
     assert result['rerank_applied'] is True and len(result['hits']) == 12
     assert result['total_candidates'] == 100
-    assert result['retrieval_diagnostics'] == {'recalled_candidates': 250, 'eligible_candidates': 100,
+    assert result['retrieval_diagnostics'] == {'recalled_candidates': 250, 'eligible_candidates': 100, 'eligible_model_candidates': 100,
         'candidate_limit': 32, 'rerank_candidates': 32}
 
 

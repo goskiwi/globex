@@ -110,7 +110,8 @@ async def test_multiple_searches_in_recent_turns_and_selected_duplicates(tmp_pat
     state=history()
     state['messages']=[m for m in state['messages'] if m.id not in {'u6','u7'}]
     updates=await policy(tmp_path,product_tokens=1).compact_checkpoint(state)
-    assert [m.id for m in updates['messages']]==['t0','t1','t2','t3','t4','t5']
+    assert [m.id for m in updates['messages']]==['t0','t1','t2','t3','t4']
+    # u6/u7 被删除后，t5/t6/t7 同属当前请求，不能仅因商品配额归档。
     state=history()
     for m in state['messages']:
         if isinstance(m,ToolMessage):

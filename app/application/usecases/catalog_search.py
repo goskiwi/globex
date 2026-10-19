@@ -50,6 +50,16 @@ _MAX_VECTOR_RECALL = 256
 _FILTERED_OUT_LIMIT = 3
 
 
+def _distinct_products(ranking):
+    """同款跨平台只占一个模糊检索名额，保留当前排序中最靠前的来源。"""
+    distinct, seen = [], set()
+    for score, product in ranking:
+        identity = product.canonical_product_id or product.product_id
+        if identity not in seen:
+            seen.add(identity)
+            distinct.append((score, product))
+    return distinct
+
 
 def tokenize(text: str) -> set[str]:
     """极简分词：空格切词 + 中文连续段落的 2-gram（关键词降级召回用）。"""
@@ -100,7 +110,7 @@ class CatalogSearchUseCase:
         if identifiers:
             return await self._execute_exact_ids(spec, identifiers)
         if self._hybrid_enabled:
-            return await self._execute_hybrid(spec)
+            return await self._with_catalogue_coverage(spec, await self._execute_hybrid(spec))
         scored: list[tuple[float, Product]] = []
         recall_strategy = "keyword_2gram"
         rerank_applied = False
@@ -126,10 +136,11 @@ class CatalogSearchUseCase:
                 rerank_applied = True
             except Exception as err:  # noqa: BLE001
                 logger.warning("rerank 不可用，按向量分排序：%s", err)
+        candidates = _distinct_products(candidates)
         hits = [self._candidate_card(score, product, spec) for score, product in candidates[: spec.top_k]]
         result = {
             "hits": hits,
-            "total_candidates": diagnostics["eligible_candidates"],
+            "total_candidates": diagnostics['eligible_model_candidates'],
             "recall_strategy": recall_strategy,
             "rerank_applied": rerank_applied,
             "retrieval_diagnostics": diagnostics,
@@ -138,6 +149,17 @@ class CatalogSearchUseCase:
             # 如实告知"召回到了但被硬约束挡掉"，否则模型分不清"库里没有"与"被过滤"，
             # 会把超预算商品答成"没有这个商品"
             result["filtered_out"] = filtered_out
+        return await self._with_catalogue_coverage(spec, result)
+
+    async def _with_catalogue_coverage(self, spec, result):
+        """从当前目录计数，区分尚未找到的型号与同款平台条目。"""
+        eligible = [p for p in await self._product_repo.list_all() if self.eligible_skus(p, spec)]
+        models = {p.canonical_product_id or p.product_id for p in eligible}
+        returned = {h.get('canonical_product_id') or h['product_id'] for h in result['hits']}
+        result['catalogue_coverage'] = {
+            'eligible_model_count': len(models), 'eligible_listing_count': len(eligible),
+            'returned_model_count': len(returned), 'unseen_model_count': len(models - returned),
+        }
         return result
 
     def _candidate_limit(self, spec: ProductSearchSpec) -> int:
@@ -158,9 +180,10 @@ class CatalogSearchUseCase:
         eligible, rejected = self._filter_candidates(spec, ranking)
         eligible.sort(key=lambda pair: pair[0], reverse=True)
         limit = self._candidate_limit(spec)
-        pool = eligible[:limit]
+        pool = _distinct_products(eligible)[:limit]
         return pool, rejected, {"recalled_candidates": len(ranking),
             "eligible_candidates": len(eligible), "candidate_limit": limit,
+            "eligible_model_candidates": len(_distinct_products(eligible)),
             "rerank_candidates": len(pool)}
 
     async def _execute_exact_ids(self, spec: ProductSearchSpec, identifiers: list[str]) -> dict:
@@ -225,7 +248,7 @@ class CatalogSearchUseCase:
         lexical_hits, vector_hits = await asyncio.gather(lexical(), vector())
         # 硬约束先于候选截断，BM25会扫描当前小目录的全部词项命中。
         lexical_hits, lexical_rejected = self._filter_candidates(spec, lexical_hits)
-        lexical_hits = lexical_hits[:diagnostics["candidate_limit"]]
+        lexical_hits = _distinct_products(lexical_hits)[:diagnostics["candidate_limit"]]
         vector_eligible, vector_rejected = self._filter_candidates(spec, vector_hits or [])
         rejected = (lexical_rejected + vector_rejected)[:_FILTERED_OUT_LIMIT]
         # 单路故障时保留健康侧，不让零权重把降级结果清空。
@@ -256,12 +279,7 @@ class CatalogSearchUseCase:
             except Exception as err:
                 diagnostics["reranker_error"] = getattr(err, "code", type(err).__name__)
                 logger.warning("Hybrid 重排不可用：%s", diagnostics["reranker_error"])
-        deduped, seen = [], set()
-        for score, product in scored:
-            key = product.canonical_product_id or product.product_id
-            if key not in seen:
-                seen.add(key)
-                deduped.append((score, product))
+        deduped = _distinct_products(scored)
         result = {"hits": [self._candidate_card(score, p, spec) for score, p in deduped[:spec.top_k]],
                 "total_candidates": len(deduped), "recall_strategy": strategy, "rerank_applied": rerank_applied,
                 "retrieval_variant": "bm25_vector_rrf_v1", "vector_available": vector_hits is not None,
@@ -339,7 +357,8 @@ class CatalogSearchUseCase:
             products = await self._product_repo.find_by_ids([hit.product_id for hit in vector_hits])
             by_id = {product.product_id: product for product in products}
             scored = [(hit.score, by_id[hit.product_id]) for hit in vector_hits if hit.product_id in by_id]
-            if len(vector_hits) < top_n or top_n >= _MAX_VECTOR_RECALL or sum(bool(self.eligible_skus(p, spec)) for _, p in scored) >= limit:
+            eligible = [(score, product) for score, product in scored if self.eligible_skus(product, spec)]
+            if len(vector_hits) < top_n or top_n >= _MAX_VECTOR_RECALL or len(_distinct_products(eligible)) >= limit:
                 return scored
             top_n = min(_MAX_VECTOR_RECALL, top_n*2)
 

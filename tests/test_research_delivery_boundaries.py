@@ -47,18 +47,19 @@ def test_272_observations_are_not_272_selected_candidates():
 
 
 @pytest.mark.parametrize('delegated', [False, True])
-async def test_read_results_in_current_turn_can_be_archived(tmp_path, delegated):
+async def test_current_results_archive_only_under_actual_request_pressure(tmp_path, delegated):
     state = history(8)
     state['messages'] = [m for m in state['messages'] if not isinstance(m, HumanMessage)]
     state['messages'].insert(0, HumanMessage(id='current', name='delegated_task' if delegated else 'buyer',
                                            content='本次研究目标'))
-    middleware = policy(tmp_path, product_tokens=1)
+    middleware = policy(tmp_path, product_tokens=1, target_tokens=1)
     middleware.model = None
     update = await middleware.compact_checkpoint(state)
     assert {m.id for m in update['messages']} == {f't{i}' for i in range(6)}
     assert update['context_statistics']['archived_result_count'] == 6
     for message in update['messages']:
         payload = json.loads(message.content)
+        assert payload['archived'] and not payload['historical']
         saved = await middleware.store.get('buyer', 'handoff', payload['result_ref'])
         assert saved['data']['hits']
     assert not any('archived' in m.content for m in state['messages'] if isinstance(m, ToolMessage))
@@ -254,8 +255,7 @@ async def test_protected_research_still_obeys_complete_request_capacity(tmp_path
 
 
 @pytest.mark.parametrize('count', [6, 14])
-async def test_current_finalist_details_stay_available_with_existing_candidate_limit(tmp_path, count):
-    from app.application.tools.recommendation_tools import MAX_DECISION_ITEMS
+async def test_current_details_use_request_capacity_instead_of_candidate_count(tmp_path, count):
     state = history(count)
     state['messages'] = [m.model_copy(update={'name': 'get_product_details'}) if isinstance(m, ToolMessage) else m
                          for m in state['messages'] if not isinstance(m, HumanMessage)]
@@ -263,7 +263,7 @@ async def test_current_finalist_details_stay_available_with_existing_candidate_l
     middleware = policy(tmp_path, product_tokens=1)
     middleware.model = None
     update = await middleware.compact_checkpoint(state)
-    assert len(update['messages']) == max(0, count - MAX_DECISION_ITEMS)
+    assert not update['messages']
     for message in update['messages']:
         assert json.loads(message.content)['archived']
     state['messages'].append(HumanMessage(id='next', name='buyer', content='新的查询'))
