@@ -171,14 +171,18 @@ async def test_memory_action_uses_explicit_page_approval_and_verifies_persisted_
     assert events[-1]['payload']=={'approved':approved,'persisted':approved}
 
 
-@pytest.mark.parametrize('wrong',['tool','arguments','multiple','already_written'])
+@pytest.mark.parametrize('wrong',['tool','arguments','multiple','already_written','normalized_already_written'])
 async def test_memory_action_never_approves_a_different_or_already_executed_write(wrong):
     import json
     from scripts.eval.http_actions import execute_tool_approval_action
     action=_memory_action();posts=[]
     def handle(request):
         if request.method=='POST':posts.append(request);return httpx.Response(500)
-        if request.url.path=='/commerce/preferences':return httpx.Response(200,json={'preferences':[action['expected_payload']]})
+        if request.url.path=='/commerce/preferences':
+            preference=action['expected_payload']
+            if wrong=='normalized_already_written':preference={**preference,'statement':'不喜欢合成聚合物材质的商品',
+                'source_kind':'agent','source_ref':'session','evidence':action['expected_payload']['statement']}
+            return httpx.Response(200,json={'preferences':[preference]})
         row={'id':'approval','tool':'remember_preference_tool','arguments':json.dumps(action['expected_payload'])}
         if wrong=='tool':row['tool']='create_order_tool'
         if wrong=='arguments':row['arguments']=json.dumps({'kind':'like','statement':'别的偏好'})

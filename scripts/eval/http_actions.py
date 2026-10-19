@@ -97,6 +97,10 @@ async def execute_tool_approval_action(client, base_url, buyer_id, session_id, a
         response = await client.get(base_url + path, params={'buyer_id': buyer_id})
         response.raise_for_status()
         return response.json()
+    def from_approved_source(preference):
+        return (preference.get('kind') == action['expected_payload']['kind'] and preference.get('source_kind') == 'agent'
+            and preference.get('source_ref') == session_id and isinstance(preference.get('evidence'), str)
+            and bool(preference['evidence']) and preference['evidence'] in action['expected_payload']['statement'])
     snapshot = await read('/commerce/ag-ui/sessions/' + session_id)
     rows = snapshot['state'].get('toolApprovals', [])
     matches = [r for r in rows if r.get('tool') == action['action'] and
@@ -104,7 +108,7 @@ async def execute_tool_approval_action(client, base_url, buyer_id, session_id, a
     if len(rows) != 1 or len(matches) != 1 or not isinstance(matches[0].get('id'), str) or not matches[0]['id']:
         raise ValueError('待批准工具或参数与显式记忆动作不匹配，不执行批准')
     preferences = await read('/commerce/preferences')
-    if any(matches_expected(p, action['expected_payload']) for p in preferences['preferences']):
+    if any(matches_expected(p, action['expected_payload']) or from_approved_source(p) for p in preferences['preferences']):
         raise ValueError('批准前偏好已写入，不能算作确认保护通过')
     selected = matches[0]
     events.append({'type': 'eval.tool_approval.snapshot', 'payload': {'after_turn': action['after_turn'], 'approval': selected}})
@@ -120,9 +124,7 @@ async def execute_tool_approval_action(client, base_url, buyer_id, session_id, a
         raise ValueError('批准请求未完成或记忆操作仍待确认')
     saved = await read('/commerce/preferences')
     # 记忆服务可规范化陈述；用批准的来源和原文证据核对，后续商品断言再核对硬过滤。
-    present = any(p.get('kind') == action['expected_payload']['kind'] and p.get('source_kind') == 'agent'
-        and p.get('source_ref') == session_id and isinstance(p.get('evidence'), str) and p['evidence']
-        and p['evidence'] in action['expected_payload']['statement'] for p in saved['preferences'])
+    present = any(from_approved_source(p) for p in saved['preferences'])
     events.append({'type': 'eval.preferences.snapshot', 'payload': {'after_turn': action['after_turn'], 'preferences': saved['preferences']}})
     if present != action['approved']:
         raise ValueError('持久偏好与页面批准/拒绝结果不一致')
