@@ -136,3 +136,24 @@ it('实际App查看到确认闭环传递精确平台SKU与展示币种，准备�
     expect(products[1].currency).toBe('USD');
   }finally{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();}
 });
+
+it('同一平台查看两个规格：卡片、抽屉和确认准备保留首个指定目标，平台不重复',async()=>{
+  const {default:ProductCards}=await import('../src/components/ProductCards');
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);let opened:any;
+  const product=readProducts([{...records[0],requested_sku_ids:['P3020-S2','P3020-S1'],default_sku_id:'P3020-S2',
+    skus:records[0].skus.map((sku,i)=>({...sku,stock:10,price_major:i?107.99:98.97,currency:'CNY',display_price_major:i?107.99:98.97,display_currency:'CNY'}))}]);
+  const onPrepare=vi.fn();
+  try{
+    await act(async()=>root.render(<ProductCards mode="view" products={product} onDetail={g=>{opened=g;}}/>));
+    expect(host.querySelector('.price')?.textContent).toContain('107.99');
+    await act(async()=>host.querySelector<HTMLButtonElement>('.detail-button')!.click());
+    await act(async()=>root.render(<ProductDetail group={opened} busy={false} onClose={()=>{}} onPrepare={onPrepare} onCompare={()=>{}} onAsk={()=>{}}/>));
+    expect(host.querySelectorAll('input[name="platform"]')).toHaveLength(1);
+    expect(host.querySelectorAll('input[name="product-sku"]')).toHaveLength(2);
+    expect(host.querySelector<HTMLInputElement>('input[name="product-sku"]:checked')!.value).toBe('P3020-S2');
+    expect(host.querySelector('.price')?.textContent).toContain('107.99');
+    await act(async()=>[...host.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='准备下单')!.click());
+    expect(onPrepare).toHaveBeenCalledWith(product[0],'P3020-S2','CNY');
+  }finally{await act(async()=>root.unmount());host.remove();}
+});

@@ -74,7 +74,7 @@ export interface ProductCard {
   package_dimensions_cm?: { length?: number; width?: number; height?: number };
   updated_at?: string;
   default_sku_id?: string;
-  requested_sku_id?: string;
+  requested_sku_ids?: string[];
   selected_sku_id?: string;
   image_url?: string | null;
   image_kind?: "illustration" | "placeholder";

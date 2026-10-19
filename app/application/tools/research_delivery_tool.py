@@ -31,7 +31,7 @@ def build_research_delivery_tool(rates: ExchangeRateTable):
 
         用户本轮只要研究结果、暂不最终推荐或组合时使用。task_ids 来自 task_dispatch 的
         scope.task_id，可在一次调用中包含多份研究。系统填充事实和价格比较，分别展示专家的取舍建议与待核验问题，
-        成功后直接结束本轮；不调用推荐/比较，不发布购物卡，不下单。
+        已交付的研究不再重写；不调用推荐/比较，不下单。
         """
         tasks = runtime.state.get('task_plan', {}).get('tasks', {})
         selected = list(dict.fromkeys(task_ids))

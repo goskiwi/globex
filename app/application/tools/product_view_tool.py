@@ -22,7 +22,7 @@ def build_product_view_tool(catalog, evidence_store, bus):
         同款由页面按canonical_product_id合并为一张商品卡，卡内保留各平台全部规格和报价。
         targets仍提交各平台记录，不能自行丢掉报价；guidance不要按记录数说成多款或多张卡。
         不能用recommend_products代替详情展示。
-        不变更预算、选购项或交易授权；成功交付后本轮结束，不再写一份参数报告。
+        不变更预算、选购项或交易授权；已交付资料不再重复生成参数报告。
         """
         request = ProductViewInput(targets=targets, guidance=guidance)
         context = ShoppingContext.current()
@@ -35,17 +35,25 @@ def build_product_view_tool(catalog, evidence_store, bus):
             parameters = dict(effective["parameters"])
             budget = parameters.pop("landed_budget_major", None)
             parameters["target_currency"] = parameters.get("target_currency") or context.currency
-            cards = []
+            targets_by_product = {}
             for target in request.targets:
-                identifier = target.product_id
+                targets_by_product.setdefault(target.product_id, [])
+                if target.sku_id:
+                    targets_by_product[target.product_id].append(target.sku_id)
+            cards = []
+            for identifier, requested_skus in targets_by_product.items():
                 spec = ProductSearchSpec(product_id=identifier, **parameters,
                     excluded_product_ids=tuple(effective.get("excluded_products", [])),
                     excluded_sku_ids=tuple(effective.get("excluded_skus", [])))
                 result = await catalog.product_details(identifier, spec,
-                    sku_id=target.sku_id, landed_budget_major=budget)
+                    sku_id=requested_skus[0] if requested_skus else None, landed_budget_major=budget)
                 if not result["hits"]:
                     raise ValueError(f"目录不存在该商品，不能展示：{identifier}")
-                if target.sku_id:result["hits"][0]["requested_sku_id"]=target.sku_id
+                card = result['hits'][0]
+                if set(requested_skus) - {sku['sku_id'] for sku in card['skus']}:
+                    raise ValueError(f'指定规格不属于该商品，不能展示：{identifier}')
+                if requested_skus:
+                    card['requested_sku_ids'] = requested_skus
                 cards.extend(result["hits"])
             payload = {"guidance": request.guidance, "hits": cards, "purpose": "product_view"}
             payload["result_ref"] = await evidence_store.save(context.buyer_id, context.shopping_session_id, "product_view", payload)

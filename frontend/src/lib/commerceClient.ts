@@ -267,7 +267,11 @@ export function readProducts(value: unknown): ProductCard[] {
     }
     if (Number.isSafeInteger(item.quantity) && Number(item.quantity) > 0) card.quantity = item.quantity as number;
     if (Array.isArray(item.constraint_issues)) card.constraint_issues = item.constraint_issues.filter((v): v is string=>typeof v === "string");
-    if (typeof item.requested_sku_id === "string") card.requested_sku_id=item.requested_sku_id;
+    if (item.requested_sku_ids !== undefined) {
+      if (!isStringArray(item.requested_sku_ids) || !item.requested_sku_ids.length
+        || item.requested_sku_ids.some(id=>!skus.some(sku=>sku.sku_id===id))) return [];
+      card.requested_sku_ids=[...item.requested_sku_ids];
+    }
     if (typeof item.recommendation_reason === "string") card.recommendation_reason = item.recommendation_reason;
     if (Array.isArray(item.tradeoffs)) card.tradeoffs = item.tradeoffs.filter((v): v is string => typeof v === "string");
     const landed = readLandedPrice(item.landed_price, card.currency);

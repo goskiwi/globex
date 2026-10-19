@@ -29,8 +29,6 @@ export function initialOffer(group:ProductGroup):ProductOffer|undefined {
       if(sku)return {product,sku};
     }
   }
-  const focused=group.records.flatMap(product=>product.skus.filter(sku=>sku.sku_id===product.requested_sku_id).map(sku=>({product,sku})));
-  if(focused.length===1)return focused[0];
   const selected=group.records.flatMap(product=>product.skus
     .filter(sku=>sku.sku_id===product.selected_sku_id).map(sku=>({product,sku})));
   if(selected.length===1)return selected[0];
@@ -56,7 +54,8 @@ export function groupProductRecords(products:ProductCard[]):ProductGroup[]{
     const sharedFields=productFactKeys.filter(field=>records.every(p=>JSON.stringify(p[field])===JSON.stringify(first[field])));
     const description=records.every(p=>p.description===first.description)?first.description:undefined;
     const image=records.find(p=>p.image_url);
-    return {key,records,sharedFields,product:{...first,description,
+    const initialSkuId=records.find(p=>p.requested_sku_ids?.length)?.requested_sku_ids?.[0];
+    return {key,records,sharedFields,initialSkuId,product:{...first,description,
       image_url:image?.image_url,image_alt:image?.image_alt,image_kind:image?.image_kind}};
   });
 }

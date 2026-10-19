@@ -70,7 +70,7 @@ it('查看指定非默认规格时金额与抽屉起点保持同一SKU，全部�
   const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
   let opened:any;
   const products=readProducts([{product_id:'P3004',title:'查看商品',brand:'合成',score:1,category:'旅行装备',origin_country:'CN',currency:'CNY',price_major:107.99,
-    default_sku_id:'P3004-S2',requested_sku_id:'P3004-S2',highlights:[],skus:[{sku_id:'P3004-S1',spec:'原规格',price_major:98.97,currency:'CNY',stock:10},{sku_id:'P3004-S2',spec:'指定规格',price_major:107.99,currency:'CNY',stock:10}]}]);
+    default_sku_id:'P3004-S2',requested_sku_ids:['P3004-S2'],highlights:[],skus:[{sku_id:'P3004-S1',spec:'原规格',price_major:98.97,currency:'CNY',stock:10},{sku_id:'P3004-S2',spec:'指定规格',price_major:107.99,currency:'CNY',stock:10}]}]);
   try{
     await act(async()=>root.render(<ProductCards mode="view" products={products} onDetail={g=>{opened=g;}}/>));
     expect(host.textContent).toContain('107.99');expect(host.textContent).toContain('指定规格');expect(host.textContent).not.toContain('98.97');

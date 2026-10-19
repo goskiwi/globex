@@ -14,10 +14,10 @@ async def verified_sku_items(lookup, buyer_id: str, session_id: str, items: list
         evidence = await lookup(buyer_id, session_id, product_id=product_id, sku_id=sku_id or "")
         if evidence is None:
             raise ValueError(f"当前会话缺少可用商品证据：{sku_id or product_id}；请先取得所需来源的商品资料")
-        card = next((hit for hit in evidence["data"].get("hits", []) if hit.get("product_id") == product_id), None)
-        if card is None:
+        cards = [hit for hit in evidence["data"].get("hits", []) if hit.get("product_id") == product_id]
+        if not cards:
             raise ValueError("商品证据与请求不匹配")
-        sku_ids = {sku["sku_id"] for sku in card.get("skus", []) if sku.get("sku_id")}
+        sku_ids = {sku["sku_id"] for card in cards for sku in card.get("skus", []) if sku.get("sku_id")}
         if sku_id not in sku_ids:
             raise ValueError(f"商品 {product_id} 缺少可核对的规格，请先读取资料并明确 sku_id")
         verified.append(OrderItemInput(product_id, sku_id, item["quantity"]))
