@@ -286,6 +286,7 @@ export interface ResearchReport {
   caveats: string[];
   questions: string[];
   issues: string[];
+  transaction_state: 'none' | 'awaiting_confirmation';
 }
 export interface ResearchDelivery {
   runId: string;

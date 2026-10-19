@@ -54,6 +54,9 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
       </div>}
       {!!report.caveats.length && <p>资料局限：{report.caveats.join('；')}</p>}
       {!!report.unmet_requirements.length && <p>未满足明确要求：{report.unmet_requirements.join('；')}</p>}
+      {!!report.questions.length && <p>需要补充：{report.questions.join('；')}</p>}
+      {!!report.issues.length && <p>未完成事项：{report.issues.join('；')}</p>}
+      {report.transaction_state==='awaiting_confirmation' && <p>已有确认单等待页面批准，尚未执行交易。</p>}
       <ProductCards mode="research" products={report.items.map(card)}
         onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}/>
       {!report.items.length && <p>本次没有交回符合要求的候选，未满足条件见上方说明。</p>}

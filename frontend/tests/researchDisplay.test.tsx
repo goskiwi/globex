@@ -11,13 +11,23 @@ import {readResearchReports} from '../src/lib/research';
 
 const assessment='适合优先减轻随身负担的人，折叠后也方便收纳。若每天携带电脑，独立电脑仓和保护能力仍需核验。';
 const report={task_id:'bag',title:'通勤背包研究',status:'partial',product_count:1,sku_count:1,
-  caveats:[],unmet_requirements:['电脑仓资料尚未核实'],questions:[],issues:[],price_comparisons:[],items:[{
+  caveats:['目录未标明背板结构'],unmet_requirements:['电脑仓资料尚未核实'],questions:['需要放多大电脑？'],
+  issues:['补充来源暂不可用'],transaction_state:'awaiting_confirmation',price_comparisons:[],items:[{
     product_id:'P1003',sku_id:'P1003-S1',assessment,caveats:['是否有独立电脑仓？'],
     facts:{product:{product_id:'P1003',title:'Wanderlite 折叠旅行双肩包 35L',weight_kg:0.38,
       description:'完整目录原文仍保留，防泼水且可折叠。',highlights:['支持折叠'],
       dimensions_cm:{length:50},material_tags:['尼龙'],rating_summary:{average:4.6,review_count:217},ships_to:['CN']},
       sku:{sku_id:'P1003-S1',spec:'石墨黑',price_major:11958.33,currency:'JPY',display_price_major:574,display_currency:'CNY',stock:5},quotes:[],historical:false}}]};
-const delivery={runId:'r',guidance:'背包研究已交回，电脑仓资料尚未核实。',reports:[report],status:'partial',task_ids:['bag'],completed_task_ids:[]};
+const delivery={runId:'r',guidance:'已交付1份研究报告。',reports:[report],status:'partial',task_ids:['bag'],completed_task_ids:[]};
+
+it('研究组件完整展示缺口、问题、执行事项与确认状态，每项只出现一次',()=>{
+  const html=renderToStaticMarkup(<ResearchReports delivery={delivery as ResearchDelivery}/>);
+  for(const text of [report.title,'目录未标明背板结构','电脑仓资料尚未核实','需要放多大电脑？','补充来源暂不可用',
+    '已有确认单等待页面批准，尚未执行交易。']){
+    const visible=html.replace(/<[^>]*>/g,'');
+    expect(visible.split(text)).toHaveLength(2);
+  }
+});
 
 it('只读取当前结构化研究，不从旧正文构造候选',()=>{
   expect(readResearchReports([delivery])[0].reports[0].items[0].assessment).toBe(assessment);
@@ -54,6 +64,13 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     expect(section).not.toBeNull();
     expect(section.closest('.assistant-turn')?.getAttribute('data-message-id')).toBe(`${firstRun}:final:answer`);
     expect(section.querySelector('.research-analysis')?.textContent).toContain(assessment);
+    const turn=section.closest('.assistant-turn')!;
+    expect(turn.querySelectorAll('h3')).toHaveLength(1);
+    for(const text of [report.title, ...report.caveats, ...report.unmet_requirements, ...report.questions, ...report.issues,
+      '已有确认单等待页面批准，尚未执行交易。']){
+      expect(turn.textContent!.split(text)).toHaveLength(2);
+      expect(turn.querySelector('.assistant-text')?.textContent).not.toContain(text);
+    }
     expect(section.querySelector('.product-card')?.textContent).not.toContain(assessment);
     expect(section.textContent).toContain('¥574.00');
     expect(section.textContent).toContain('部分完成');

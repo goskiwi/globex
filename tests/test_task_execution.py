@@ -56,11 +56,13 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         assert model.cursor == 3, '研究交付后不能再调用模型收尾'
         assert result.status == ('partial' if partial else 'completed')
         assert result.presentations[-1]["kind"]=="research"
-        assert '背包研究' in result.final_text and '水杯研究' in result.final_text
+        assert result.final_text.startswith('已交付2份研究报告。')
+        assert '背包研究' not in result.final_text and '水杯研究' not in result.final_text
         assert result.presentations[-1]["kind"]=="research"
         payload = next(m.artifact['data'] for m in reversed(state['messages'])
                        if isinstance(m, ToolMessage) and m.name == 'present_research')
         candidates = [c for report in payload['reports'] for c in report['items']]
+        assert [report['title'] for report in payload['reports']] == ['背包研究', '水杯研究']
         assert [c['sku_id'] for c in candidates] == ['P1003-S1','P1008-S1']
         assert candidates[0]['facts']['sku']['price_major'] == 129
         assert candidates[0]['facts']['product']['weight_kg'] == .38

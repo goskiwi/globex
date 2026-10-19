@@ -4,7 +4,7 @@ from langchain_core.messages import ToolMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.application.runtime.results import ToolResult, ToolResultState
-from app.application.usecases.research_report import project_research_report, research_summary
+from app.application.usecases.research_report import project_research_report
 from app.domain.catalog.exchange_rate import ExchangeRateTable
 
 
@@ -23,17 +23,6 @@ class ResearchDeliveryInput(BaseModel):
         if len({r.task_id for r in self.reports}) != len(self.reports):
             raise ValueError('同一研究任务只能交付一次标题')
         return self
-
-
-def _report(data):
-    """正文说明本次交付范围；候选取舍和已读资料由研究组件完整展示。"""
-    lines = ['### ' + data['title'], research_summary(data['status'], data['items'])]
-    for key, label in (('unmet_requirements', '未满足要求'), ('caveats','资料局限'), ('questions', '需要补充'), ('issues', '未完成事项')):
-        if data.get(key):
-            lines.append(label + '：' + '；'.join(data[key]))
-    if data.get('transaction_state') == 'awaiting_confirmation':
-        lines.append('已有确认单等待页面批准，尚未执行交易。')
-    return '\n\n'.join(lines)
 
 
 def build_research_delivery_tool(rates: ExchangeRateTable):
@@ -66,10 +55,8 @@ def build_research_delivery_tool(rates: ExchangeRateTable):
         from app.application.runtime.research_plan import delivery_coverage, project_delivery_outcome
         coverage=delivery_coverage(runtime.state.get('task_plan',{}),selected,completed,'research')
         projected = [project_research_report(results[key], rates, title=titles[key]) for key in selected]
-        guidance='\n\n'.join(_report(report) for report in projected)
-        if coverage['unmet_goals']:
-            guidance+=f"\n\n还有{len(coverage['unmet_goals'])}项研究尚未完成。"
-        return ToolResult({'guidance':guidance,
+        # 完整内容只由报告组件展示；最终文字保留交付回执，不再复制报告。
+        return ToolResult({'guidance':f'已交付{len(projected)}份研究报告。',
                            'reports': projected,
                            'task_ids': selected, 'completed_task_ids': completed,
                            'plan_outcome':project_delivery_outcome(coverage),'status':coverage['status']})

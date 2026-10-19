@@ -6,7 +6,6 @@ from pydantic import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from app.application.agents.handoff import ResearchSubmission, build_submission_tool
-from app.application.tools.research_delivery_tool import _report
 from app.application.usecases.research_report import project_research_report, research_summary
 from app.domain.catalog.exchange_rate import ExchangeRateTable
 from tests.test_research_delivery_boundaries import research_receipt
@@ -37,10 +36,8 @@ def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
     assert unit['minimum_minor'] == 29118 and unit['maximum_minor'] == 29900
     assert unit['spread_minor'] == 782 and unit['lowest'][0]['sku_id'] == 'P40018-S1'
     assert landed['minimum_minor'] == 31618 and landed['maximum_minor'] == 32400
-    text = _report(result)
-    assert '2款商品、2个明确规格' in text and '3款' not in text and '头戴式' not in text
+    assert 'summary' not in result
     assert result['items'][0]['caveats'] == ['是否有电脑仓？']
-    assert '商品原文' not in text and '取舍建议' not in text
     assert data == before, '事实投影不能改写原始回执'
 
 
@@ -52,12 +49,10 @@ def test_assessment_is_presented_separately_without_replacing_facts_or_price_com
     result = project_research_report(data, RATES, title='研究结果')
     assert result['items'][0]['assessment'] == candidate['assessment']
     assert result['items'][0]['facts'] == before
-    text = _report(result)
     assert result['items'][0]['facts']['product']['description'] == '支持蓝牙和降噪，未提供佩戴形式'
     assert result['items'][0]['facts']['sku']['price_major'] == 299
     assert result['price_comparisons'][0]['minimum_minor'] == 29118
-    assert candidate['assessment'] not in text, '取舍由组件完整展示，正文不重复'
-    assert '2款商品、2个明确规格' in text
+    assert (result['product_count'], result['sku_count']) == (2, 2)
 
 
 def test_submission_requires_current_assessment_without_filling_old_payload():

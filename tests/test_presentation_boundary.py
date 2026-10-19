@@ -1,10 +1,40 @@
 """交付职责边界：内部任务不作标题，推荐与组合预算互不混淆。"""
 import json
+from copy import deepcopy
+from types import SimpleNamespace
+import pytest
+from langchain_core.messages import ToolMessage
 from app.application.tools.recommendation_tools import build_recommendation_tool,build_bundle_tool,Pick
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
 from app.domain.catalog.product_search_spec import ProductSearchSpec
 from tests.trade_test_helpers import confirmation_env
+
+
+@pytest.mark.parametrize('status', ['completed', 'partial', 'needs_input', 'failed'])
+async def test_research_receipt_is_brief_and_report_keeps_all_completion_details(status):
+    from app.application.tools.research_delivery_tool import build_research_delivery_tool
+    from app.domain.catalog.exchange_rate import ExchangeRateTable
+    from tests.test_research_delivery_boundaries import research_receipt
+    receipt = research_receipt('P1003')
+    receipt['scope']['task_id'] = 'bag'
+    receipt.update(status=status, caveats=['目录未标明背板结构'],
+                   unmet_requirements=['独立电脑仓缺少证明'] if status == 'partial' else [],
+                   questions=['需要放多大电脑？'] if status == 'needs_input' else [],
+                   issues=['补充来源暂不可用'] if status == 'failed' else [],
+                   transaction_state='awaiting_confirmation' if status == 'needs_input' else 'none')
+    original = deepcopy(receipt)
+    runtime = SimpleNamespace(state={'messages': [ToolMessage(content='', name='task_dispatch',
+        tool_call_id='research', artifact={'data': receipt})], 'task_plan': {'tasks': {'bag': {'stale': False, 'scope': receipt['scope']}}}})
+    result = await build_research_delivery_tool(ExchangeRateTable())(
+        [{'task_id': 'bag', 'title': '通勤背包研究'}], runtime)
+    assert result.ok
+    assert result.data['guidance'] == '已交付1份研究报告。'
+    report = result.data['reports'][0]
+    for field in ('caveats', 'unmet_requirements', 'questions', 'issues', 'transaction_state', 'status'):
+        assert report[field] == original[field]
+    assert report['items'] == original['candidates']
+    assert receipt == original
 
 
 async def test_individual_choices_and_bundle_share_facts_but_apply_distinct_total_budget(confirmation_env):
@@ -50,6 +80,7 @@ async def test_main_supplies_public_title_without_copying_internal_goal(tmp_path
         payload=result.presentations[0]['payload'];report=payload['reports'][0]
         assert report['title']==title and 'goal' not in report
         assert internal not in json.dumps(payload,ensure_ascii=False) and 'description/highlights' not in result.final_text
-        assert title in result.final_text
+        assert result.final_text == '已交付1份研究报告。'
+        assert title not in result.final_text
         assert state['task_plan']['tasks']['bag']['scope']['goal']==internal
     finally:await c.shutdown()
