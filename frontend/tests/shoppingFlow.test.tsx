@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -27,7 +28,7 @@ it('完整App表单归属原回复，提交后接一次结果、收起表单，�
       const process={runId:lastRun,userMessageId:messages.at(-1).id,status:posts===1?'waiting_input':'completed',steps:[]};processes.push(process);
       if(posts===1){origin=lastRun;form=makeForm();}
       messages=[...messages,{id:lastRun+':final:answer',role:'assistant',content:posts===1?'请补充使用方式。':'更推荐便携款。'}];
-      const state=posts===1?{process,shoppingForms:[form]}:{process,recommendation:decision,deliveredRunId:lastRun,shoppingForms:[]};
+      const state=posts===1?{process,shoppingForms:[form]}:{process,presentations:presented('recommendation',decision,lastRun),shoppingForms:[]};
       return sse([{type:'RUN_STARTED',runId:lastRun,threadId:session},{type:'STATE_SNAPSHOT',snapshot:state},
         {type:'MESSAGES_SNAPSHOT',messages},{type:'RUN_FINISHED',runId:lastRun,threadId:session}]);
     }
@@ -39,8 +40,7 @@ it('完整App表单归属原回复，提交后接一次结果、收起表单，�
     }
     if(url.includes('/shopping-forms?'))return Response.json({forms:form?[form]:[]});
     if(url.includes('/ag-ui/sessions?'))return Response.json({sessions:session?[{id:session,title:'测试选购',updatedAt:1}]:[]});
-    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,processes,productViews:[],productHistory:[],events:[],
-      run:{runId:lastRun,threadId:session,status:'completed',messages,state:{recommendation:posts>1?decision:null,deliveredRunId:posts>1?lastRun:null,process:processes.at(-1)}}});
+    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,processes,events:[],run:{runId:lastRun,threadId:session,status:'completed',messages,state:{presentations:presented('recommendation',posts>1?decision:null,lastRun),process:processes.at(-1)}},presentations:presented('recommendation',posts>1?decision:null,lastRun)});
     return Response.json({forms:[],skills:[],confirmations:[],products:[],sessions:[],revision:0});
   }));
   const host=document.createElement('div');document.body.append(host);let root=createRoot(host);

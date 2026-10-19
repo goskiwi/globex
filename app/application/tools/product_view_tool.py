@@ -45,10 +45,10 @@ def build_product_view_tool(catalog, evidence_store, bus):
                     sku_id=target.sku_id, landed_budget_major=budget)
                 if not result["hits"]:
                     raise ValueError(f"目录不存在该商品，不能展示：{identifier}")
+                if target.sku_id:result["hits"][0]["requested_sku_id"]=target.sku_id
                 cards.extend(result["hits"])
             payload = {"guidance": request.guidance, "hits": cards, "purpose": "product_view"}
             payload["result_ref"] = await evidence_store.save(context.buyer_id, context.shopping_session_id, "product_view", payload)
-            bus.publish(context.shopping_session_id, "product_view.result", payload)
             return _ok(payload)
         except (ValueError, KeyError, TypeError) as error:
             return _fail(str(error))

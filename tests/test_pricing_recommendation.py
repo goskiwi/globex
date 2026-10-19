@@ -1,3 +1,4 @@
+from tests.presentation_helpers import delivery_middlewares
 """完整报价与推荐链：使用真实目录、证据库和 SQLite，不调用外部模型。"""
 import pytest
 
@@ -77,18 +78,16 @@ async def test_recommendation_uses_evidence_current_constraints_and_actual_quant
 
 
 def test_final_recommendation_is_not_replaced_by_later_search():
-    from ag_ui.core import RunAgentInput
-    from app.application.agents.ag_ui_adapter import AGUIRunAdapter
-    from app.infrastructure.eventbus import TradeEvent
-    request = RunAgentInput(thread_id="s", run_id="r", state={}, messages=[], tools=[], context=[], forwarded_props={})
-    adapter = AGUIRunAdapter(request, lambda event: None)
-    recommendation = {"mode": "alternatives", "hits": [{"product_id": "P1001"}], "quote": None, "result_ref": "ctx_test"}
-    adapter.on_trade_event(TradeEvent("s", "recommendation.result", recommendation, ""))
-    adapter.on_trade_event(TradeEvent("s", "tool.result", {"tool": "product_search_tool", "hits": [{"product_id": "P1003"}]}, ""))
-    assert adapter.state["recommendation"] is None
-    adapter.finish("已交付推荐", "completed", None, delivery={"kind":"recommendation","status":"completed"})
-    assert adapter.state["recommendation"] == recommendation
-    assert "products" not in adapter.state
+    from tests.presentation_helpers import accept
+    from tests.test_product_delivery import adapter,emit
+    target,_=adapter()
+    payload={'mode':'alternatives','hits':[{'product_id':'P1001'}],'quote':None,'result_ref':'ctx_test'}
+    accept(target,'recommendation',payload)
+    emit(target,'tool.result',{'tool':'product_search_tool','hits':[{'product_id':'P1003'}]})
+    target.finish('已交付','completed',None)
+    assert target.state['presentations'][0]['payload']==payload
+    assert 'products' not in target.state
+
 
 
 def test_schema_migration_preserves_nonempty_history(tmp_path):
@@ -124,7 +123,7 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
         "mode": "bundle", "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "preferred_sku_id":None, "dimensions":["旅行收纳"], "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
         AIMessage(content="两件合计418元")])
     tool = as_langchain_tool(build_recommendation_tool(catalog, env.evidence, env.bus), args_schema=RecommendationInput)
-    graph = create_agent(model, tools=[tool], middleware=[FinalDeliveryMiddleware()])
+    graph = create_agent(model, tools=[tool], middleware=delivery_middlewares())
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY"}}))
     try:

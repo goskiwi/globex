@@ -30,11 +30,9 @@ async def ask(c, text, **kwargs):
 async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_path, monkeypatch, partial):
     child_models = iter([ScriptedModel(responses=[
         call('get_product_details', {'product_id': product}),
-        submission(status='partial' if partial and product == 'P1008' else 'completed',
-            issues=['未核验用户额外要求'] if partial and product == 'P1008' else [],
-            candidates=[{'product_id': product, 'sku_id': product + '-S1',
-            'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'open_questions': ['是否有电脑仓？']}])]) for product in ('P1003', 'P1008')])
-    steps = [{'id': key, 'goal': goal} for key, goal in [('bag', '背包研究'), ('cup', '水杯研究')]]
+        submission(candidates=[{'product_id': product, 'sku_id': product + '-S1',
+            'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'caveats': ['是否有电脑仓？']}],unmet_requirements=['必须核验明确附加要求'] if partial and product == 'P1008' else [])]) for product in ('P1003', 'P1008')])
+    steps = [{'id':key,'goal':goal,'requirements':['必须核验明确附加要求'] if partial and key=='cup' else []} for key,goal in [('bag', '背包研究'), ('cup', '水杯研究')]]
     model = ScriptedModel(responses=[
         call('update_shopping_state', {'update': {'plan': steps}}),
         AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'args': {
@@ -48,9 +46,9 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         result, state = await ask(c, '分别请专家研究背包和水杯，本轮只要两份研究，不发布最终购物卡')
         assert model.cursor == 3, '研究交付后不能再调用模型收尾'
         assert result.status == ('partial' if partial else 'completed')
-        assert result.delivery["kind"]=="research"
+        assert result.presentations[-1]["kind"]=="research"
         assert '背包研究' in result.final_text and '水杯研究' in result.final_text
-        assert result.delivery["kind"]=="research"
+        assert result.presentations[-1]["kind"]=="research"
         payload = next(m.artifact['data'] for m in reversed(state['messages'])
                        if isinstance(m, ToolMessage) and m.name == 'present_research')
         candidates = [c for report in payload['reports'] for c in report['items']]
@@ -58,7 +56,7 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         assert candidates[0]['facts']['sku']['price_major'] == 129
         assert candidates[0]['facts']['product']['weight_kg'] == .38
         assert candidates[0]['assessment'] == '适合优先考虑便携性的需求，实际适配仍需核验。'
-        assert candidates[0]['open_questions'] == ['是否有电脑仓？']
+        assert candidates[0]['caveats'] == ['是否有电脑仓？']
         assert 'description' not in result.final_text and '商品原文' not in result.final_text
         assert state['task_plan']['tasks']['bag']['delivery']=='research'
         assert state['task_plan']['tasks']['bag']['delivery']!='products'
@@ -117,7 +115,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     deliveries=[]
     try:
-        with observe_run_events(lambda e:deliveries.append(e.payload) if e.type=='recommendation.result' else None):
+        with observe_run_events(lambda e:deliveries.append(e.payload['payload']) if e.type=='presentation.result' and e.payload['kind']=='recommendation' else None):
             result,state=await ask(c,'请按分项预算研究商品，不能扩大背包预算')
         dispatch=next((m.artifact or {})['data'] for m in state['messages'] if isinstance(m,ToolMessage) and m.name=='task_dispatch')
         assert dispatch['scope']['effective_search']['parameters']['price_max_major']==budget
@@ -127,7 +125,8 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
             assert result.status=='partial'
             assert not deliveries
             assert state['task_plan']['steps'][0]['status']=='blocked'
-            assert any(e['code']=='candidate_constraints_failed' for e in dispatch['feedback'])
+            assert 'P1003-S1' not in dispatch['qualified_skus']
+            assert 'over_price_cap' in dispatch['candidates'][0]['facts']['sku']['constraint_issues']
         else:
             assert len(deliveries)==1 and deliveries[0]['hits'][0]['price_major']==129
             assert result.status==('partial' if extra_goal else 'completed')
@@ -270,9 +269,9 @@ async def test_implicit_task_conditions_cannot_be_omitted_at_delivery(tmp_path,m
 @pytest.mark.parametrize('within_budget',[False,True])
 async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_path,monkeypatch,within_budget):
     child=ScriptedModel(responses=[call('get_product_details',{'product_id':'P1003'}),
-        submission(status='partial',unmet_constraints=[] if within_budget else ['超出背包预算'],issues=['研究尚未完成'],candidates=[
-            {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。','unmet_constraints':[] if within_budget else ['超出预算']}
-            for sku in ['P1003-S1','P1003-S2']])])
+        submission(candidates=[
+            {'product_id':'P1003','sku_id':sku,'assessment':'适合优先考虑便携性的需求，实际适配仍需核验。'}
+            for sku in ['P1003-S1','P1003-S2']],caveats=['研究尚未完成'])])
     model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
         'filters':{'price_max_major':300,'target_currency':'CNY'},
         'plan':[{'id':'bag','goal':'100元内的背包','filters':{'price_max_major':150 if within_budget else 100}}]}}),
@@ -286,11 +285,11 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
         receipt=next(m for m in state['messages'] if isinstance(m,ToolMessage) and m.name=='compare_products')
         assert receipt.status=='success'
         data=receipt.artifact['data']
-        assert data['plan_outcome']['status']=='partial'
+        assert data['plan_outcome']['status']==('completed' if within_budget else 'partial')
         assert all(('over_price_cap' in p['constraint_issues']) is (not within_budget) for p in data['hits'])
-        assert state['task_plan']['steps'][0]['status']=='blocked'
+        assert state['task_plan']['steps'][0]['status']==('delivered' if within_budget else 'blocked')
         _,resumed=await ask(c,'当前研究完成了吗？')
-        assert resumed['task_plan']['steps'][0]['status']=='blocked'
+        assert resumed['task_plan']['steps'][0]['status']==('delivered' if within_budget else 'blocked')
     finally:await c.shutdown()
 
 

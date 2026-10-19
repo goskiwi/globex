@@ -131,7 +131,6 @@ def build_recommendation_tool(catalog, evidence_store, bus):
             _attach_plan_outcome(result, context, request.picks)
             ref = await evidence_store.save(context.buyer_id, context.shopping_session_id, "recommendation", result)
             result["result_ref"] = ref
-            bus.publish(context.shopping_session_id, "recommendation.result", result)
             return _ok(result)
         except (ValueError, KeyError, TypeError) as exc:
             return _fail(str(exc))
@@ -158,7 +157,6 @@ def build_comparison_tool(catalog, evidence_store, bus):
                       "unverified_requirements": unverified}
             _attach_plan_outcome(result, context, request.entries)
             result["result_ref"] = await evidence_store.save(context.buyer_id, context.shopping_session_id, "comparison", result)
-            bus.publish(context.shopping_session_id, "comparison.result", result)
             return _ok(result)
         except (ValueError, KeyError, TypeError) as exc:
             return _fail(str(exc))

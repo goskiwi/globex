@@ -157,7 +157,7 @@ class RunService:
         result=run['result']
         if result is None:
             return ExecutionResult('运行结果尚未取得完整持久记录，请先核查状态。','failed','persistence_error')
-        return ExecutionResult(result['text'],result['status'],result['stop_reason'],result['delivery'])
+        return ExecutionResult(result['text'],result['status'],result['stop_reason'],tuple(result['presentations']))
 
     async def wait(self, run_id, buyer_id, timeout=None):
         deadline=time.monotonic()+timeout if timeout is not None else None
@@ -251,8 +251,7 @@ class RunService:
             if result.error or adapter.error:
                 adapter.fail(result.error if getattr(result,"error_code",None) in {"SESSION_VERSION_CHANGED","CONTEXT_CAPACITY_EXCEEDED","PERSISTENCE_FAILED"} else adapter.error or "本轮服务暂时未能完成请求，请重试。", code=getattr(result,"error_code",None))
             else:
-                adapter.finish(result.final_text, result.status, result.stop_reason,
-                               delivery=result.delivery)
+                adapter.finish(result.final_text, result.status, result.stop_reason)
         except asyncio.CancelledError:
             adapter.fail("本轮已明确停止" if entry.reason == "stop" else "服务重启或执行中断，已保存的内容仍可恢复。", cancelled=entry.reason == "stop")
         except Exception:

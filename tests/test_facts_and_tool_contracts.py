@@ -28,7 +28,7 @@ def card():
 
 
 def deliver(evidence, sku='P1003-S2'):
-    submission=ResearchSubmission(status='completed',candidates=[
+    submission=ResearchSubmission(candidates=[
         {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
     assert not evidence.validate(submission)
     return evidence.delivered(submission).candidates[0].facts
@@ -121,11 +121,10 @@ def test_optional_phone_is_plain_optional_text_without_format_conversion():
 
 
 def test_unknown_research_attributes_are_not_unmet_user_constraints():
-    result=ResearchSubmission(status='completed',candidates=[{'product_id':'P1003',
-        'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'open_questions':['电脑隔层？']}])
-    assert result.status=='completed' and not result.unmet_constraints
-    with pytest.raises(ValidationError):
-        ResearchSubmission(status='completed',unmet_constraints=['买家要求防水，未核验'])
+    result=ResearchSubmission(candidates=[{'product_id':'P1003','assessment':'依据已读资料','caveats':['电脑隔层未知']}])
+    assert not result.unmet_requirements and 'status' not in ResearchSubmission.model_fields
+    assert result.candidates[0].caveats==['电脑隔层未知']
+
 
 
 async def test_delegation_keeps_prior_conditions_and_current_source_without_substring_gate():
@@ -159,7 +158,7 @@ def test_delegation_rejects_removed_research_dimensions_without_alias():
 @pytest.mark.parametrize('sku', ['', ' ', '\t\n'])
 def test_blank_sku_is_rejected_not_converted_to_product_only(sku):
     with pytest.raises(ValidationError):
-        ResearchSubmission(status='completed',candidates=[
+        ResearchSubmission(candidates=[
             {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
 
 

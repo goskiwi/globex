@@ -82,15 +82,14 @@ async def test_view_projects_selected_sku_without_hiding_other_choices(confirmat
 
 @pytest.mark.parametrize('complete',[False,True])
 def test_view_commit_is_explicit_and_does_not_replace_recommendation(complete):
-    request=RunAgentInput.model_validate(body())
-    previous={'recommendation':{'hits':[{'product_id':'previous'}]},'comparison':None,'deliveredRunId':'old'}
-    target=AGUIRunAdapter(request,lambda event:None,authoritative_state=previous)
-    target.on_trade_event(TradeEvent('s1','product_view.result',{'purpose':'product_view','guidance':'查看资料',
-        'hits':[{'product_id':'P3020'}],'result_ref':'ctx_view'},''))
-    assert target.state['productViews']==[]
-    target.finish('查看资料','completed',None,delivery={"kind":"product_view","status":"completed"} if complete else None)
-    assert bool(target.state['productViews']) is complete
-    assert target.state['recommendation']==previous['recommendation'] and target.state['deliveredRunId']=='old'
+    from tests.presentation_helpers import accept
+    target=AGUIRunAdapter(RunAgentInput.model_validate(body()),lambda event:None)
+    accept(target,'recommendation',{'hits':[{'product_id':'previous'}]},identifier='before')
+    if complete:accept(target,'product_view',{'purpose':'product_view','guidance':'查看资料','hits':[{'product_id':'P3020'}],'result_ref':'ctx_view'},identifier='view')
+    target.finish('查看资料','completed',None)
+    assert len(target.state['presentations'])==1+int(complete)
+    assert target.state['presentations'][0]['kind']=='recommendation'
+
 
 
 async def test_journal_restores_view_with_its_original_reply_after_followup(tmp_path):
@@ -100,13 +99,14 @@ async def test_journal_restores_view_with_its_original_reply_after_followup(tmp_
              'result_ref':'ctx_view','runId':'view'}
     await journal.append('view','owner',[
         {'type':'MESSAGES_SNAPSHOT','messages':[{'id':'view:final:answer','role':'assistant','content':'详情资料'}]},
-        {'type':'STATE_SNAPSHOT','snapshot':{'productViews':[payload]}},
+        {'type':'STATE_SNAPSHOT','snapshot':{'presentations':[{'id':'view-record','kind':'product_view','status':'completed','runId':'view','payload':payload}]}},
         {'type':'RUN_FINISHED','runId':'view','threadId':'s1'}])
     await journal.reserve(body('followup'),'b1','owner')
     await journal.append('followup','owner',[{'type':'RUN_FINISHED','runId':'followup','threadId':'s1'}])
     restored=await journal.session('s1','b1')
-    assert restored['productViews']==[payload]
-    assert restored['run']['state']['recommendation'] is None
+    assert restored['presentations'][0]['payload']==payload
+    assert restored['presentations'][0]['runId']=='view'
+    assert restored['run']['state'].get('presentations',[])==[]
 
 
 async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatch):
@@ -120,7 +120,7 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
     container=await _container(tmp_path,monkeypatch,model)
     try:
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','商品价100元人民币，看看颈枕'))
-        assert (result.delivery["kind"]=="product_view") and result.final_text==guidance and model.cursor==3
+        assert (result.presentations[-1]["kind"]=="product_view") and result.final_text==guidance and model.cursor==3
         state=await container.orchestrator._sessions._agents['s'].graph.aget_state({'configurable':{'thread_id':'s'}})
         assert state.values['shopping_work']['filters']['price_max_major']==100
         assert not await container.orchestrator._evidence_store.search('b','s',kind='display_batch')

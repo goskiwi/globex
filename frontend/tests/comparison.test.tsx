@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 import {renderToStaticMarkup} from "react-dom/server";
 import {expect, it} from "vitest";
 import ProductComparison from "../src/components/ProductComparison";
@@ -74,7 +75,7 @@ it("真实 AG-UI 快照消费、本机恢复和追加问题保留比较，新建
   let calls=0;
   const fetch=async(_url:any,init:any)=>{
     const body=JSON.parse(String(init.body));
-    const state={products:[],comparison:++calls===1?comparison:null,recommendation:null,progress:[]};
+    const state={products:[],progress:[],presentations:[...presented('recommendation',null,body.runId),...presented('comparison',++calls===1?comparison:null,body.runId)]};
     return new Response([
       {type:"RUN_STARTED",threadId:body.threadId,runId:body.runId},
       {type:"STATE_SNAPSHOT",snapshot:state},

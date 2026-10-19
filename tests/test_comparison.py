@@ -1,3 +1,4 @@
+from tests.presentation_helpers import delivery_middlewares
 """比较复用权威报价与原生图交付，不修改买家选择和交易。"""
 import json
 import pytest
@@ -34,7 +35,7 @@ async def test_compare_sibling_skus_quotes_and_terminal_delivery(comparison_env)
         def bind_tools(self, tools, **kwargs): return self
     model = Model(responses=[AIMessage(content="", tool_calls=[{"id":"comparison", "name":"compare_products", "args":{
         "entries":[p.model_dump() for p in env.entries], "guidance":env.guidance, "preferred_sku_id":"P1001-S1", "dimensions":["颜色偏好"]}}]), AIMessage(content="不该执行")])
-    graph = create_agent(model, tools=[as_langchain_tool(env.tool, args_schema=ComparisonInput)], middleware=[FinalDeliveryMiddleware()])
+    graph = create_agent(model, tools=[as_langchain_tool(env.tool, args_schema=ComparisonInput)], middleware=delivery_middlewares())
     try:
         output = await graph.ainvoke({"messages":[HumanMessage(content="比较两种规格")]})
         assert model.i == 1 and output["messages"][-1].content == env.guidance
@@ -89,51 +90,47 @@ async def test_comparison_requires_current_buyer_evidence(comparison_env):
 
 
 def test_comparison_projection_survives_later_search_and_restores():
-    from ag_ui.core import RunAgentInput
-    from app.application.agents.ag_ui_adapter import AGUIRunAdapter
-    from app.infrastructure.eventbus import TradeEvent
-    request = RunAgentInput(thread_id="s", run_id="r", state={}, messages=[], tools=[], context=[], forwarded_props={})
-    adapter = AGUIRunAdapter(request, lambda e: None)
-    result = {"hits":[{"product_id":"P1001", "default_sku_id":"P1001-S1"}, {"product_id":"P1001", "default_sku_id":"P1001-S2"}], "preferred_sku_id":None,"dimensions":["颜色"],"max_items":12}
-    adapter.on_trade_event(TradeEvent("s","recommendation.result",{"hits":[]},""))
-    adapter.on_trade_event(TradeEvent("s","comparison.result",result,""))
-    adapter.on_trade_event(TradeEvent("s","tool.result",{"tool":"product_search_tool","hits":[]},""))
-    assert adapter.state["comparison"] is None
-    adapter.finish("已交付比较", "completed", None, delivery={"kind":"comparison","status":"completed"})
-    assert adapter.state["comparison"] == result and adapter.state["recommendation"] is None
-    restored = AGUIRunAdapter(request, lambda e: None, authoritative_state=adapter.state)
-    assert restored.state["comparison"] == result
+    from tests.presentation_helpers import accept
+    from tests.test_product_delivery import adapter,emit
+    target,_=adapter()
+    result={'hits':[{'product_id':'P1001','default_sku_id':'P1001-S2'}],'guidance':'比较规格'}
+    accept(target,'comparison',result)
+    emit(target,'tool.result',{'tool':'product_search_tool','hits':[]})
+    target.finish('已交付比较','completed',None)
+    assert target.state['presentations'][0]['payload']==result
+    restored=type(target)(target.request,lambda _:None,authoritative_state=target.state)
+    assert restored.state['presentations']==target.state['presentations']
 
 
-@pytest.mark.asyncio
+
 async def test_comparison_survives_journal_restart_and_followup(tmp_path):
     from app.infrastructure.ag_ui_journal import AGUIJournal
     from tests.test_ag_ui_journal import body
-    path = tmp_path / "comparison.db"
-    journal = AGUIJournal(path)
-    result = {"hits":[{"product_id":"P1001","default_sku_id":"P1001-S1"},
-                      {"product_id":"P1001","default_sku_id":"P1001-S2"}], "preferred_sku_id":None,"dimensions":["颜色"],"max_items":12}
-    await journal.reserve(body(), "b1", "owner")
-    await journal.append("r1", "owner", [{"type":"STATE_SNAPSHOT","snapshot":{"comparison":result,"products":[],"recommendation":None}},
-        {"type":"RUN_FINISHED","threadId":"s1","runId":"r1"}])
-    reopened = AGUIJournal(path)
-    assert (await reopened.session("s1", "b1"))["run"]["state"]["comparison"] == result
-    await reopened.reserve(body("r2"), "b1", "owner2")
-    followup = await reopened.session("s1", "b1")
-    assert followup["run"]["state"]["comparison"] == result
-    assert followup["run"]["state"]["deliveredRunId"] == "r1"
-    assert followup["productHistory"] == []
+    from tests.presentation_helpers import presentation
+    path=tmp_path/'comparison.db';journal=AGUIJournal(path)
+    result=presentation('comparison',{'hits':[{'product_id':'P1001','default_sku_id':'P1001-S1'},{'product_id':'P1001','default_sku_id':'P1001-S2'}],'dimensions':['颜色'],'preferred_sku_id':None,'max_items':12},run_id='r1')
+    await journal.reserve(body(),'b1','owner')
+    await journal.append('r1','owner',[{'type':'STATE_SNAPSHOT','snapshot':{'presentations':[result]}},{'type':'RUN_FINISHED','threadId':'s1','runId':'r1'}])
+    reopened=AGUIJournal(path)
+    assert (await reopened.session('s1','b1'))['presentations']==[result]
+    followup,_=await reopened.reserve(body('r2'),'b1','owner2')
+    assert followup['input']['state'].get('presentations',[])==[]
+    assert (await reopened.session('s1','b1'))['presentations']==[result]
 
 
-@pytest.mark.asyncio
+
 async def test_parallel_final_presentations_do_not_race_to_overwrite_state():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-    last = AIMessage(content="", tool_calls=[{"id":"a","name":"recommend_products","args":{}},
-                                            {"id":"b","name":"compare_products","args":{}}])
-    handler = AsyncMock()
-    middleware = FinalDeliveryMiddleware()
-    for call in last.tool_calls:
-        result = await middleware.awrap_tool_call(SimpleNamespace(tool_call=call, state={"messages":[last]}), handler)
-        assert result.status == "error"
-    handler.assert_not_called()
+    from tests.test_agent_handoff import ScriptedModel
+    from app.application.runtime.results import ToolResult
+    from tests.presentation_helpers import delivery_middlewares
+    async def recommend_products():
+        """已校验的推荐结果。"""
+        return ToolResult({'guidance':'推荐说明','hits':[]})
+    async def compare_products():
+        """已校验的比较结果。"""
+        return ToolResult({'guidance':'比较说明','hits':[]})
+    model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'id':'a','name':'recommend_products','args':{}},{'id':'b','name':'compare_products','args':{}}])])
+    graph=create_agent(model,tools=[as_langchain_tool(recommend_products),as_langchain_tool(compare_products)],middleware=delivery_middlewares())
+    result=await graph.ainvoke({'messages':[HumanMessage(content='推荐并比较')]})
+    assert {p['kind'] for p in result['presentations']}=={'recommendation','comparison'}
+    assert len({p['id'] for p in result['presentations']})==2 and model.cursor==1

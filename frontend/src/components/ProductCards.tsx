@@ -61,6 +61,10 @@ interface RecommendationCardsProps extends CommonCardsProps {
 type ProductCardsProps = RecommendationCardsProps | (CommonCardsProps & { mode: "view" | "research" });
 
 function viewPrice(group: ProductGroup) {
+  const focused=group.records.find(p=>p.requested_sku_id);
+  const sku=focused?.skus.find(s=>s.sku_id===focused.requested_sku_id);
+  if(sku){const price=skuPrice(sku);return {text:money(price.amount,price.currency),kind:'商品价'};}
+
   const offers = availableOffers(group);
   if (!offers.length) return { text: "当前缺货", kind: "" };
   const prices = offers.map(o => skuPrice(o.sku));
@@ -78,7 +82,7 @@ function ProductCards(props: ProductCardsProps) {
       const recommendation = props.mode === "recommendation" ? props : null;
       const saved = recommendation?.favoriteIds.has(product.product_id) ?? false;
       const selected = recommendation?.comparedIds.has(comparisonKey(product)) ?? false;
-      const primary = product.skus.find(sku => sku.sku_id === product.default_sku_id);
+      const primary = product.skus.find(sku => sku.sku_id === (props.mode==="view" ? product.requested_sku_id ?? product.default_sku_id : product.default_sku_id));
       const landed = props.mode !== "view" ? comparisonQuote(product) : null;
       const price = viewPrice(group);
       return <article className={`product-card ${selected ? "selected" : ""}`} key={group.key}
@@ -97,7 +101,7 @@ function ProductCards(props: ProductCardsProps) {
             {product.rating_summary && <span className="rating"><i>★</i> {product.rating_summary.average.toFixed(1)} <span>({product.rating_summary.review_count}{product.rating_is_live ? '' : ' · 样例'})</span></span>}
           </div>
           <button className="product-title" onClick={() => props.onDetail(group)}>{product.title}</button>
-          <div className="product-subtitle">{(recommendation || props.mode === "research") ? (primary?.spec || product.highlights[0] || "查看商品详细信息")
+          <div className="product-subtitle">{(recommendation || props.mode === "research" || !!product.requested_sku_id) ? (primary?.spec || product.highlights[0] || "查看商品详细信息")
             : [...new Set(group.records.map(p => platformLabel(p.source_platform)))].join(" · ")}</div>
           <div className="product-price-row">
             <div className="price">{props.mode === "view" ? price.text : primary ? money(product.price_major,product.currency) : "规格待确认"}</div>

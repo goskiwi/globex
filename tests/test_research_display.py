@@ -18,17 +18,18 @@ async def test_research_is_committed_only_after_final_delivery_and_restored_on_i
           'task_ids':['bag'],'completed_task_ids':['bag'] if status=='completed' else [],'status':status}
     start(adapter,'report','present_research')
     end(adapter,'report','present_research',data)
-    assert not adapter.state['researchReports']
-    adapter.finish(data['guidance'],status,None,delivery={"kind":"research","status":status})
-    assert adapter.state['recommendation'] is None and adapter.state['comparison'] is None
-    assert adapter.state['researchReports'][0]['runId']=='r1'
+    from tests.presentation_helpers import accept
+    assert adapter.state['presentations']==[]
+    accept(adapter,'research',data,status=status)
+    adapter.finish(data['guidance'],status,None)
+    assert adapter.state['presentations'][0]['runId']=='r1'
     await journal.append('r1','owner',[e.model_dump(mode='json',by_alias=True,exclude_none=True) for e in events])
     # 后续普通问句不抢走旧报告归属；重新打开日志后仍在原回复下。
     await journal.reserve(body('r2'),'b1','other')
     await journal.append('r2','other',[{'type':'RUN_FINISHED','threadId':'s1','runId':'r2'}])
     restored=await AGUIJournal(tmp_path/'research.db').session('s1','b1')
-    assert restored['researchReports']==adapter.state['researchReports']
-    assert restored['researchReports'][0]['status']==status
+    assert restored['presentations']==adapter.state['presentations']
+    assert restored['presentations'][0]['status']==status
 
 
 @pytest.mark.parametrize('ending',['unconfirmed','failed','cancelled'])
@@ -38,7 +39,7 @@ def test_prepared_research_is_not_published_on_failed_or_unconfirmed_delivery(en
     end(adapter,'report','present_research',{'reports':[]})
     if ending=='cancelled':adapter.fail('已停止',cancelled=True)
     else:adapter.finish('尚未交付','failed' if ending=='failed' else 'completed',None)
-    assert adapter.state['researchReports']==[]
+    assert adapter.state['presentations']==[]
 
 
 def test_research_evidence_keeps_registered_media_without_changing_sku_facts():

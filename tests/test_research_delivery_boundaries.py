@@ -1,3 +1,4 @@
+from tests.presentation_helpers import delivery_middlewares
 from app.application.agents.handoff import ResearchSubmission
 """研究链路反例：证据不冒充选择，当前轮可整理，收尾仍可交付。"""
 import json
@@ -82,7 +83,7 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
         requests.append(body)
         name = 'read' if len(requests) == 1 else delivery.name
         args = {} if main or len(requests) == 1 else {
-            'status': 'partial', 'issues': ['候选不足']}
+            'caveats': ['候选不足']}
         response = completion()
         response['choices'][0].update(message={'role': 'assistant', 'content': '', 'tool_calls': [
             {'id': f'c{len(requests)}', 'type': 'function',
@@ -91,7 +92,7 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
     model = await client_model(tmp_path, handler)
     try:
         execution = ExecutionMiddleware(2, main=main, delivery_tools=(delivery.name,))
-        middleware = [execution, FinalDeliveryMiddleware()] if main else [HandoffMiddleware(), execution]
+        middleware = [execution, *delivery_middlewares()] if main else [HandoffMiddleware(), execution]
         graph = create_agent(model, tools=[read, delivery], middleware=middleware,
                              context_schema=None if main else HandoffContext)
         result = await graph.ainvoke({'messages': [HumanMessage(content='研究')]},
@@ -100,7 +101,7 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
         assert [t['function']['name'] for t in requests[1]['tools']] == [delivery.name]
         assert result['execution_stop'] == 'model_call_limit'
         if main:
-            assert result['delivery']['kind']=='recommendation'
+            assert result['presentations'][-1]['kind']=='recommendation'
             assert result['messages'][-1].content.startswith('已有候选')
         else:
             assert result['handoff_result']['status'] == 'partial'
@@ -138,14 +139,14 @@ async def test_closing_form_is_needs_input_not_failed():
         return ToolResult('仍缺用途')
     async def show_shopping_form():
         """已创建并保存问题。"""
-        return ToolResult({'form_id':'saved-form','status':'awaiting_input'})
+        return ToolResult({'form_id':'saved-form','form':{'form_id':'saved-form','messages':[]},'status':'awaiting_input'})
     model=ScriptedModel(responses=[call('read',{}),call('show_shopping_form',{})])
     graph=create_agent(model,tools=[as_langchain_tool(read),as_langchain_tool(show_shopping_form)],
         middleware=[ExecutionMiddleware(2,main=True,delivery_tools=('show_shopping_form',)),
-                    FinalDeliveryMiddleware()],checkpointer=InMemorySaver())
+                    *delivery_middlewares()],checkpointer=InMemorySaver())
     runner,session=root(graph,TradeEventBus())
     output=await runner._reply('handoff',session,[HumanMessage(content='需要补充用途')])
-    assert output.status=='needs_input' and output.delivery=={'kind':'clarification','status':'needs_input'}
+    assert output.status=='needs_input' and output.presentations[-1]['kind']=='clarification'
     assert model.cursor==2 and (await graph.aget_state(session.config)).next==()
 
 
@@ -154,7 +155,7 @@ def test_completed_status_alone_cannot_publish_an_unfinished_batch():
     target,_=adapter()
     emit(target,'recommendation.result',{'hits':[{'product_id':'P1001'}]})
     target.finish('完成','completed',None)
-    assert target.state['recommendation'] is None
+    assert target.state['presentations']==[]
 
 
 async def test_large_selected_facts_use_source_refs_without_truncation():
@@ -185,11 +186,9 @@ def research_receipt(identifier, *, description='目录明确记载防水卷口'
     return {'agent': 'search_agent', 'status': 'completed', 'summary': '该品类研究完成',
         'scope': {'task_id': identifier, 'goal': '通勤研究', 'effective_search': {'parameters': {'ship_to': 'CN', 'target_currency': 'CNY'}},
                   'parent_conditions': {'unused': '原始条件' * 100}},
-        'candidates': [{'product_id': identifier, 'sku_id': identifier + '-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。',
-                        'open_questions': ['是否有电脑仓？'], 'unmet_constraints': [],
-                        'facts': facts}],
+        'candidates': [{'product_id':identifier,'sku_id':identifier + '-S1','assessment':'适合优先考虑便携性的需求，实际适配仍需核验。','caveats':['是否有电脑仓？'],'facts':facts}],
         'evidence_refs': ['ctx_' + identifier], 'observed_products': ['仅观察未选中' * 200],
-        'transaction_state': 'none', 'stop_reason': None, 'unmet_constraints': [], 'questions': [], 'issues': []}
+        'transaction_state': 'none', 'stop_reason': None, 'caveats': [], 'unmet_requirements': [], 'questions': [], 'issues': []}
 
 
 async def test_current_research_keeps_facts_under_pressure_and_old_turn_can_archive(tmp_path):
@@ -212,7 +211,7 @@ async def test_current_research_keeps_facts_under_pressure_and_old_turn_can_arch
         shown = message_data(receipt)
         assert not shown.get('archived')
         assert shown['candidates'] == original['candidates']
-        assert shown['candidates'][0]['open_questions'] == ['是否有电脑仓？']
+        assert shown['candidates'][0]['caveats'] == ['是否有电脑仓？']
         assert shown['transaction_state'] == 'none'
         saved = await middleware.store.get('buyer', 'handoff', shown['result_ref'])
         assert saved['data'] == original
@@ -238,7 +237,7 @@ async def test_first_large_handoff_retains_identity_sku_and_quote_conditions():
     assert facts['quotes'] == original['candidates'][0]['facts']['quotes']
     assert facts['offloaded'] and facts['omitted_product_fields'] == ['description']
     assert 'description' not in facts['product']
-    assert view['candidates'][0]['open_questions'] == ['是否有电脑仓？']
+    assert view['candidates'][0]['caveats'] == ['是否有电脑仓？']
     assert json.dumps(original, ensure_ascii=False) == before
 
 
@@ -272,14 +271,15 @@ async def test_current_finalist_details_stay_available_with_existing_candidate_l
     assert len(old['messages']) == count - 2, '旧轮次恢复原有回收规则，不永久保护详情'
 
 
-@pytest.mark.parametrize('completed', [False, True])
+@pytest.mark.parametrize('completed',[False,True])
 def test_partial_run_only_publishes_a_completed_delivery(completed):
-    from tests.test_product_delivery import adapter, emit
-    target, _ = adapter()
-    emit(target, 'recommendation.result', {'hits': [{'product_id': 'P1001'}]})
-    target.finish('研究未完整完成，已有选择见卡片。', 'partial', 'model_call_limit',
-                  delivery={"kind":"recommendation","status":"completed"} if completed else None)
-    assert bool(target.state['recommendation']) is completed
+    from tests.test_product_delivery import adapter
+    from tests.presentation_helpers import accept
+    target,_=adapter()
+    if completed:accept(target,'recommendation',{'hits':[{'product_id':'P1001'}]})
+    target.finish('已有成果见卡片，其他工作未完成','partial','model_call_limit')
+    assert bool(target.state['presentations']) is completed
+
 
 
 async def test_model_that_never_submits_cannot_keep_researching():
@@ -299,7 +299,7 @@ async def test_model_that_never_submits_cannot_keep_researching():
     output = await runner._reply('handoff', session, [HumanMessage(content='继续研究')])
     assert len(executed) == 2 and model.cursor == 3
     assert output.status == 'partial' and output.stop_reason == 'model_call_limit'
-    assert output.delivery is None
+    assert not output.presentations
     assert 'ctx_original' in output.text
     snapshot = await graph.aget_state(session.config)
     assert snapshot.next == ()

@@ -50,7 +50,7 @@ class TaskPlanMiddleware(AgentMiddleware):
         # 无计划且只做直接查询时，不额外制造计划步骤。
         hint = {'steps': plan['steps'], 'research': {key: {
             'goal': value['scope']['goal'],
-            **{k: value[k] for k in ('status', 'qualified_skus', 'required_gaps', 'gaps', 'stale', 'delivery') if k in value}}
+            **{k: value[k] for k in ('status', 'execution_status', 'qualified_skus', 'unmet_requirements', 'caveats', 'stale', 'delivery') if k in value}}
             for key, value in plan['tasks'].items()}}
         result = {'task_plan': plan}
         if plan['steps'] or plan['tasks'] or any(m.name == 'task_plan' for m in state['messages']):
@@ -73,9 +73,9 @@ class TaskPlanMiddleware(AgentMiddleware):
         if any(dependent_steps(work.plan, {key}).intersection(step_ids) for key in step_ids):
             return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
                                content='存在前后依赖的研究不能同批执行；先完成前置研究，再执行后续步骤。本批均未执行。')
-        if len(step_ids) != len(set(step_ids)) or sum(c['name'] in DELIVERIES for c in calls) > 1:
+        if len(step_ids) != len(set(step_ids)):
             return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
-                               content='同一批次不能重复执行一个计划步骤，也不能提交多个最终交付；本批均未执行。')
+                               content='同一批次不能重复执行一个计划步骤；本批均未执行。')
         if 'task_dispatch' in names and names & DELIVERIES:
             return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
                                content='研究任务和最终交付必须分批执行，本批均未执行。')

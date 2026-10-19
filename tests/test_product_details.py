@@ -74,7 +74,7 @@ async def test_native_main_reads_both_platform_records_without_budget_change(tmp
     try:
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY',
             '商品价100元人民币，查看Roamix航空颈枕'))
-        assert result.status=='completed' and result.delivery is None
+        assert result.status=='completed' and not result.presentations
         agent=container.orchestrator._sessions._agents['s']
         state=await agent.graph.aget_state(agent.config)
         assert state.values['shopping_work']['filters']['price_max_major']==100

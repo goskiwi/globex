@@ -74,6 +74,7 @@ export interface ProductCard {
   package_dimensions_cm?: { length?: number; width?: number; height?: number };
   updated_at?: string;
   default_sku_id?: string;
+  requested_sku_id?: string;
   selected_sku_id?: string;
   image_url?: string | null;
   image_kind?: "illustration" | "placeholder";
@@ -138,7 +139,13 @@ export interface ProductView {
   purpose: "product_view";
 }
 
+export interface Presentation {
+  id:string; runId:string; kind:"recommendation"|"comparison"|"product_view"|"research"|"clarification";
+  status:"completed"|"partial"|"needs_input"; payload:Record<string,unknown>;
+}
+
 export interface CommerceSnapshot {
+  presentations: Presentation[];
   researchReports: ResearchDelivery[];
   productViews: ProductView[];
   comparison: Comparison | null;
@@ -246,8 +253,7 @@ export interface ResearchCandidate {
   product_id: string;
   sku_id: string | null;
   assessment: string;
-  open_questions: string[];
-  unmet_constraints: string[];
+  caveats: string[];
   facts: {
     product: Partial<ProductCard>;
     sku: ProductCard['skus'][number] | null;
@@ -270,7 +276,8 @@ export interface ResearchReport {
     lowest: {product_id: string; sku_id: string; title: string; amount_minor: number}[];
     highest: {product_id: string; sku_id: string; title: string; amount_minor: number}[];
   }[];
-  unmet_constraints: string[];
+  unmet_requirements: string[];
+  caveats: string[];
   questions: string[];
   issues: string[];
 }

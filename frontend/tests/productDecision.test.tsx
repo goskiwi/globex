@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from "react";
 import {createRoot} from "react-dom/client";
@@ -35,23 +36,23 @@ it("推荐卡片绑定原回复，追问与刷新不移动，新的比较在新�
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   localStorage.clear();sessionStorage.clear();
   vi.stubGlobal('scrollTo',vi.fn());Element.prototype.scrollIntoView=vi.fn();
-  let posts=0,firstRun='',lastRun='',sessionId='',messages:any[]=[],state:any={};
+  let posts=0,firstRun='',lastRun='',sessionId='',messages:any[]=[],state:any={},records:any[]=[];
   vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
     if(url.endsWith('/ag-ui/run')){
       const body=JSON.parse(String(init?.body));posts++;lastRun=body.runId;sessionId=body.threadId;
       if(posts===1)firstRun=body.runId;
       const text=posts===1?'首轮选购建议':posts===2?'这是后续查库存的回答':'新的比较建议';
       messages=[...body.messages,{id:`${body.runId}:final:answer`,role:'assistant',content:text}];
-      if(posts===1)state={recommendation:{...decision,guidance:text,mode:'alternatives',quote:null},
-        comparison:null,deliveredRunId:body.runId};
-      if(posts===3)state={recommendation:null,comparison:{...decision,guidance:text},deliveredRunId:body.runId};
+      if(posts===1)state={presentations:[...presented('recommendation',{...decision,guidance:text,mode:'alternatives',quote:null},body.runId),...presented('comparison',null,body.runId)]};
+      if(posts===3)state={presentations:[...presented('recommendation',null,body.runId),...presented('comparison',{...decision,guidance:text},body.runId)]};
+      for(const p of state.presentations??[])if(!records.some(r=>r.id===p.id))records.push(p);
       const events=[{type:'RUN_STARTED',threadId:body.threadId,runId:body.runId},
         {type:'MESSAGES_SNAPSHOT',messages},{type:'STATE_SNAPSHOT',snapshot:state},
         {type:'RUN_FINISHED',threadId:body.threadId,runId:body.runId}];
       return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'Content-Type':'text/event-stream'}});
     }
     if(url.includes('/ag-ui/sessions?'))return Response.json({sessions:sessionId?[{id:sessionId,title:'测试选购',updatedAt:1}]:[]});
-    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,productHistory:[],events:[],
+    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,presentations:records,events:[],
       run:{runId:lastRun,threadId:sessionId,status:'completed',messages,state}});
     return Response.json({sessions:[],confirmations:[],skills:[],products:[],form:null,revision:0});
   }));
@@ -98,8 +99,7 @@ it("实际 App 四张卡全部可勾选，手动比较复用首选与关注点�
     if(String(url).endsWith("/ag-ui/run")) {
       const body=JSON.parse(String(init?.body));
       const events=[{type:"RUN_STARTED",threadId:body.threadId,runId:body.runId},
-        {type:"STATE_SNAPSHOT",snapshot:{recommendation:{...decision,mode:"alternatives",quote:null},comparison:null,
-          deliveredRunId:body.runId,skillUsages:[],progress:[]}},
+        {type:"STATE_SNAPSHOT",snapshot:{skillUsages:[],progress:[],presentations:[...presented('recommendation',{...decision,mode:"alternatives",quote:null},body.runId),...presented('comparison',null,body.runId)]}},
         {type:"MESSAGES_SNAPSHOT",messages:[...body.messages,{id:`${body.runId}:final:answer`,role:"assistant",content:decision.guidance}]},
         {type:"RUN_FINISHED",threadId:body.threadId,runId:body.runId}];
       return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(""),{headers:{"Content-Type":"text/event-stream"}});

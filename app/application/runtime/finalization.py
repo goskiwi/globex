@@ -19,7 +19,7 @@ class RunFinalizer:
         self._sessions, self._bus = sessions, bus
         self._conversation_store, self._evidence_store = conversation_store, evidence_store
 
-    async def finish(self, intent, text, delivered, persistence_guard, *, cancelled=False) -> bool:
+    async def finish(self, intent, text, presentations, persistence_guard, *, cancelled=False) -> bool:
         session_id = intent.shopping_session_id
         saved = False
         try:
@@ -31,8 +31,9 @@ class RunFinalizer:
                 return False
             saved = True
             if self._evidence_store is not None:
-                if delivered is not None:
-                    await self._evidence_store.save(intent.buyer_id, session_id, "display_batch", delivered)
+                for accepted in presentations or ():
+                    if accepted['kind'] in {'recommendation','comparison'}:
+                        await self._evidence_store.save(intent.buyer_id, session_id, "display_batch", accepted['payload'])
                 await self._evidence_store.save(intent.buyer_id, session_id, "conversation", {
                     "buyer": intent.raw_query, "agent": text,
                 })

@@ -115,7 +115,7 @@ async def test_native_agent_corrects_id_reference_before_delivery(tmp_path,monke
     container=await _container(tmp_path,monkeypatch,model)
     try:
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','推荐充气颈枕'))
-        assert result.status=='completed' and result.delivery["kind"]=="recommendation"
+        assert result.status=='completed' and result.presentations[-1]["kind"]=="recommendation"
         assert result.final_text==guidance
         feedback=[m for m in model.seen[-1] if isinstance(m,ToolMessage)
                   and m.tool_call_id.startswith('bad-advice-round-')]

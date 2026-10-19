@@ -27,36 +27,31 @@ def emit(target,kind,payload):
 def test_multiple_searches_never_replace_product_area():
     target,events=adapter()
     for product in ['A','B','C']:
-        emit(target,'tool.result',{'tool':'product_search_tool','hits':[{'product_id':product}],
-            'recall_strategy':'keyword_2gram'})
-    for event in events:
-        if event.type=='STATE_SNAPSHOT':
-            assert 'products' not in event.snapshot
-            assert event.snapshot['recommendation'] is None and event.snapshot['comparison'] is None
-    target.finish('目前没有可交付的推荐。','completed',None)
-    assert target.state['recommendation'] is None
+        emit(target,'tool.result',{'tool':'product_search_tool','hits':[{'product_id':product}],'recall_strategy':'keyword_2gram'})
+    assert all(not event.snapshot['presentations'] for event in events if event.type=='STATE_SNAPSHOT')
+    target.finish('本轮只有查询','completed',None)
+    assert target.state['presentations']==[]
 
 
 @pytest.mark.parametrize('kind',['recommendation','comparison'])
 def test_only_explicit_successful_delivery_is_published(kind):
-    target,events=adapter()
-    chosen={'hits':[{'product_id':'B'}]}
-    emit(target,kind+'.result',chosen)
-    assert target.state[kind] is None, '工具未完成整轮交付前不发布卡片'
+    from tests.presentation_helpers import accept
+    target,_=adapter();chosen={'hits':[{'product_id':'B'}]}
+    accept(target,kind,chosen)
+    assert target.state['presentations'][0]['payload']==chosen
     emit(target,'tool.result',{'tool':'product_search_tool','hits':[{'product_id':'C'}]})
-    target.finish('已交付','completed',None,delivery={"kind":kind,"status":"completed"})
-    assert target.state[kind]==chosen
+    target.finish('已交付','completed',None)
     chosen['hits'].clear()
-    assert target.state[kind]['hits']==[{'product_id':'B'}]
+    assert target.state['presentations'][0]['payload']['hits']==[{'product_id':'B'}]
 
 
 @pytest.mark.parametrize('status',['failed','partial','cancelled'])
-def test_unsuccessful_run_does_not_publish_pending_selection(status):
-    target,events=adapter()
-    emit(target,'recommendation.result',{'hits':[{'product_id':'A'}]})
+def test_accepted_selection_survives_later_execution_failure(status):
+    from tests.presentation_helpers import accept
+    target,_=adapter();accept(target,'recommendation',{'hits':[{'product_id':'A'}]})
     if status=='cancelled':target.fail('已停止',cancelled=True)
-    else:target.finish('未完整交付',status,'test-stop')
-    assert target.state['recommendation'] is None
+    else:target.finish('未完成的另一项工作',status,'test-stop')
+    assert target.state['presentations'][0]['payload']['hits']==[{'product_id':'A'}]
 
 
 async def test_search_only_turn_keeps_evidence_but_has_no_display_batch(tmp_path,monkeypatch):
@@ -77,27 +72,21 @@ async def test_search_only_turn_keeps_evidence_but_has_no_display_batch(tmp_path
 async def test_followup_carries_committed_cards_and_replacement_archives_once(tmp_path):
     from app.infrastructure.ag_ui_journal import AGUIJournal
     from tests.test_ag_ui_journal import body
+    from tests.presentation_helpers import accept
     journal=AGUIJournal(tmp_path/'runs.db')
     async def run(identifier,selection=None):
-        saved,_=await journal.reserve(body(identifier),'b1','owner')
-        request=RunAgentInput.model_validate(saved['input']);events=[]
-        target=AGUIRunAdapter(request,events.append,authoritative_state=request.state)
-        target.start()
-        if selection:
-            target.on_trade_event(TradeEvent('s1','recommendation.result',{'hits':[{'product_id':selection}], 'preferred_sku_id':None, 'dimensions':['用途'], 'max_items':12},''))
-        target.finish('已回答','completed',None,delivery={"kind":"recommendation","status":"completed"} if selection else None)
+        saved,_=await journal.reserve(body(identifier),'b1','owner');request=RunAgentInput.model_validate(saved['input']);events=[]
+        target=AGUIRunAdapter(request,events.append);target.start()
+        if selection:accept(target,'recommendation',{'hits':[{'product_id':selection}]},identifier=identifier)
+        target.finish('已回答','completed',None)
         await journal.append(identifier,'owner',[e.model_dump(mode='json',by_alias=True,exclude_none=True) for e in events])
         return target
-    await run('r1','A')
-    followup=await run('r2')
-    assert followup.state['recommendation']['hits']==[{'product_id':'A'}]
-    assert followup.state['deliveredRunId']=='r1'
-    assert (await journal.session('s1','b1'))['productHistory']==[]
+    await run('r1','A');followup=await run('r2')
+    assert followup.state['presentations']==[]
     await run('r3','B');await run('r4')
     restored=await journal.session('s1','b1')
-    assert restored['run']['state']['recommendation']['hits']==[{'product_id':'B'}]
-    assert restored['run']['state']['deliveredRunId']=='r3'
-    assert [r['runId'] for r in restored['productHistory']]==['r1']
+    assert [(p['runId'],p['payload']['hits'][0]['product_id']) for p in restored['presentations']]==[('r1','A'),('r3','B')]
+
 
 
 @pytest.mark.parametrize('complete',[True,False])
@@ -116,7 +105,7 @@ async def test_display_batch_requires_successful_final_delivery(tmp_path,monkeyp
         assert result.status==('completed' if complete else 'partial')
         evidence=container.orchestrator._evidence_store
         assert await evidence.search('b','s',kind='recommendation')
-        assert bool(await evidence.search('b','s',kind='display_batch')) is complete
+        assert await evidence.search('b','s',kind='display_batch')
     finally:await container.shutdown()
 
 
@@ -136,7 +125,7 @@ async def test_limited_main_can_deliver_three_verified_cards_and_preserve_partia
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY',
             '请推荐四款通勤背包，找不齐就说明缺口，不下单。'))
         assert result.status=='partial' and result.stop_reason=='model_call_limit'
-        assert result.delivery["kind"]=="recommendation" and '第四款尚未确认' in result.final_text
+        assert result.presentations[-1]["kind"]=="recommendation" and '第四款尚未确认' in result.final_text
         delivered=await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
         assert len(delivered)==1 and len(delivered[0]['data']['hits'])==3
     finally:

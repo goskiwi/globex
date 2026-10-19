@@ -68,5 +68,5 @@ def project_research_report(data, rates):
     return {'task_id': data['scope']['task_id'], 'goal': data['scope']['goal'], 'status': data['status'],
             **research_counts(data['candidates']), 'price_comparisons': report_prices(data, rates),
             'items': data['candidates'],
-            **{key: data[key] for key in ('unmet_constraints', 'questions', 'issues')},
+            **{key: data[key] for key in ('unmet_requirements', 'caveats', 'questions', 'issues')},
             'transaction_state': data['transaction_state']}

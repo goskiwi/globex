@@ -51,10 +51,7 @@ def observe_run_events(observer: Callable[["TradeEvent"], None]):
         _run_observer.reset(token)
 
 EVENT_TYPES = (
-    "ui.surface",
-    "recommendation.result",
-    "product_view.result",
-    "comparison.result",
+    "presentation.result",
     "agent.dispatch",
     "tool.invoke",
     "tool.result",

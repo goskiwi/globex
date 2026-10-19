@@ -154,12 +154,11 @@ async def test_real_compaction_and_reopened_evidence_are_readable_by_child(env,t
     search,_,dispatch,_=factories(tmp_path,monkeypatch,[],tools=[tool])
     search.capability_registry=env.registry;search.buyer_skill_store=env.personal
     child=ScriptedModel(responses=[load_call(env.skill),call('conversation_fact_lookup',{'result_ref':ref}),
-        submission(status='partial',candidates=[{'product_id':'P0','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}],
-            unmet_constraints=['尚未重新核验当前库存'])])
+        submission(candidates=[{'product_id':'P0','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}],caveats=['尚未重新核验当前库存'])])
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     output=(await dispatch('search_agent',task(
         skill_refs=[{'id':env.skill['id'],'version':'1'}]))).data
-    assert output['status']=='partial' and output['historical_evidence_refs']==[ref]
+    assert output['status']=='completed' and output['historical_evidence_refs']==[ref]
     assert '商品限制'*10 not in str(child.seen[0])
     assert 'PRIVATE_BODY' in str(child.seen[1])
     assert 'P0' in str(child.seen[2])

@@ -33,14 +33,8 @@ class AGUIRunAdapter:
     def __init__(self, request: RunAgentInput, emit: Callable[[BaseEvent], None], *, authoritative_state: dict | None = None) -> None:
         self.request = request
         self.emit = emit
-        self._pending_delivery = None
-        self._pending_research = None
         self.state: dict[str, Any] = {
-            "recommendation": None,
-            "comparison": None,
-            "deliveredRunId": None,
-            "productViews": [],
-            "researchReports": [],
+            "presentations": [],
             "shoppingForms": [],
             "shoppingFilters": {},
             "confirmations": [],
@@ -52,7 +46,8 @@ class AGUIRunAdapter:
                 "status": "queued", "steps": []},
         }
         if authoritative_state:
-            self.state.update({k:copy.deepcopy(authoritative_state[k]) for k in ("recommendation","comparison","deliveredRunId","skillUsages","shoppingFilters") if k in authoritative_state})
+            self.state.update({k:copy.deepcopy(authoritative_state[k]) for k in ("skillUsages","shoppingFilters") if k in authoritative_state})
+            self.state['presentations']=[copy.deepcopy(p) for p in authoritative_state.get('presentations',[]) if p['runId']==request.run_id]
         self.error: str | None = None
         self._text_open: set[str] = set()
         self._tool_open: set[str] = set()
@@ -60,7 +55,6 @@ class AGUIRunAdapter:
         self._tool_output: dict[str, list[str]] = {}
         self._skill_arguments: dict[str, dict] = {}
         self._tool_arguments: dict[str, dict] = {}
-        self._delivery_steps: dict[str, str] = {}
         self._completed = False
 
     def _id(self, kind: str, original: str) -> str:
@@ -150,15 +144,16 @@ class AGUIRunAdapter:
                 content=content,
                 role="tool",
             ))
-            if success and name == "present_research":
-                self._pending_research = copy.deepcopy(event.data)
             arguments = self._tool_arguments.pop(event.tool_call_id,{})
             if success and name=='update_shopping_state' and isinstance(event.data,dict) and isinstance(event.data.get('filters'),dict):
                 self.state['shoppingFilters']=copy.deepcopy(event.data['filters'])
-            self._progress(call_id, label(name,arguments,event.data), step_status(name,event.data,success),
-                result_summary(name,arguments,event.data,success,failure=event.failure))
+            accepted=next((p for p in self.state['presentations'] if p['id']==event.tool_call_id),None)
+            status=step_status(name,event.data,success)
+            summary=result_summary(name,arguments,event.data,success,failure=event.failure)
             if success and name in DELIVERY_TOOLS:
-                self._delivery_steps[DELIVERY_TOOLS[name]] = call_id
+                status='completed' if accepted else 'unconfirmed'
+                summary=delivery_summary(name,accepted['payload'] if accepted else event.data,delivered=bool(accepted))
+            self._progress(call_id,label(name,arguments,event.data),status,summary)
             self.snapshot()
         elif kind == "REPLY_END":
             reason = str(event.finished_reason).lower()
@@ -230,18 +225,20 @@ class AGUIRunAdapter:
                        "提交未被接纳：" + "；".join(e["message"] for e in payload["errors"]))
             self._progress(identifier, "提交任务结果", status, summary)
             self.snapshot()
-        elif event.type == "ui.surface":
-            form = payload.get("form")
-            if (isinstance(form, dict) and form.get("session_id") == self.request.thread_id
-                    and isinstance(self.request.forwarded_props, dict)
-                    and payload.get("buyer_id") == self.request.forwarded_props.get("buyerId")):
-                self.state["shoppingForms"] = [copy.deepcopy(form)]
-                for message in form.get("messages", []):
-                    self.emit(CustomEvent(name="a2ui", value=copy.deepcopy(message)))
-                self.snapshot()
-        elif event.type in {"recommendation.result", "comparison.result", "product_view.result"}:
-            # 工具准备的结果只有在本轮成功结束后，才成为页面交付。
-            self._pending_delivery = (event.type.split(".")[0], copy.deepcopy(payload))
+        elif event.type == "presentation.result":
+            accepted={**copy.deepcopy(payload),'runId':self.request.run_id}
+            self.state['presentations']=[p for p in self.state['presentations'] if p['id']!=accepted['id']]+[accepted]
+            # 展示归属于本轮回复；接纳时就建立回复锚点，中断无需末尾开关解锁。
+            guidance='\n\n'.join(p['payload'].get('guidance','请填写下方问题后继续。')
+                for p in self.state['presentations'])
+            self.emit(MessagesSnapshotEvent(messages=[*self.request.messages,
+                AssistantMessage(id=self._id('final','answer'),content=guidance)]))
+            if accepted['kind']=='clarification':
+                form=accepted['payload']['form']
+                self.state['shoppingForms']=[form]
+                for message in form.get('messages',[]):
+                    self.emit(CustomEvent(name='a2ui',value=copy.deepcopy(message)))
+            self.snapshot()
         elif event.type in {"confirmation.required", "confirmation.resolved"}:
             confirmation = payload.get("confirmation")
             if (isinstance(confirmation, dict) and isinstance(self.request.forwarded_props, dict)
@@ -275,7 +272,7 @@ class AGUIRunAdapter:
         self._tool_open.clear()
         self._tool_arguments.clear()
 
-    def finish(self, final_text: str, status: str, stop_reason: str | None, *, delivery: dict | None = None) -> None:
+    def finish(self, final_text: str, status: str, stop_reason: str | None) -> None:
         if self._completed:
             return
         self._completed = True
@@ -286,27 +283,9 @@ class AGUIRunAdapter:
             *self.request.messages,
             AssistantMessage(id=self._id("final", "answer"), content=final_text),
         ]))
-        if status in {"completed", "partial"} and delivery is not None and delivery["kind"] in {"recommendation", "comparison", "product_view"} and not self.state["toolApprovals"] and self._pending_delivery is not None and self._pending_delivery[0] == delivery["kind"]:
-            kind, payload = self._pending_delivery
-            if kind == "product_view":
-                self.state["productViews"] = [{**payload, "runId": self.request.run_id}]
-            else:
-                self.state["recommendation"] = self.state["comparison"] = None
-                self.state[kind] = payload
-                self.state["deliveredRunId"] = self.request.run_id
-            identifier = self._delivery_steps.get(kind)
-            if identifier:
-                name = next(name for name, value in DELIVERY_TOOLS.items() if value==kind)
-                title = {'recommendation':'交付最终推荐','comparison':'交付比较结果','product_view':'展示商品详情'}[kind]
-                self._progress(identifier,title,'completed',delivery_summary(name,payload,delivered=True))
-        if status in {"completed", "partial"} and delivery is not None and delivery["kind"] == "research" and not self.state["toolApprovals"] and self._pending_research is not None:
-            self.state["researchReports"] = [{**self._pending_research, "runId": self.request.run_id}]
-        self._pending_research = None
-        self._pending_delivery = None
         self.state["status"] = "awaiting_confirmation" if self.state["toolApprovals"] else status
         self.state["executionStatus"] = status
         self.state["stopReason"] = stop_reason
-        self.state["delivery"] = delivery
         self.state['process']['status'] = 'waiting_confirmation' if self.state['toolApprovals'] else {'failed':'failed','needs_input':'waiting_input'}.get(status,status)
         for entry in self.state['process']['steps']:
             if entry['status']=='running':

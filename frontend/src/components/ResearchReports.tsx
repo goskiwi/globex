@@ -34,9 +34,8 @@ function card(candidate: ResearchCandidate): ProductCard {
 
 function Questions({candidate}: {candidate: ResearchCandidate}) {
   return <>
-    {!!candidate.unmet_constraints.length && <p className="product-tradeoff">未满足要求：{candidate.unmet_constraints.join('；')}</p>}
-    {!!candidate.open_questions.length && <details className="research-questions"><summary>待核验事项 · {candidate.open_questions.length}</summary>
-      <ul>{candidate.open_questions.map((question,i)=><li key={i}>{question}</li>)}</ul></details>}
+    {!!candidate.caveats.length && <details className="research-questions"><summary>待核验事项 · {candidate.caveats.length}</summary>
+      <ul>{candidate.caveats.map((question,i)=><li key={i}>{question}</li>)}</ul></details>}
   </>;
 }
 
@@ -51,9 +50,10 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
         {report.items.map(candidate=><div key={`${candidate.product_id}:${candidate.sku_id}`}>
           <p><strong>{candidate.facts.product.title ?? candidate.product_id}：</strong>{candidate.assessment}</p>
           {candidate.facts.historical && <p>历史资料，尚未重新核验。</p>}
-          {!!candidate.unmet_constraints.length && <p>未满足要求：{candidate.unmet_constraints.join('；')}</p>}
         </div>)}
       </div>}
+      {!!report.caveats.length && <p>资料局限：{report.caveats.join('；')}</p>}
+      {!!report.unmet_requirements.length && <p>未满足明确要求：{report.unmet_requirements.join('；')}</p>}
       <ProductCards mode="research" products={report.items.map(card)}
         onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}/>
       {!report.items.length && <p>本次没有交回符合要求的候选，未满足条件见上方说明。</p>}

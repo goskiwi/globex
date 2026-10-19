@@ -1,3 +1,4 @@
+from tests.presentation_helpers import delivery_middlewares
 """原生图在推荐成功后结束；失败、普通咨询和下一轮不被误截断。"""
 import pytest
 from langchain.agents import create_agent
@@ -27,15 +28,15 @@ async def test_failed_recommendation_can_correct_and_success_stops_then_new_turn
         return _fail("超过预算") if len(attempts) == 1 else _ok({"guidance": "通勤更看重轻便时，我推荐这款；需要防雨时再看另一款。", "hits": [{"product_id": "P1001"}]})
     model = Model(responses=[call("first"), call("second"), AIMessage(content="下一轮正常咨询"), AIMessage(content="不应调用")])
     graph = create_agent(model, tools=[as_langchain_tool(recommend_products)],
-        middleware=[FinalDeliveryMiddleware()], checkpointer=InMemorySaver())
+        middleware=delivery_middlewares(), checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "test"}}
     result = await graph.ainvoke({"messages": [HumanMessage(content="推荐商品")]}, config)
     assert model.i == 2 and len(attempts) == 2
     assert result["messages"][-1].content == "通勤更看重轻便时，我推荐这款；需要防雨时再看另一款。"
-    assert result['delivery']['kind']=='recommendation'
+    assert result['presentations'][-1]['kind']=='recommendation'
     result = await graph.ainvoke({"messages": [HumanMessage(content="再问一个问题")]}, config)
     assert model.i == 3 and result["messages"][-1].content == "下一轮正常咨询"
-    assert result['delivery'] is None
+    assert not result['presentations']
 
 
 @pytest.mark.asyncio
@@ -52,16 +53,13 @@ async def test_other_failed_or_unfinished_tools_are_not_hidden():
 @pytest.mark.asyncio
 async def test_ordinary_conversation_unchanged():
     model = Model(responses=[AIMessage(content="你好"), AIMessage(content="不应调用")])
-    graph = create_agent(model, tools=[], middleware=[FinalDeliveryMiddleware()])
+    graph = create_agent(model, tools=[], middleware=delivery_middlewares())
     result = await graph.ainvoke({"messages": [HumanMessage(content="你好")]})
     assert model.i == 1 and result["messages"][-1].content == "你好"
 
 
 @pytest.mark.asyncio
 async def test_successful_old_delivery_without_guidance_is_not_given_placeholder_advice():
-    middleware = FinalDeliveryMiddleware()
-    request = call("legacy")
-    receipt = ToolMessage(name="recommend_products", tool_call_id="legacy", content="旧交付",
-                          artifact={"data": {"hits": [{"product_id": "P1001"}]}})
-    with pytest.raises(ValueError, match="整体选购建议"):
-        await middleware.abefore_model({"messages": [request, receipt]}, None)
+    from app.application.runtime.delivery import presentation
+    with pytest.raises(ValueError,match='展示结果缺少说明'):
+        presentation('recommend_products',{'hits':[{'product_id':'P1001'}]},'call')

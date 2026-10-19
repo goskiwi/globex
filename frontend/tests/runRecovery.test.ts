@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 import { describe, expect, it } from "vitest";
 import { CommerceClient } from "./clientFixture";
 
@@ -139,11 +140,11 @@ describe("持久运行恢复（使用官方 AG-UI SDK）", () => {
         complete = true;
         return sse(body.runId, [[1, { type: "RUN_STARTED", threadId: body.threadId, runId: body.runId }],
           [2, { type: "MESSAGES_SNAPSHOT", messages: [...body.messages, { id: "final", role: "assistant", content: "恢复后的完整结果" }] }],
-          [3, { type: "STATE_SNAPSHOT", snapshot: { recommendation: null, comparison: null, progress: [] } }],
+          [3, { type: "STATE_SNAPSHOT", snapshot: {progress: [],presentations:[...presented('recommendation',null,body.runId),...presented('comparison',null,body.runId)]} }],
           [4, { type: "RUN_FINISHED", threadId: body.threadId, runId: body.runId }]]);
       }
       const run = { runId: body.runId, threadId: body.threadId, status: complete ? "completed" : "running", input: body,
-        messages: body.messages, state: { recommendation: null, comparison: null } };
+        messages: body.messages, state: {presentations:[...presented('recommendation',null,body.runId),...presented('comparison',null,body.runId)]} };
       if (url.includes("/sessions?")) return json({ sessions: [{ id: body.threadId, title: "服务端历史", updatedAt: Date.now() }] });
       if (url.includes("/sessions/")) return json({ id: body.threadId, run });
       return json(run);
@@ -212,7 +213,7 @@ describe("持久运行恢复（使用官方 AG-UI SDK）", () => {
     const values = store();
     values.setItem("globex.buyer", "b1");
     values.setItem("globex.account.b1.active-session", "s1");
-    values.setItem("globex.account.b1.sessions", JSON.stringify([{ id: "s1", title: "旧记录", updatedAt: 1, messages: [{ id: "u", role: "user", content: "查询" }], recommendation: null, comparison: null, runId: "r1" }]));
+    values.setItem("globex.account.b1.sessions", JSON.stringify([{id: "s1",title: "旧记录",updatedAt: 1,messages: [{ id: "u", role: "user", content: "查询" }],runId: "r1",presentations:[...presented('recommendation',null,'r1'),...presented('comparison',null,'r1')]}]));
     let posts = 0;
     const client = new CommerceClient({ url: "/commerce/ag-ui/run", storage: values, buyerId:"b1", fetch: async (url, init) => {
       if (init.method === "POST") posts++;

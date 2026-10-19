@@ -85,7 +85,7 @@ async def secured(confirmation_env, monkeypatch,tmp_path):
         task_queue=None, db_engine=env.engine, trade_db_engine=env.engine,
         cache=SimpleNamespace(enabled=False),
         orchestrator=SimpleNamespace(handle_intent=AsyncMock(return_value=SimpleNamespace(
-            status="completed", stop_reason=None, error=None, delivery=None, shopping_session_id="session-1", final_text="结果"))),
+            status="completed", stop_reason=None, error=None, presentations=(), shopping_session_id="session-1", final_text="结果"))),
         query_order=SimpleNamespace(execute=AsyncMock(return_value={"order_id": "order"})),
         cancel_order=SimpleNamespace(execute=AsyncMock(return_value={"confirmation": {}})),
     )

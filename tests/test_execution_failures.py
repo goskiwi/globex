@@ -31,8 +31,7 @@ async def test_actual_nested_validation_then_corrected_call_retains_two_receipts
     async def recommend_products(picks:list, guidance:str, preferred_sku_id:str|None, dimensions:list, mode:str):
         """交付合成商品，不连接订单或目录。"""
         executions.append(picks)
-        payload = {'hits':[{'product_id':p.product_id,'default_sku_id':p.sku_id,'title':'合成颈枕'} for p in picks]}
-        bus.publish('s1','recommendation.result',payload)
+        payload = {'guidance':guidance,'hits':[{'product_id':p.product_id,'default_sku_id':p.sku_id,'title':'合成颈枕'} for p in picks]}
         return ToolResult(payload)
     tool = as_langchain_tool(recommend_products,args_schema=RecommendationInput)
     graph = tool_graph(tool,middlewares=[BusinessToolMiddleware(None,bus),ToolResilienceMiddleware(CircuitBreakerRegistry())])
@@ -52,7 +51,7 @@ async def test_actual_nested_validation_then_corrected_call_retains_two_receipts
         picks[1]['quantity']=1
         completed=await call_tool(graph,**arguments)
     assert completed.status=='success' and len(executions)==1
-    adapter.finish('已交付','completed',None,delivery={"kind":"recommendation","status":"completed"})
+    adapter.finish('已交付','completed',None)
     steps=adapter.state['process']['steps']
     assert len(steps)==2 and steps[0]['status']=='failed' and steps[1]['status']=='completed'
     assert steps[0]['id']!=steps[1]['id'] and '已交付2款' in steps[1]['summary']

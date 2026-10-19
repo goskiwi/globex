@@ -159,7 +159,7 @@ async def test_search_stays_internal_and_preserves_final_message_history():
     final_state = [event["snapshot"] for event in events if event["type"] == "STATE_SNAPSHOT"][-1]
     assert search["hits"] and "image_url" not in search["hits"][0]
     assert "products" not in final_state and "searchCompleted" not in final_state
-    assert final_state["recommendation"] is final_state["comparison"] is None
+    assert final_state["presentations"] == []
     assert final_state["status"] == "completed"
     assert final_state["process"]['steps'][0]["status"] == "completed"
     assert 'progress' not in final_state
@@ -175,7 +175,7 @@ async def test_empty_search_clears_client_products():
     events = await collect(orchestrator, state={"products": [{"product_id": "fake-old-product"}]})
     snapshots = [event["snapshot"] for event in events if event["type"] == "STATE_SNAPSHOT"]
     assert all("products" not in s and "searchCompleted" not in s for s in snapshots)
-    assert snapshots[-1]["recommendation"] is None
+    assert snapshots[-1]["presentations"] == []
 
 
 async def test_both_entrypoints_execute_graph_instead_of_text_only_cache():

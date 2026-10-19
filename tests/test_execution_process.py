@@ -99,16 +99,18 @@ def test_type_change_summary_and_clear_are_explicit():
 
 
 def test_pending_delivery_does_not_claim_published_before_commit():
+    from tests.presentation_helpers import accept
     payload={'hits':[{'product_id':'P1001','title':'背包','default_sku_id':'P1001-S1'}],'preferred_sku_id':'P1001-S1'}
-    a=adapter();start(a,'rec','recommend_products')
-    a.on_trade_event(TradeEvent('s1','recommendation.result',payload,''))
-    end(a,'rec','recommend_products',payload)
+    a=adapter();start(a,'rec','recommend_products');end(a,'rec','recommend_products',payload)
+    assert a.state['presentations']==[]
+    assert a.state['process']['steps'][0]['status']=='unconfirmed'
     assert '已装配' in a.state['process']['steps'][0]['summary']
-    assert a.state['recommendation'] is None
-    a.finish('建议','completed',None,delivery={"kind":"recommendation","status":"completed"})
+    accept(a,'recommendation',payload,identifier='rec')
+    end(a,'rec','recommend_products',payload)
+    a.finish('建议','completed',None)
     assert '已交付' in a.state['process']['steps'][0]['summary']
-    assert a.state['process']['steps'][0]['label']=='交付最终推荐'
-    assert a.state['process']['status']=='completed'
+    assert a.state['process']['steps'][0]['status']=='completed'
+
 
 
 @pytest.mark.parametrize('cancelled,status',[ (True,'cancelled'),(False,'failed') ])

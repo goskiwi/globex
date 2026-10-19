@@ -22,9 +22,7 @@ async def test_old_delivery_is_history_only_not_a_new_decision(tmp_path):
         {'type':'STATE_SNAPSHOT','snapshot':{'recommendation':old}},
         {'type':'RUN_FINISHED','threadId':'s1','runId':'r1'}])
     restored = await journal.session('s1','b1')
-    assert restored['state']['recommendation'] is None
-    assert restored['run']['state']['recommendation'] is None
-    assert restored['productHistory'][0]['products'] == old['hits']
+    assert restored['presentations'] == []
     # 原始运行与事件不改写，不给旧结果补造首选或维度。
     assert (await journal.run('r1','b1'))['state']['recommendation'] == old
     next_run,_ = await journal.reserve(body('r2'), 'b1','owner')
@@ -60,7 +58,7 @@ class ControlledOrchestrator:
             raise
         event_observer(SimpleNamespace(type="TEXT_BLOCK_END", block_id="text-1"))
         return SimpleNamespace(status="completed", stop_reason=None, final_text="已找到适合周末旅行的背包", error=None,
-                               delivery={"kind":"recommendation","status":"completed"}, )
+                               presentations=(), )
 
 
 async def wait_status(journal, run_id, status):
@@ -333,25 +331,26 @@ async def test_session_directory_does_not_silently_hide_older_conversations(tmp_
 
 
 async def test_followup_preserves_delivery_without_reviving_old_approvals(tmp_path):
+    from tests.presentation_helpers import presentation
+    chosen=presentation('recommendation',{'hits':[{'product_id':'P1003'}],'preferred_sku_id':None,'dimensions':['用途'],'max_items':12},run_id='r1')
     journal = AGUIJournal(tmp_path / 'history.db')
     await journal.reserve(body(), 'b1', 'owner')
     await journal.append('r1', 'owner', [
         {'type': 'TOOL_CALL_START', 'toolCallId': 'search', 'toolCallName': 'product_search', 'timestamp': 1234},
         {'type': 'TOOL_CALL_ARGS', 'toolCallId': 'search', 'delta': '秘密参数'},
         {'type': 'TOOL_CALL_END', 'toolCallId': 'search'},
-        {'type': 'STATE_SNAPSHOT', 'snapshot': {'recommendation': {'hits': [{'product_id': 'P1003'}], 'preferred_sku_id':None, 'dimensions':['用途'], 'max_items':12},  'toolApprovals': [{'id': 'already-decided'}]}},
+        {'type': 'STATE_SNAPSHOT', 'snapshot': {'presentations':[chosen], 'toolApprovals': [{'id': 'already-decided'}]}},
         {'type': 'RUN_FINISHED', 'threadId': 's1', 'runId': 'r1'},
     ])
     await journal.reserve(body('r2'), 'b1', 'owner')
     await journal.append('r2', 'owner', [
-        {'type': 'STATE_SNAPSHOT', 'snapshot': {'recommendation': None, 'comparison': None, 'toolApprovals': []}},
+        {'type': 'STATE_SNAPSHOT', 'snapshot': {'presentations': [], 'toolApprovals': []}},
         {'type': 'RUN_FINISHED', 'threadId': 's1', 'runId': 'r2'},
     ])
     restored = await journal.session('s1', 'b1')
-    assert restored['run']['state']['recommendation']['hits'] == [{'product_id': 'P1003'}]
-    assert restored['run']['state']['deliveredRunId'] == 'r1'
+    assert restored['presentations']==[chosen]
+    assert restored['run']['state']['presentations']==[]
     assert restored['run']['state']['toolApprovals'] == []
-    assert restored['productHistory'] == []
     assert restored['events'][0]['timestamp'] == 1234
     assert '秘密参数' not in json.dumps(restored['events'], ensure_ascii=False)
     assert all(set(item) <= {'id', 'type', 'timestamp'} for item in restored['events'])
@@ -359,25 +358,25 @@ async def test_followup_preserves_delivery_without_reviving_old_approvals(tmp_pa
         await journal.session('s1', 'another-buyer')
 
 
-async def test_history_snapshot_does_not_hold_write_lock_for_other_sessions(tmp_path, monkeypatch):
-    journal = AGUIJournal(tmp_path / "history-concurrency.db")
-    await journal.reserve(body(), "b1", "owner")
-    reading, release = asyncio.Event(), asyncio.Event()
-    original = journal._latest_delivery
-
-    async def paused(db, session, buyer):
-        reading.set()
-        await release.wait()
-        return await original(db, session, buyer)
-
-    monkeypatch.setattr(journal, "_latest_delivery", paused)
-    reader = asyncio.create_task(journal.session("s1", "b1"))
+async def test_history_snapshot_does_not_hold_write_lock_for_other_sessions(tmp_path,monkeypatch):
+    from contextlib import asynccontextmanager
+    journal=AGUIJournal(tmp_path/'concurrency.db')
+    await journal.reserve(body(),'b1','owner')
+    reading,release=asyncio.Event(),asyncio.Event()
+    original=journal._read_snapshot
+    @asynccontextmanager
+    async def paused():
+        async with original() as db:
+            await db.execute('SELECT * FROM agui_runs')
+            reading.set()
+            await release.wait()
+            yield db
+    monkeypatch.setattr(journal,'_read_snapshot',paused)
+    reader=asyncio.create_task(journal.session('s1','b1'))
     try:
-        await asyncio.wait_for(reading.wait(), 2)
-        # 新会话不需要恢复其他会话的商品交付，因此跳过暂停函数。
-        monkeypatch.setattr(journal, "_latest_delivery", original)
-        run, created = await asyncio.wait_for(journal.reserve(body("r2", "s2"), "b1", "other"), 2)
-        assert created and run["threadId"] == "s2"
+        await asyncio.wait_for(reading.wait(),2)
+        run,created=await asyncio.wait_for(journal.reserve(body('r2','s2'),'b1','other'),2)
+        assert created and run['threadId']=='s2'
     finally:
         release.set()
         await reader

@@ -17,7 +17,7 @@ class ResearchDeliveryInput(BaseModel):
 def _report(data):
     """正文说明本次交付范围；候选取舍和已读资料由研究组件完整展示。"""
     lines = ['### ' + data['goal'], research_summary(data['status'], data['items'])]
-    for key, label in (('unmet_constraints', '未满足要求'), ('questions', '需要补充'), ('issues', '未完成事项')):
+    for key, label in (('unmet_requirements', '未满足要求'), ('caveats','资料局限'), ('questions', '需要补充'), ('issues', '未完成事项')):
         if data.get(key):
             lines.append(label + '：' + '；'.join(data[key]))
     if data.get('transaction_state') == 'awaiting_confirmation':

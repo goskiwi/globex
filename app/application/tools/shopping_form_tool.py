@@ -36,13 +36,8 @@ def build_shopping_form_tool(store, bus):
         except ValueError as error:
             return ToolResult(data=str(error), state=ToolResultState.ERROR,
                               error_code="business_rejected", error_reason="补充信息表单未满足创建条件")
-        bus.publish(
-            ctx.shopping_session_id,
-            "ui.surface",
-            {"buyer_id": ctx.buyer_id, "form": form},
-        )
         return ToolResult(data={
-                            "form_id": form["form_id"],
+                            "form_id": form["form_id"], "form": form,
                             "status": "awaiting_input",
                             "notice": "澄清表单已显示；请结束本轮等待买家提交。不得按默认值继续检索或当作已确认约束。",
                         }, state=ToolResultState.SUCCESS)

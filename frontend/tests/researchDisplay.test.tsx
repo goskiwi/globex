@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -10,8 +11,8 @@ import {readResearchReports} from '../src/lib/research';
 
 const assessment='适合优先减轻随身负担的人，折叠后也方便收纳。若每天携带电脑，独立电脑仓和保护能力仍需核验。';
 const report={task_id:'bag',goal:'通勤背包研究',status:'partial',product_count:1,sku_count:1,
-  unmet_constraints:['电脑仓资料尚未核实'],questions:[],issues:[],price_comparisons:[],items:[{
-    product_id:'P1003',sku_id:'P1003-S1',assessment,open_questions:['是否有独立电脑仓？'],unmet_constraints:[],
+  caveats:[],unmet_requirements:['电脑仓资料尚未核实'],questions:[],issues:[],price_comparisons:[],items:[{
+    product_id:'P1003',sku_id:'P1003-S1',assessment,caveats:['是否有独立电脑仓？'],
     facts:{product:{product_id:'P1003',title:'Wanderlite 折叠旅行双肩包 35L',weight_kg:0.38,
       description:'完整目录原文仍保留，防泼水且可折叠。',highlights:['支持折叠'],
       dimensions_cm:{length:50},material_tags:['尼龙'],rating_summary:{average:4.6,review_count:217},ships_to:['CN']},
@@ -34,13 +35,12 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
       if(posts===1){firstRun=lastRun;saved={...delivery,runId:firstRun};}
       messages=[...body.messages,{id:`${lastRun}:final:answer`,role:'assistant',content:posts===1?delivery.guidance:'继续解释，不重复整份研究。'}];
       const events=[{type:'RUN_STARTED',threadId:session,runId:lastRun},{type:'MESSAGES_SNAPSHOT',messages},
-        {type:'STATE_SNAPSHOT',snapshot:{researchReports:posts===1?[saved]:[],recommendation:null,comparison:null}},
+        {type:'STATE_SNAPSHOT',snapshot:{presentations:[...presented('recommendation',null,body.runId),...presented('comparison',null,body.runId),...shown('research',posts===1?[saved]:[])]}},
         {type:'RUN_FINISHED',threadId:session,runId:lastRun}];
       return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'Content-Type':'text/event-stream'}});
     }
     if(url.includes('/ag-ui/sessions?'))return Response.json({sessions:session?[{id:session,title:'通勤研究',updatedAt:1}]:[]});
-    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,researchReports:[saved],productViews:[],productHistory:[],
-      run:{runId:lastRun,threadId:session,status:'completed',messages,state:{}}});
+    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,run:{runId:lastRun,threadId:session,status:'completed',messages,state:{}},presentations:[...shown('research',[saved]),...shown('product_view',[])]});
     return Response.json({sessions:[],confirmations:[],skills:[],products:[],form:null,revision:0});
   }));
   const host=document.createElement('div');document.body.append(host);let root=createRoot(host);

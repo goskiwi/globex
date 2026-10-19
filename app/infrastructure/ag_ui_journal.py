@@ -138,29 +138,11 @@ class AGUIJournal:
                       if m.get('id') == row['run_id']+':final:answer'), '')
         result = None if pending else {'text':state.get('executionError') or final,
             'status':state.get('executionStatus') or ('completed' if row['status']=='completed' else 'failed'),
-            'stop_reason':state.get('stopReason') or state.get('errorCode'), 'delivery':state.get('delivery')}
+            'stop_reason':state.get('stopReason') or state.get('errorCode'), 'presentations':state.get('presentations',[])}
         return {"result":result, "runId": row["run_id"], "threadId": row["session_id"], "status": row["status"],
                 "cursor": row["last_seq"], "stopRequested": bool(row["stop_requested"]),
                 "input": json.loads(row["input_json"]), "messages": projection["messages"],
                 "state": projection["state"], "updatedAt": int(row["updated_at"] * 1000)}
-
-    async def _latest_delivery(self, db, session_id, buyer_id):
-        """从已交付的运行记录恢复当前卡片；后续问句不改变交付归属。"""
-        async with db.execute(
-            "SELECT run_id,status,projection_json FROM agui_runs WHERE session_id=? AND buyer_id=? ORDER BY created_at DESC,rowid DESC",
-            (session_id, buyer_id),
-        ) as cursor:
-            async for row in cursor:
-                state = json.loads(row["projection_json"])["state"]
-                delivery = state.get("comparison") or state.get("recommendation")
-                # 旧交付留在历史，不作为当前协议的活动结果，不补造首选或关注点。
-                if not isinstance(delivery, dict) or not {'preferred_sku_id','dimensions','max_items'} <= delivery.keys():
-                    continue
-                if row["status"] != "completed" and not state.get("deliveredRunId"):
-                    continue
-                return {"recommendation":state.get("recommendation"), "comparison":state.get("comparison"),
-                        "deliveredRunId":state.get("deliveredRunId") or row["run_id"]}
-        return {}
 
     async def reserve(self, body: dict, buyer_id: str, owner: str, lease_seconds=30, *, queued=False, request_id=None) -> tuple[dict, bool]:
         now, run_id, session_id = time.time(), body["runId"], body["threadId"]
@@ -199,7 +181,7 @@ class AGUIJournal:
                 requested=[p['interruptId'] for p in body['resume']]
                 if not requested or len(set(requested))!=len(requested) or not set(requested)<=pending:
                     raise JournalConflict("确认已处理或与当前待执行操作不一致，请刷新会话")
-            trusted_state = await self._latest_delivery(db, session_id, buyer_id)
+            trusted_state = {}
             if body.get('resume') and 'skillUsages' in previous_state:
                 trusted_state['skillUsages'] = previous_state['skillUsages']
             messages = json.loads(session["messages_json"]) if session else []
@@ -392,10 +374,7 @@ class AGUIJournal:
             run = self._run(await self._one(db, "SELECT * FROM agui_runs WHERE run_id=?", (row["last_run_id"],)))
             # sessions.messages_json 是下一轮使用的滑动窗口，不是页面完整历史。
             # 旧版本已保留每轮最终投影；按持久顺序合并即可恢复，无需重写原始数据。
-            current_delivery = await self._latest_delivery(db, session_id, buyer_id)
-            active_delivery = {'recommendation':None, 'comparison':None, 'deliveredRunId':None, **current_delivery}
-            run["state"].update(active_delivery)
-            messages, deliveries, product_views, research_reports, processes = {}, {}, {}, {}, []
+            messages, presentations, processes = {}, {}, []
             async with db.execute(
                 "SELECT run_id,status,projection_json,updated_at FROM agui_runs "
                 "WHERE session_id=? AND buyer_id=? ORDER BY created_at,rowid",
@@ -415,19 +394,8 @@ class AGUIJournal:
                                 if step.get('status')=='running':
                                     step.update(status='unconfirmed',summary='运行已结束，未取得完整执行结果')
                         processes.append(process)
-                    for view in state.get("productViews", []):
-                        if view.get("runId") == saved["run_id"] and view.get("purpose") == "product_view":
-                            product_views[view["runId"]] = view
-                    for report in state.get("researchReports", []):
-                        if report.get("runId") == saved["run_id"]:
-                            research_reports[report["runId"]] = report
-                    products = (state.get("comparison") or state.get("recommendation") or {}).get("hits", [])
-                    if products and (saved["status"] == "completed" or state.get("deliveredRunId")):
-                        origin = state.get("deliveredRunId") or saved["run_id"]
-                        deliveries.setdefault(origin, {"runId": origin, "products": products,
-                            "updatedAt": int(saved["updated_at"] * 1000)})
-            product_history = [value for origin,value in deliveries.items()
-                               if origin != current_delivery.get("deliveredRunId")]
+                    for accepted in state.get('presentations',[]):
+                        presentations[accepted['id']]=accepted
             # 只回传最近 80 条事件的安全元数据，不暴露工具参数、结果或推理原文。
             async with db.execute(
                 "SELECT r.run_id,e.seq,json_extract(e.event_json,'$.type') AS type,"
@@ -441,5 +409,5 @@ class AGUIJournal:
                 events = [{"id": f"{item['run_id']}:{item['seq']}", "type": item["type"],
                            "timestamp": item["timestamp"]} for item in await cursor.fetchall()]
             return {"id": session_id, "title": row["title"], "messages": list(messages.values()),
-                    "productHistory": product_history, "productViews": list(product_views.values()), "researchReports": list(research_reports.values()), "processes": processes, "events": events[::-1],
-                    "state": {**json.loads(row["state_json"]), **active_delivery}, "run": run, "updatedAt": int(row["updated_at"] * 1000)}
+                    "presentations":list(presentations.values()), "processes": processes, "events": events[::-1],
+                    "state": json.loads(row["state_json"]), "run": run, "updatedAt": int(row["updated_at"] * 1000)}

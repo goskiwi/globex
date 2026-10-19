@@ -37,6 +37,7 @@ class TaskEvidence:
         self.historical_refs = set()
         self._lookups = set()
         self.delegated = {}
+        self.requirements = []
 
     @property
     def products(self):
@@ -159,9 +160,8 @@ class TaskEvidence:
 
     def stopped_result(self, reason):
         """停止时交回证据与缺口；检索命中不能自动升级为已筛选候选。"""
-        return self.delivered(ResearchSubmission(
-            status="partial" if self.successful_tools else "failed",
-            issues=[reason]))
+        return self.delivered(ResearchSubmission()).model_copy(update={
+            'status':'partial' if self.successful_tools else 'failed','issues':[reason]})
 
     def stopped_text(self, reason):
         result = self.stopped_result(reason)
@@ -207,9 +207,16 @@ class TaskEvidence:
                 if key[1] is not None and quote_key[:2] == key]
         from app.application.usecases.research_report import research_summary
         from app.application.agents.handoff import TradeSubmission
-        summary = ({'completed':'交易任务完成', 'partial':'交易任务部分完成', 'needs_input':'交易任务需要补充信息',
-                    'failed':'交易任务未完成'}[submission.status] if isinstance(submission, TradeSubmission)
-                   else research_summary(submission.status, payload['candidates']))
+        if isinstance(submission,TradeSubmission):
+            status=submission.status
+            payload['unmet_requirements']=payload.pop('unmet_constraints')
+        else:
+            constrained=any(v['issues'] for key,v in self.qualification.items()
+                if key in {(c.product_id,c.sku_id) for c in submission.candidates})
+            status='partial' if submission.unmet_requirements or constrained or not submission.candidates else 'completed'
+            payload['status']=status
+        summary=({'completed':'交易任务完成','partial':'交易任务部分完成','needs_input':'交易任务需要补充信息','failed':'交易任务未完成'}[status]
+            if isinstance(submission,TradeSubmission) else research_summary(status,payload['candidates']))
         return SubagentResult(**payload, summary=summary,
             evidence_refs=sorted(self.refs),
             observed_product_count=len(self.products),
@@ -225,17 +232,12 @@ class TaskEvidence:
             elif candidate.sku_id is not None and candidate.sku_id not in self.products[candidate.product_id]:
                 errors.append(issue("sku_mismatch", f"candidates.{index}.sku_id",
                                     "该 SKU 不属于候选商品的已读证据，请按工具结果修正。"))
-            else:
-                known = [v for (pid, sid), v in self.qualification.items()
-                         if pid == candidate.product_id and (candidate.sku_id is None or sid == candidate.sku_id)
-                         and not v['historical']]
-                if known and all(v['issues'] for v in known):
-                    if result.status == 'completed' or not candidate.unmet_constraints:
-                        errors.append(issue('candidate_constraints_failed', f'candidates.{index}',
-                            '已读事实表明候选不符合本任务条件；移除候选或交回明确带缺口的partial结果。'))
-        if result.status == "completed" and not self.successful_tools:
-            errors.append(issue("completion_without_evidence", "status",
-                                "没有成功业务工具结果；如需用户补充或无法完成，请如实修改状态。"))
+        if isinstance(result,ResearchSubmission):
+            for value in result.unmet_requirements:
+                if value not in self.requirements:
+                    errors.append(issue('requirement_unbound','unmet_requirements','只能引用本任务已有明确要求；其他局限写caveats'))
+        if not self.successful_tools and (isinstance(result,ResearchSubmission) or result.status=='completed'):
+            errors.append(issue('completion_without_evidence','submission','没有实际业务证据，不能提交研究或交易成果'))
         return errors
 
 
@@ -338,9 +340,9 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
             "content": json.dumps({"accepted": not errors, "errors": errors}, ensure_ascii=False)})
             for m in state["messages"] if isinstance(m, ToolMessage) and m.tool_call_id in call_ids]
         reason = state.get("execution_stop")
-        if not errors and reason and result.status == "completed":
-            result = result.model_copy(update={"status": "partial", "issues": [*result.issues, reason]})
-        accepted = evidence.delivered(result).model_dump() if not errors else None
+        accepted=evidence.delivered(result).model_dump() if not errors else None
+        if accepted is not None and reason:
+            accepted.update(status='partial',issues=[*accepted['issues'],reason])
         bus = self.bus
         for receipt in state["messages"]:
             if isinstance(receipt, ToolMessage) and receipt.tool_call_id in call_ids:
@@ -349,7 +351,7 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
                     bus.publish(context.evidence.session_id, "handoff.result", {
                         "tool_call_id": execution_id,
                         "decision": "rejected" if errors else "accepted",
-                        "status": "failed" if errors else result.status,
+                        "status": "failed" if errors else accepted["status"],
                         "result": accepted,
                         "errors": errors,
                     })

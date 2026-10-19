@@ -39,7 +39,7 @@ def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
     assert landed['minimum_minor'] == 31618 and landed['maximum_minor'] == 32400
     text = _report(result)
     assert '2款商品、2个明确规格' in text and '3款' not in text and '头戴式' not in text
-    assert result['items'][0]['open_questions'] == ['是否有电脑仓？']
+    assert result['items'][0]['caveats'] == ['是否有电脑仓？']
     assert '商品原文' not in text and '取舍建议' not in text
     assert data == before, '事实投影不能改写原始回执'
 
@@ -64,7 +64,7 @@ def test_submission_requires_current_assessment_without_filling_old_payload():
     schema = convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
     assert 'assessment' in schema['properties']['candidates']['items']['required']
     with pytest.raises(ValidationError) as failure:
-        ResearchSubmission(status='completed', candidates=[{'product_id': 'P1022'}])
+        ResearchSubmission(candidates=[{'product_id': 'P1022'}])
     assert any(e['loc'] == ('candidates', 0, 'assessment') and e['type'] == 'missing'
                for e in failure.value.errors())
 
@@ -148,7 +148,7 @@ def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
 def test_model_cannot_inject_facts_or_duplicate_candidate():
     candidate = {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
     with pytest.raises(ValidationError):
-        ResearchSubmission(status='completed', candidates=[{**candidate, 'facts': {'product': {'weight_kg': .01}}}])
-    assert ResearchSubmission(status='completed', candidates=[candidate]).candidates[0].product_id == 'P1022'
+        ResearchSubmission(candidates=[{**candidate, 'facts': {'product': {'weight_kg': .01}}}])
+    assert ResearchSubmission(candidates=[candidate]).candidates[0].product_id == 'P1022'
     with pytest.raises(ValidationError, match='不能重复'):
-        ResearchSubmission(status='completed', candidates=[candidate, candidate])
+        ResearchSubmission(candidates=[candidate, candidate])

@@ -10,7 +10,9 @@ from dataclasses import replace
 
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ToolCallRequest
 from langchain_core.messages import AIMessage, ToolMessage
-from langgraph.types import interrupt
+from langgraph.types import interrupt,Command
+from app.application.runtime.delivery import DeliveryState,presentation
+from app.application.usecases.intents import DELIVERY_KINDS
 
 from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.llm import create_chat_model
@@ -25,6 +27,8 @@ from app.infrastructure.operational_metrics import observe_tool_result
 
 class BusinessToolMiddleware(AgentMiddleware):
     """一次工具执行的结果、状态更新与回执出口；不判断调用顺序。"""
+
+    state_schema = DeliveryState
 
     def __init__(self, loops, bus):
         self.loops, self.bus = loops, bus
@@ -61,6 +65,7 @@ class BusinessToolMiddleware(AgentMiddleware):
                 receipts = tool_receipts(output)
                 if not receipts: raise TypeError("工具必须返回 ToolMessage 或含对应回执的 Command")
                 processed=[]
+                presentations=[]
                 failed=any(r.status=="error" for r in receipts)
                 for receipt in receipts:
                     notices=[]
@@ -106,11 +111,19 @@ class BusinessToolMiddleware(AgentMiddleware):
                         payload["error"]=receipt.text
                         payload['failure'] = receipt_failure(receipt)
                         span.set_status(Status(StatusCode.ERROR))
+                    if receipt.status == 'success' and name in DELIVERY_KINDS:
+                        accepted=presentation(name,full,event_id)
+                        presentations.append(accepted)
+                        self.bus.publish(session,'presentation.result',accepted)
                     self.bus.publish(session,"tool.result",payload)
                     emit("TOOL_RESULT_TEXT_DELTA",receipt.text)
                     emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))
                 observe_tool_result(failed=failed)
-                return replace_receipts(output,processed)
+                normalized=replace_receipts(output,processed)
+                if not presentations:return normalized
+                if isinstance(normalized,Command):
+                    return replace(normalized,update={**normalized.update,'presentations':presentations})
+                return Command(update={'messages':processed,'presentations':presentations})
             except BaseException as error:
                 observe_tool_result(failed=True)
                 span.set_attribute("error.type",type(error).__name__);span.set_status(Status(StatusCode.ERROR))

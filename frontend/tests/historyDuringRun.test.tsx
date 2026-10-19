@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -17,9 +18,8 @@ it('运行中的对话不锁住历史浏览；切换只断订阅，不取消服�
     if(url.includes('/cancel'))cancelled++;
     if(url.includes('/sessions?'))return Response.json({sessions:[
       {id:'active-s',title:'正在处理的对话',updatedAt:2},{id:'older-s',title:'之前的对话',updatedAt:1}]});
-    if(url.includes('/sessions/older-s'))return Response.json({productViews:[],messages:[
-      {id:'older-r:final:answer',role:'assistant',content:'已打开旧对话原文'}],
-      run:{runId:'older-r',threadId:'older-s',status:'completed',messages:[],state:{}}});
+    if(url.includes('/sessions/older-s'))return Response.json({messages:[
+      {id:'older-r:final:answer',role:'assistant',content:'已打开旧对话原文'}],run:{runId:'older-r',threadId:'older-s',status:'completed',messages:[],state:{}},presentations:[...shown('product_view',[])]});
     if(url.includes('/sessions/active-s'))return Response.json({run});
     if(url.includes('/runs/running-r?'))return Response.json(run);
     if(url.includes('/runs/running-r/events'))return new Response(new ReadableStream({start(controller){

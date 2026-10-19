@@ -122,9 +122,10 @@ async def test_agent_surface_is_projected_to_agui_and_replay_state(tmp_path):
     )
     try:
         with observe_run_events(adapter.on_trade_event):
-            await build_shopping_form_tool(forms, TradeEventBus())(
-                "选购背包", [{"id": "use_case", "type": "text", "label": "背包主要用在哪个场景？"}]
-            )
+            from tests.native_tool_helpers import tool_graph,call_tool
+            from app.application.runtime.middleware import BusinessToolMiddleware
+            graph=tool_graph(build_shopping_form_tool(forms,TradeEventBus()),middlewares=[BusinessToolMiddleware(None,TradeEventBus())])
+            await call_tool(graph,title='选购背包',questions=[{'id':'use_case','type':'text','label':'背包主要用在哪个场景？'}])
         assert adapter.state.get("shoppingForms"), "Agent 工具应更新页面和持久事件快照"
         assert any(getattr(e, "name", None) == "a2ui" for e in events)
     finally:
@@ -186,6 +187,7 @@ async def test_buyer_can_restore_unstarted_draft_without_browser_cache(tmp_path)
 async def test_native_graph_calls_clarification_tool_then_accepts_answer(tmp_path):
     import httpx
     from langchain.agents import create_agent
+    from app.application.runtime.middleware import BusinessToolMiddleware
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
     from app.application.runtime.tools import as_langchain_tool
@@ -207,7 +209,7 @@ async def test_native_graph_calls_clarification_tool_then_accepts_answer(tmp_pat
     model=await client_model(tmp_path,handler)
     forms=store(tmp_path/'forms.db');emitted=[]
     graph=create_agent(model,tools=[as_langchain_tool(build_shopping_form_tool(forms,TradeEventBus()),args_schema=ClarificationRequest)],
-        checkpointer=InMemorySaver())
+        middleware=[BusinessToolMiddleware(None,TradeEventBus())],checkpointer=InMemorySaver())
     config={'configurable':{'thread_id':'s'}}
     token=ShoppingContext.set(ShoppingContextSnapshot('s','b','zh-CN','USD'))
     try:

@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 import { describe, expect, it } from "vitest";
 import { CommerceClient } from "./clientFixture";
 
@@ -59,7 +60,7 @@ describe("通过官方 SDK 消费真实 AG-UI 协议", () => {
             started(body),
             {
               type: "STATE_SNAPSHOT",
-              snapshot: { recommendation: null, comparison: null, progress: [] },
+              snapshot: {progress: [],presentations:[...presented('recommendation',null,body.runId),...presented('comparison',null,body.runId)]},
             },
             finished(body),
           ]);
@@ -79,12 +80,12 @@ describe("通过官方 SDK 消费真实 AG-UI 协议", () => {
           { type: "TEXT_MESSAGE_END", messageId: "assistant-1" },
           {
             type: "STATE_SNAPSHOT",
-            snapshot: { recommendation: null, comparison: null, progress: [] },
+            snapshot: {progress: [],presentations:[...presented('recommendation',null,body.runId),...presented('comparison',null,body.runId)]},
           },
           {
             type: "STATE_DELTA",
             delta: [
-              { op: "replace", path: "/recommendation", value: {mode:"alternatives",guidance:"审核后的建议",hits:[product],preferred_sku_id:null,dimensions:["用途"],max_items:12,quote:null,result_ref:"ctx_final",unverified_requirements:[]} },
+              { op: "replace", path: "/presentations", value: presented("recommendation",{mode:"alternatives",guidance:"审核后的建议",hits:[product],preferred_sku_id:null,dimensions:["用途"],max_items:12,quote:null,result_ref:"ctx_final",unverified_requirements:[]},body.runId) },
             ],
           },
           {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 import logging
 import time
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -132,33 +133,29 @@ class MainAgentOrchestrator:
         context_token = ShoppingContext.set(ShoppingContextSnapshot(
             shopping_session_id=session_id, buyer_id=intent.buyer_id,
             locale=intent.locale, currency=intent.currency,
-            source_message_id=intent.message_id, source_run_id=intent.run_id,
+            source_message_id=intent.message_id, source_run_id=intent.run_id or uuid.uuid4().hex,
         ))
         init_budget(self._token_budget_total)
         started_at = time.monotonic()
         trace = self._bus.subscribe(session_id) if self._conversation_store else None
         finalizer = RunFinalizer(self._sessions, self._bus, self._conversation_store, self._evidence_store)
-        recommendation = None
-
-        def collect_delivery(event):
-            nonlocal recommendation
-            if event.shopping_session_id == session_id and event.type in {"recommendation.result", "comparison.result"}:
-                recommendation = event.payload
-
+        accepted=[]
+        def collect(event):
+            if event.shopping_session_id==session_id and event.type=='presentation.result':
+                accepted.append(event.payload)
         try:
-            with observe_run_events(collect_delivery):
-                try:
-                    result = await self._execute_intent(intent)
-                except asyncio.CancelledError:
-                    text = "[cancelled] 本轮执行已中断"
-                    saved = await finalizer.finish(intent, text, None, persistence_guard, cancelled=True)
-                    if saved:
-                        await finalizer.record_conversation(intent, text,
-                            int((time.monotonic() - started_at) * 1000), trace, cancelled=True)
-                    raise
-            delivered = recommendation if result.delivery and result.delivery["kind"] in {"recommendation", "comparison"} else None
             try:
-                saved = await finalizer.finish(intent, result.final_text, delivered, persistence_guard)
+                with observe_run_events(collect):
+                    result = await self._execute_intent(intent)
+            except asyncio.CancelledError:
+                text = "[cancelled] 本轮执行已中断"
+                saved = await finalizer.finish(intent, text, accepted, persistence_guard, cancelled=True)
+                if saved:
+                    await finalizer.record_conversation(intent, text,
+                        int((time.monotonic() - started_at) * 1000), trace, cancelled=True)
+                raise
+            try:
+                saved = await finalizer.finish(intent, result.final_text, accepted, persistence_guard)
             except RunPersistenceError as error:
                 logger.exception("执行收尾失败，不自动重放业务操作")
                 saved = error.session_saved
@@ -219,7 +216,7 @@ class MainAgentOrchestrator:
                     execution = ExecutionResult(final_text, "needs_input")
                 final_text = self._guard_final_text(session_id, final_text)
                 return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
-                                          delivery=execution.delivery)
+                                          presentations=execution.presentations)
             if pending:
                 event = approval_event(pending)
                 observer = self._native_observer.get()
@@ -264,7 +261,7 @@ class MainAgentOrchestrator:
                 final_text = "这次长期记忆变更还未执行，请在下方确认或拒绝。"
                 execution = ExecutionResult(final_text, "needs_input")
             return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
-                                      delivery=execution.delivery)
+                                      presentations=execution.presentations)
         except ContextCapacityError:
             text = "本次比较的内容超过安全上下文容量。原始记录已保留，请缩小商品范围或分批比较。"
             final_text = text

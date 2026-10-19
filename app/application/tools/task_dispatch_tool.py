@@ -73,6 +73,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
         evidence = TaskEvidence(session_id)
         feedback = []
         stop_reason = None
+        execution_status = "completed"
         scope = None
         try:
             budget = get_budget()
@@ -127,6 +128,19 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 parent["selected_products"] = list(context.selected_lines)
                 # 子任务只看到解析后的一份条件，不再同时接收原条件和覆盖值。
                 task_context = task.model_dump(exclude={"filters", "requirements", "preferences"})
+                evidence.requirements=list(effective.get('requirements',[]))
+                # 同一请求/同一范围的成果已经执行过，纠正或再次展示不重建研究。
+                request_id=context.source_run_id or context.source_message_id
+                scope['request_id']=request_id
+                if subagent_type=='search_agent':
+                    for previous in context.task_plan.get('tasks',{}).values():
+                        if ({k:v for k,v in (previous.get('scope') or {}).items() if k!='task_id'}==
+                            {k:v for k,v in scope.items() if k!='task_id'} and previous.get('execution_status')=='completed'):
+                            saved={key:deepcopy(value) for key,value in previous.items() if key not in {'stale','delivery'}}
+                            return ToolResult(saved,model_data=await bounded_tool_view(saved,search_factory.evidence_store,
+                                context,kind='handoff',token_limit=model_token_limit),
+                                state=ToolResultState.ERROR if saved['status']=='failed' else ToolResultState.SUCCESS,
+                                error_code='business_rejected' if saved['status']=='failed' else None)
                 inputs = [HumanMessage(name="delegated_task", content=json.dumps({
                     "delegated_task": task_context, "parent_context": parent}, ensure_ascii=False))]
                 bus.publish(session_id, "agent.dispatch", {"agent": subagent_type,
@@ -151,27 +165,34 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 else:
                     result = SubagentResult.model_validate(reply["handoff_result"])
                 stop_reason = reply.get("execution_stop")
+                if stop_reason:execution_status="stopped"
         except (ExecutionStopped, GraphRecursionError, TimeoutError, ContextCapacityError) as error:
+            execution_status = "stopped"
             stop_reason = error.reason if isinstance(error, ExecutionStopped) else (
                 "step_limit" if isinstance(error, GraphRecursionError) else
                 "context_capacity" if isinstance(error, ContextCapacityError) else "timeout")
             result = evidence.stopped_result(stop_reason)
         except DelegationInputError as error:
+            execution_status = "failed"
             feedback = [issue('task_precondition', 'task', str(error))]
             result = SubagentResult(status='failed', summary='委派条件尚未满足，子任务未执行。', issues=[str(error)])
         except asyncio.CancelledError:
             raise
         except Exception as error:
+            execution_status = "failed"
             # 保留已完成的业务引用，不回传可能包含地址或模型请求的异常原文。
             feedback = [issue("execution_error", "runtime", "子图执行异常，已完成业务结果保留；请核对后决定是否重试。")]
             result = SubagentResult(status="failed", summary="子任务未交付可核验的完整结果。",
                                     issues=["execution_error:" + type(error).__name__])
 
+        if subagent_type=='search_agent' and scope and scope['effective_search'].get('unverified_requirements'):
+            gaps=list(dict.fromkeys([*result.unmet_requirements,*scope['effective_search']['unverified_requirements']]))
+            result=result.model_copy(update={'status':'partial','unmet_requirements':gaps})
         selected_keys = {(c.product_id, c.sku_id) for c in result.candidates}
         qualified = sorted(sid for (pid, sid), value in evidence.qualification.items()
                            if value['verified'] and ((pid, sid) in selected_keys or (pid, None) in selected_keys))
         decision = {"agent": subagent_type, **result.model_dump(),
-                    'scope': scope, 'qualified_skus': qualified, 'observed_products': sorted(evidence.products),
+                    'scope': scope, 'execution_status':execution_status, 'qualified_skus': qualified, 'observed_products': sorted(evidence.products),
                     'observed_skus': {pid: sorted(skus) for pid, skus in evidence.products.items()},
                     "evidence_refs": sorted(evidence.refs), "feedback": feedback,
                     "historical_evidence_refs": sorted(evidence.historical_refs),

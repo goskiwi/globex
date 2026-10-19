@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -93,7 +94,7 @@ it('实际App查看到确认闭环传递精确平台SKU与展示币种，准备�
       session=body.threadId;run=body.runId;
       const events=[{type:'RUN_STARTED',threadId:session,runId:run},
         {type:'MESSAGES_SNAPSHOT',messages:[...body.messages,{id:`${run}:final:answer`,role:'assistant',content:'查看这款颈枕。'}]},
-        {type:'STATE_SNAPSHOT',snapshot:{productViews:[{runId:run,guidance:'查看这款颈枕。',hits:products,result_ref:'ctx_view',purpose:'product_view'}]}},
+        {type:'STATE_SNAPSHOT',snapshot:{presentations:[...shown('product_view',[{runId:run,guidance:'查看这款颈枕。',hits:products,result_ref:'ctx_view',purpose:'product_view'}])]}},
         {type:'RUN_FINISHED',threadId:session,runId:run}];
       return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'Content-Type':'text/event-stream'}});
     }

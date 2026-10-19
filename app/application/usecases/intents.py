@@ -9,9 +9,12 @@ DELIVERY_KINDS = {"recommend_products":"recommendation", "compare_products":"com
 PRODUCT_DELIVERIES = frozenset({"recommendation", "comparison", "product_view"})
 
 
-class Delivery(TypedDict):
+class Presentation(TypedDict):
+    id: str
+    runId: str
     kind: Literal["recommendation", "comparison", "product_view", "research", "clarification"]
     status: Literal["completed", "partial", "needs_input"]
+    payload: dict
 
 
 @dataclass(frozen=True)
@@ -34,4 +37,4 @@ class SubmitIntentOutput:
     error_code: str | None = None
     status: str = "completed"
     stop_reason: str | None = None
-    delivery: Delivery | None = None
+    presentations: tuple[Presentation, ...] = ()

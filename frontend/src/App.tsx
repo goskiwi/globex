@@ -4,12 +4,12 @@ import { ToolApprovalCards } from "./components/ToolApprovalCards";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCommerceAgent } from "./hooks/useCommerceAgent";
 import { readProducts } from "./lib/commerceClient";
-import type { ProductCard } from "./types";
+import type { ProductCard,ResearchDelivery,Comparison } from "./types";
 import Icon from "./components/Icon";
 import Markdown from "./components/Markdown";
 import EventTimeline from "./components/EventTimeline";
 import ProductCards, { ProductImage } from "./components/ProductCards";
-import ProductHistory from "./components/ProductHistory";
+
 import ResearchReports from "./components/ResearchReports";
 import {CatalogMediaProvider} from "./components/CatalogMedia";
 import ProductDetail from "./components/ProductDetail";
@@ -266,7 +266,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
       onDetail={setDetail}
     />
   );
-  const deliveredMessageId = agent.deliveredRunId ? `${agent.deliveredRunId}:final:answer` : null;
+  const currentDecisionId=[...agent.presentations].reverse().find(p=>p.kind==="recommendation"||p.kind==="comparison")?.id;
   const deliveredProducts = shownProducts.length > 0 && (
     <section className="search-results" aria-label="商品结果">
       <div className="results-heading">
@@ -464,17 +464,15 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
                           <Markdown content={message.content} collapsible={message.content !== decision?.guidance} />
                         </div>
                         </div>
-                        {message.id === deliveredMessageId && deliveredProducts}
+                        {agent.presentations.filter(p=>message.id===`${p.runId}:final:answer`).map(p=>
+                          p.id===currentDecisionId?<div key={p.id}>{deliveredProducts}</div>
+                          :p.kind==='product_view'?<section key={p.id} className="product-views" aria-label="商品详情"><ProductCards mode="view" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>
+                          :p.kind==='research'?<ResearchReports key={p.id} delivery={{...p.payload,runId:p.runId} as unknown as ResearchDelivery}/>
+                          :p.kind==='recommendation'||p.kind==='comparison'?<section key={p.id} className="historical-products"><p className="comparison-focus">{(p.payload as unknown as Comparison).dimensions.join('、')}</p><ProductCards mode="research" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>:null)}
                         {agent.shoppingForms.filter(form=>message.id===`${form.origin_run_id}:final:answer`).map(form=><ShoppingForm
                           key={form.form_id} form={form} busy={busy||!!agent.toolApprovals?.length||agent.confirmations.some(c=>c.status==='pending'&&!c.expired)}
                           request={agent.workspaceRequest} onApplied={applyForm}
                           continuationStatus={agent.processes.find(p=>p.runId===form.submission?.run_id)?.status}/>)}
-                        {agent.productViews?.filter(view=>message.id===`${view.runId}:final:answer`)
-                          .map(view=><section key={view.runId} className="product-views" aria-label="商品详情">
-                            <ProductCards mode="view" products={view.hits} onDetail={setDetail}/>
-                          </section>)}
-                        {agent.researchReports.filter(report=>message.id===`${report.runId}:final:answer`).map(report=><ResearchReports key={report.runId} delivery={report}/>)}
-                        <ProductHistory batches={agent.productHistory?.filter(batch => message.id === `${batch.runId}:final:answer`)}/>
                       </div>
                     ),
                   )}

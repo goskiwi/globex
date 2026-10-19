@@ -7,6 +7,7 @@ from app.application.agents.shopping_state import ShoppingWork
 
 
 class TaskScope(TypedDict):
+    request_id: str
     task_id: str
     step_id: str | None
     goal: str
@@ -22,8 +23,8 @@ class ResearchTask(TypedDict):
     observed_products: list[str]
     observed_skus: dict[str, list[str]]
     evidence_refs: list[str]
-    required_gaps: list[str]
-    gaps: list[str]
+    unmet_requirements: list[str]
+    caveats: list[str]
     stale: NotRequired[bool]
     delivery: NotRequired[Literal["research", "products"]]
 
@@ -62,12 +63,12 @@ def project_plan(work: ShoppingWork, policy: dict, saved: ResearchPlan) -> Resea
         value = tasks.get(step.id)
         if value and any(statuses[key] not in {'verified', 'reported', 'delivered'} for key in step.depends_on):
             value['stale'] = True
-        ready = bool(value and value['status'] == 'completed' and value.get('qualified_skus') and not value.get('required_gaps'))
+        ready = bool(value and value['status'] == 'completed' and value.get('qualified_skus') and not value.get('unmet_requirements'))
         status = ('pending' if not value or value['stale'] else 'blocked' if not ready else
                   'delivered' if value.get('delivery') == 'products' else
                   'reported' if value.get('delivery') == 'research' else 'verified')
         steps.append({**step.model_dump(), 'status': status,
-                      'gaps': (value.get('gaps', []) if value and not value['stale'] else []),
+                      'gaps': ([*value.get('unmet_requirements',[]),*value.get('issues',[])] if value and not value['stale'] else []),
                       'evidence_refs': (value.get('evidence_refs', []) if value and not value['stale'] else [])})
         statuses[step.id] = status
     return {'steps': steps, 'tasks': tasks, 'last_batch': saved.get('last_batch')}
@@ -85,6 +86,8 @@ def resolve_candidate_scope(plan: ResearchPlan, pick, *, require_qualified=True)
         raise ValueError('任务来源不存在或条件已变化，请重新核验该任务')
     if pick.sku_id not in value.get('observed_skus', {}).get(pick.product_id, []):
         raise ValueError('指定任务没有读取这个商品规格，不能借用其他商品的证据')
+    if require_qualified and value.get('unmet_requirements'):
+        raise ValueError('该研究仍有买家明确要求未满足，不能作为合格推荐')
     if require_qualified and pick.sku_id not in value.get('qualified_skus', []):
         raise ValueError('该规格尚未在指定任务中核验为合格候选')
     return value['scope']['effective_search']
@@ -94,7 +97,7 @@ def plan_delivery(plan: ResearchPlan, picks, cards):
     requested = {p.task_id for p in picks if p.task_id is not None}
     tasks = plan.get('tasks', {})
     issues = {c['default_sku_id']: c['constraint_issues'] for c in cards}
-    delivered = {key for key in requested if tasks[key]['status'] == 'completed' and not tasks[key].get('required_gaps')
+    delivered = {key for key in requested if tasks[key]['status'] == 'completed' and not tasks[key].get('unmet_requirements')
                  and all(not issues[p.sku_id] for p in picks if p.task_id == key)}
     steps = deepcopy(plan.get('steps', []))
     for step in steps:
@@ -112,17 +115,7 @@ def record_research(plan: ResearchPlan, work: ShoppingWork, data: dict) -> None:
     for key in dependent_steps(work.plan, {scope['task_id']}):
         if key in plan['tasks']:
             plan['tasks'][key]['stale'] = True
-    plan['tasks'][scope['task_id']] = {
-        'scope': scope, 'status': data['status'],
-        'qualified_skus': data.get('qualified_skus', []),
-        'observed_products': data.get('observed_products', []),
-        'observed_skus': data.get('observed_skus', {}),
-        'evidence_refs': data.get('evidence_refs', []),
-        'required_gaps': [*data.get('unmet_constraints', []), *scope['effective_search'].get('unverified_requirements', [])],
-        'gaps': [*data.get('unmet_constraints', []), *data.get('questions', []),
-                 *data.get('issues', []),
-                 *(question for candidate in data.get('candidates', []) for question in candidate.get('open_questions', []))],
-    }
+    plan['tasks'][scope['task_id']] = deepcopy(data)
 
 
 def apply_delivery(plan: ResearchPlan, task_ids, kind, work, policy) -> ResearchPlan:

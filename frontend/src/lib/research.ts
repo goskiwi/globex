@@ -12,10 +12,10 @@ export function readResearchReports(value: unknown): ResearchDelivery[] {
     && strings(batch.task_ids) && strings(batch.completed_task_ids) && Array.isArray(batch.reports)
     && batch.reports.every((r: unknown) => record(r) && typeof r.task_id === 'string' && typeof r.goal === 'string'
       && ['completed','partial','needs_input','failed'].includes(r.status) && amount(r.product_count) && amount(r.sku_count)
-      && ['unmet_constraints','questions','issues'].every(k=>strings(r[k]))
+      && ['unmet_requirements','caveats','questions','issues'].every(k=>strings(r[k]))
       && Array.isArray(r.items) && r.items.every((c: unknown)=>record(c) && typeof c.product_id === 'string'
         && (c.sku_id === null || typeof c.sku_id === 'string') && typeof c.assessment === 'string'
-        && strings(c.open_questions) && strings(c.unmet_constraints) && record(c.facts) && record(c.facts.product)
+        && strings(c.caveats) && record(c.facts) && record(c.facts.product)
         && typeof c.facts.historical === 'boolean' && Array.isArray(c.facts.quotes)
         && (c.facts.sku === null || record(c.facts.sku) && typeof c.facts.sku.spec === 'string'
           && amount(c.facts.sku.price_major) && typeof c.facts.sku.currency === 'string'))

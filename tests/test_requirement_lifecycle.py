@@ -20,9 +20,9 @@ async def test_verified_requirement_can_complete_delivery(tmp_path,monkeypatch):
         result,state=await ask(c,'请按计划找一款明确配防雨罩的背包并推荐。')
         dispatch=next(m.artifact['data'] for m in state['messages'] if isinstance(m,ToolMessage) and m.name=='task_dispatch')
         print(json.dumps({'final_status':result.status,'final_text':result.final_text,'child_status':dispatch['status'],
-            'child_unmet':dispatch['unmet_constraints'],'read_description':dispatch['candidates'][0]['facts']['product']['description'],
+            'child_unmet':dispatch['unmet_requirements'],'read_description':dispatch['candidates'][0]['facts']['product']['description'],
             'qualified_skus':dispatch['qualified_skus'],'task':state['task_plan']['tasks']['bag'],'steps':state['task_plan']['steps']},ensure_ascii=False))
-        assert dispatch['status']=='completed' and not dispatch['unmet_constraints']
+        assert dispatch['status']=='completed' and not dispatch['unmet_requirements']
         assert '配防雨罩' in dispatch['candidates'][0]['facts']['product']['description']
         assert result.status=='completed','已确认要求仍被永久视作未知，计划无法完成'
     finally:await c.shutdown()

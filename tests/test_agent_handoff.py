@@ -59,7 +59,7 @@ def call(name, args, identifier="call-1"):
 
 
 def submission(**updates):
-    return call("SubagentResult", {"status": "completed", **updates}, "submit-1")
+    return call("SubagentResult", updates, "submit-1")
 
 
 def task(**updates):
@@ -125,7 +125,7 @@ async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_p
     assert "无关旧话题" not in json.dumps(sent, ensure_ascii=False)
     result = next(m for m in state["messages"] if isinstance(m, ToolMessage) and m.name == "task_dispatch")
     delivered = json.loads(result.content)["candidates"][0]
-    assert {k:v for k,v in delivered.items() if k != "facts"} == {**candidate, "open_questions": [], "unmet_constraints": []}
+    assert {k:v for k,v in delivered.items() if k != "facts"} == {**candidate,"caveats":[]}
     assert delivered["facts"]["result_ref"] == "ctx_demo"
     assert json.loads(result.content)["status"] == "completed"
     assert not any(isinstance(m, ToolMessage) and m.name == "read_candidates" for m in state["messages"])
@@ -134,8 +134,8 @@ async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_p
 
 
 @pytest.mark.parametrize("response", [AIMessage(content="我已经完成了"),
-    submission(status="partial"), submission(status="needs_input"),
-    submission(status="completed", questions=["预算多少？"]), submission()])
+    submission(), submission(),
+    submission(caveats=["预算多少？"]), submission()])
 async def test_invalid_or_unsupported_completion_is_failed(tmp_path, monkeypatch, response):
     _, _, dispatch, _ = factories(tmp_path, monkeypatch, [response])
     result = await dispatch("search_agent", task())
@@ -158,10 +158,10 @@ async def test_result_must_match_actual_child_evidence(tmp_path, monkeypatch, up
 async def test_nonblocking_notes_do_not_turn_completed_task_into_failure(tmp_path, monkeypatch):
     _, _, dispatch, _ = factories(tmp_path, monkeypatch, [call("read_candidates", {}),
         submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。',
-                                "open_questions": ["容量数据？"]}])])
+                                "caveats": ["容量数据？"]}])])
     result = (await dispatch("search_agent", task())).data
     assert result["status"] == "completed"
-    assert result["candidates"][0]["open_questions"] == ["容量数据？"]
+    assert result["candidates"][0]["caveats"] == ["容量数据？"]
     assert "1款商品" in result["summary"]
 
 
@@ -171,15 +171,16 @@ async def test_nonblocking_notes_do_not_turn_completed_task_into_failure(tmp_pat
     {"status": "failed", "issues": ["检索服务不可用"]},
 ])
 async def test_explicit_noncompleted_statuses_survive_handoff(tmp_path, monkeypatch, updates):
-    _, _, dispatch, _ = factories(tmp_path, monkeypatch, [submission(**updates)])
-    result = (await dispatch("search_agent", task())).data
+    _, _, dispatch, _ = factories(tmp_path, monkeypatch, [submission(**updates)],role="trade")
+    result = (await dispatch("trade_agent", task())).data
     assert result["status"] == updates["status"]
-    assert result[next(k for k in updates if k != "status")] == updates[next(k for k in updates if k != "status")]
+    key=next(k for k in updates if k!="status")
+    assert result["unmet_requirements" if key=="unmet_constraints" else key]==updates[key]
 
 
 async def test_pending_confirmation_never_becomes_executed(tmp_path, monkeypatch):
     factory, _, dispatch, bus = factories(tmp_path, monkeypatch, [call("prepare_trade", {}),
-        submission()], role="trade")
+        submission(status="completed")], role="trade")
 
     @tool
     def prepare_trade() -> str:
@@ -286,7 +287,7 @@ async def test_real_trade_tools_prepare_without_order_or_inventory_write(confirm
     await env.evidence.save("buyer", "handoff", "products", {"hits": [{
         "product_id": product.product_id, "default_sku_id": sku.sku_id,
         "skus": [{"sku_id": sku.sku_id}]}]})
-    result_messages = [submission()] if valid_submission else [submission(status="partial") for _ in range(3)]
+    result_messages = [submission(status="completed")] if valid_submission else [submission(status="partial") for _ in range(3)]
     model = ScriptedModel(responses=[call("create_order_tool", {
         "sku_ids": [sku.sku_id], "shipping_address": asdict(sample_address())}),
         *result_messages])

@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -57,8 +58,7 @@ it('真实App结果前出现动作和摘要，终态保留原用户消息下，�
         {type:'RUN_FINISHED',runId:body.runId,threadId:session}].map(e=>`data: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'Content-Type':'text/event-stream'}});
     }
     if(url.includes('/ag-ui/sessions?'))return Response.json({sessions:session?[{id:session,title:'合成购物',updatedAt:1}]:[]});
-    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,processes,productHistory:[],productViews:[],events:[],
-      run:{runId:processes.at(-1).runId,threadId:session,status:'completed',messages,state:{process:processes.at(-1)}}});
+    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,processes,events:[],run:{runId:processes.at(-1).runId,threadId:session,status:'completed',messages,state:{process:processes.at(-1)}},presentations:[...shown('product_view',[])]});
     return Response.json({sessions:[],confirmations:[],skills:[],products:[],form:null,revision:0});
   }));
   const host=document.createElement('div');document.body.append(host);let root=createRoot(host);

@@ -194,7 +194,7 @@ async def test_native_search_keeps_tool_events_without_publishing_cards(tmp_path
         assert kinds.index("TOOL_CALL_START") < kinds.index("TOOL_CALL_END") < kinds.index("TOOL_CALL_RESULT")
         snapshots = [event["snapshot"] for event in events if event["type"] == "STATE_SNAPSHOT"]
         assert all("products" not in s for s in snapshots)
-        assert snapshots[-1]["recommendation"] is snapshots[-1]["comparison"] is None
+        assert snapshots[-1]["presentations"]==[]
         receipt = next(e for e in events if e["type"]=="TOOL_CALL_RESULT")
         assert "P1003-S1" in receipt["content"]
     finally:

@@ -22,17 +22,12 @@ import {readResearchReports} from './research';
 
 const MAX_SESSIONS = 12;
 interface SavedSession {
-  researchReports: CommerceSnapshot['researchReports'];
+  presentations: CommerceSnapshot['presentations'];
   processes: RunProcess[];
-  productViews: CommerceSnapshot['productViews'];
-  comparison: import("../types").Comparison | null;
-  recommendation: import("../types").Recommendation | null;
   id: string;
   title: string;
   updatedAt: number;
   messages: ChatMessage[];
-  deliveredRunId: string | null;
-  productHistory: CommerceSnapshot['productHistory'];
   runId?: string | null;
 }
 interface StorageLike {
@@ -101,6 +96,32 @@ export function readRecommendation(value: unknown): import("../types").Recommend
 
 export function readComparison(value: unknown): import("../types").Comparison | null {
   return readDecision(value, 2);
+}
+
+export function readPresentations(value:unknown): CommerceSnapshot['presentations'] {
+  if(!Array.isArray(value))return [];
+  return value.flatMap(item=>{
+    if(!isRecord(item)||typeof item.id!=='string'||typeof item.runId!=='string'||!isRecord(item.payload)
+      ||!['completed','partial','needs_input'].includes(String(item.status)))return [];
+    const payload=item.payload;
+    const valid=item.kind==='recommendation'?!!readRecommendation(payload):item.kind==='comparison'?!!readComparison(payload)
+      :item.kind==='product_view'?!!readProductViews([{...payload,runId:item.runId}]).length
+      :item.kind==='research'?!!readResearchReports([{...payload,runId:item.runId}]).length
+      :item.kind==='clarification'&&typeof payload.form_id==='string';
+    return valid?[{id:item.id,runId:item.runId,kind:item.kind as CommerceSnapshot['presentations'][number]['kind'],
+      status:item.status as CommerceSnapshot['presentations'][number]['status'],payload}]:[];
+  });
+}
+
+/** UI读取投影，唯一输入是已接纳成果，不维护第二份交付判断。 */
+function presentationViews(presentations:CommerceSnapshot['presentations']):Partial<CommerceSnapshot> {
+  const decisions=presentations.filter(p=>p.kind==='recommendation'||p.kind==='comparison');
+  const last=decisions.at(-1);
+  return {presentations,recommendation:last?.kind==='recommendation'?readRecommendation(last.payload):null,
+    comparison:last?.kind==='comparison'?readComparison(last.payload):null,deliveredRunId:last?.runId??null,
+    productHistory:decisions.slice(0,-1).map(p=>({runId:p.runId,updatedAt:0,products:readProducts(p.payload.hits)})),
+    productViews:presentations.filter(p=>p.kind==='product_view').flatMap(p=>readProductViews([{...p.payload,runId:p.runId}])),
+    researchReports:presentations.filter(p=>p.kind==='research').flatMap(p=>readResearchReports([{...p.payload,runId:p.runId}]))};
 }
 
 export function readProductViews(value: unknown): CommerceSnapshot['productViews'] {
@@ -246,6 +267,7 @@ export function readProducts(value: unknown): ProductCard[] {
     }
     if (Number.isSafeInteger(item.quantity) && Number(item.quantity) > 0) card.quantity = item.quantity as number;
     if (Array.isArray(item.constraint_issues)) card.constraint_issues = item.constraint_issues.filter((v): v is string=>typeof v === "string");
+    if (typeof item.requested_sku_id === "string") card.requested_sku_id=item.requested_sku_id;
     if (typeof item.recommendation_reason === "string") card.recommendation_reason = item.recommendation_reason;
     if (Array.isArray(item.tradeoffs)) card.tradeoffs = item.tradeoffs.filter((v): v is string => typeof v === "string");
     const landed = readLandedPrice(item.landed_price, card.currency);
@@ -285,6 +307,7 @@ function displayMessages(
 
 function emptySnapshot(sessionId = newId()): CommerceSnapshot {
   return {
+    presentations: [],
     productViews: [],
     researchReports: [],
     shoppingForms: [],
@@ -390,12 +413,8 @@ export class CommerceClient {
                 id: entry.id,
                 title: entry.title,
                 updatedAt: entry.updatedAt,
-                productViews: readProductViews(entry.productViews),
-                researchReports: readResearchReports(entry.researchReports),
-                processes: readProcesses(entry.processes),
-                messages: readMessages(entry.messages),
-                deliveredRunId: typeof entry.deliveredRunId === 'string' ? entry.deliveredRunId : null,
-                productHistory: readProductHistory(entry.productHistory), recommendation: readRecommendation(entry.recommendation), comparison: readComparison(entry.comparison),
+                presentations:readPresentations(entry.presentations),
+                processes:readProcesses(entry.processes),messages:readMessages(entry.messages),
                 runId: typeof entry.runId === "string" ? entry.runId : null,
               },
             ];
@@ -410,10 +429,7 @@ export class CommerceClient {
         this.snapshot = {
           ...emptySnapshot(saved.id),
           messages: saved.messages,
-          productViews: saved.productViews,
-          researchReports: saved.researchReports,
-          processes: saved.processes,
-          deliveredRunId: saved.deliveredRunId, productHistory: saved.productHistory, recommendation: saved.recommendation, comparison: saved.comparison,
+          ...presentationViews(saved.presentations),processes:saved.processes,
           recoverableRunId: saved.runId ?? null,
         };
     } catch {
@@ -455,10 +471,7 @@ export class CommerceClient {
           ?.content.slice(0, 32) ?? "选购记录",
       updatedAt: Date.now(),
       messages: this.snapshot.messages.slice(-100),
-      productViews: this.snapshot.productViews,
-      researchReports: this.snapshot.researchReports,
-      processes: this.snapshot.processes,
-      deliveredRunId: this.snapshot.deliveredRunId, productHistory: this.snapshot.productHistory, recommendation: this.snapshot.recommendation, comparison: this.snapshot.comparison,
+      presentations:this.snapshot.presentations,processes:this.snapshot.processes,
       runId: this.snapshot.recoverableRunId,
     };
     this.sessions = [
@@ -707,22 +720,10 @@ export class CommerceClient {
     }
   };
 
-  private applyDelivery(state: Record<string, unknown>, runId: string): Partial<CommerceSnapshot> {
-    const researchAdditions = readResearchReports(state.researchReports);
-    const researchReports = [...this.snapshot.researchReports.filter(report => !researchAdditions.some(next => next.runId === report.runId)), ...researchAdditions];
-    const additions = readProductViews(state.productViews);
-    const productViews = [...this.snapshot.productViews.filter(view => !additions.some(next => next.runId === view.runId)), ...additions];
-    const recommendation=readRecommendation(state.recommendation), comparison=readComparison(state.comparison);
-    if (!recommendation && !comparison) return {productViews,researchReports};
-    const origin=typeof state.deliveredRunId==="string" ? state.deliveredRunId : runId;
-    let productHistory=(this.snapshot.productHistory ?? []).filter(b=>b.runId!==origin);
-    const previous=this.snapshot.comparison?.hits ?? this.snapshot.recommendation?.hits ?? [];
-    const previousRun=this.snapshot.deliveredRunId;
-    if (previous.length && previousRun && previousRun!==origin) {
-      productHistory=[...productHistory.filter(b=>b.runId!==previousRun),
-        {runId:previousRun,updatedAt:this.sessions.find(s=>s.id===this.snapshot.sessionId)?.updatedAt ?? Date.now(),products:previous}];
-    }
-    return {recommendation,comparison,deliveredRunId:origin,productHistory,productViews,researchReports};
+  private applyDelivery(state: Record<string, unknown>, _runId: string): Partial<CommerceSnapshot> {
+    const records=new Map(this.snapshot.presentations.map(p=>[p.id,p]));
+    for(const record of readPresentations(state.presentations))records.set(record.id,record);
+    return presentationViews([...records.values()]);
   }
 
   private applyServerRun(run: Record<string, unknown>) {
@@ -754,9 +755,7 @@ export class CommerceClient {
       this.applyServerRun(data.run);
       this.update({
         ...(Array.isArray(data.messages) ? {messages: readMessages(data.messages)} : {}),
-        productHistory: readProductHistory(data.productHistory),
-        productViews: readProductViews(data.productViews),
-        researchReports: readResearchReports(data.researchReports),
+        ...presentationViews(readPresentations(data.presentations)),
         processes:readProcesses(data.processes),
         events: Array.isArray(data.events) ? data.events.filter(isRecord).flatMap(item =>
           typeof item.id === "string" && typeof item.type === "string"
@@ -1085,10 +1084,7 @@ export class CommerceClient {
     this.update({
       ...emptySnapshot(id),
       messages: session?.messages ?? [],
-      productViews: session?.productViews ?? [],
-      researchReports: session?.researchReports ?? [],
-      processes: session?.processes ?? [],
-      deliveredRunId: session?.deliveredRunId ?? null, productHistory: session?.productHistory ?? [], recommendation: session?.recommendation ?? null, comparison: session?.comparison ?? null,
+      ...presentationViews(session?.presentations??[]),processes:session?.processes??[],
       recoverableRunId: session?.runId ?? null,
       history: this.history(),
     });
@@ -1101,10 +1097,4 @@ function readApprovals(value: unknown): import("../types").ToolApproval[] {
   if (!Array.isArray(value)) return [];
   return value.filter(isRecord).flatMap(item => typeof item.id === "string" && typeof item.tool === "string" && typeof item.label === "string"
     ? [{ id: item.id, tool: item.tool, label: item.label, arguments: typeof item.arguments === "string" || isRecord(item.arguments) ? item.arguments : {} }] : []);
-}
-
-function readProductHistory(value: unknown): NonNullable<CommerceSnapshot["productHistory"]> {
-  return Array.isArray(value) ? value.filter(isRecord).flatMap(item =>
-    typeof item.runId === "string" && typeof item.updatedAt === "number"
-      ? [{runId:item.runId, updatedAt:item.updatedAt, products:readProducts(item.products)}] : []) : [];
 }

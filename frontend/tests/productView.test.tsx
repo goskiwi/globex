@@ -1,3 +1,4 @@
+import {presented,shown} from './presentationFixture';
 // @vitest-environment jsdom
 import {act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -21,13 +22,12 @@ it('查看卡进入同一详情抽屉，全部平台规格可选，追问刷新�
       messages=[...body.messages,{id:`${body.runId}:final:answer`,role:'assistant',content:text}];
       if(posts===1){firstRun=body.runId;view={runId:firstRun,guidance:text,hits:products,result_ref:'ctx_view',purpose:'product_view'};}
       const events=[{type:'RUN_STARTED',threadId:session,runId:lastRun},
-        {type:'MESSAGES_SNAPSHOT',messages},{type:'STATE_SNAPSHOT',snapshot:{productViews:posts===1?[view]:[],recommendation:null,comparison:null}},
+        {type:'MESSAGES_SNAPSHOT',messages},{type:'STATE_SNAPSHOT',snapshot:{presentations:[...presented('recommendation',null,body.runId),...presented('comparison',null,body.runId),...shown('product_view',posts===1?[view]:[])]}},
         {type:'RUN_FINISHED',threadId:session,runId:lastRun}];
       return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'Content-Type':'text/event-stream'}});
     }
     if(url.includes('/ag-ui/sessions?'))return Response.json({sessions:session?[{id:session,title:'查看颈枕',updatedAt:1}]:[]});
-    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,productViews:[view],productHistory:[],
-      run:{runId:lastRun,threadId:session,status:'completed',messages,state:{}}});
+    if(url.includes('/ag-ui/sessions/'))return Response.json({messages,run:{runId:lastRun,threadId:session,status:'completed',messages,state:{}},presentations:[...shown('product_view',[view])]});
     return Response.json({sessions:[],confirmations:[],skills:[],products:[],form:null,revision:0});
   }));
   const host=document.createElement('div');document.body.append(host);let root=createRoot(host);
@@ -60,4 +60,21 @@ it('查看卡进入同一详情抽屉，全部平台规格可选，追问刷新�
     await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await verify();
     expect(posts).toBe(2);
   }finally{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();}
+});
+
+it('查看指定非默认规格时金额与抽屉起点保持同一SKU，全部规格仍可查看',async()=>{
+  const {default:ProductCards}=await import('../src/components/ProductCards');
+  const {initialOffer}=await import('../src/lib/productGroups');
+  const {readProducts}=await import('../src/lib/commerceClient');
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+  let opened:any;
+  const products=readProducts([{product_id:'P3004',title:'查看商品',brand:'合成',score:1,category:'旅行装备',origin_country:'CN',currency:'CNY',price_major:107.99,
+    default_sku_id:'P3004-S2',requested_sku_id:'P3004-S2',highlights:[],skus:[{sku_id:'P3004-S1',spec:'原规格',price_major:98.97,currency:'CNY',stock:10},{sku_id:'P3004-S2',spec:'指定规格',price_major:107.99,currency:'CNY',stock:10}]}]);
+  try{
+    await act(async()=>root.render(<ProductCards mode="view" products={products} onDetail={g=>{opened=g;}}/>));
+    expect(host.textContent).toContain('107.99');expect(host.textContent).toContain('指定规格');expect(host.textContent).not.toContain('98.97');
+    await act(async()=>host.querySelector<HTMLButtonElement>('.detail-button')!.click());
+    expect(initialOffer(opened)?.sku.sku_id).toBe('P3004-S2');expect(opened.records[0].skus).toHaveLength(2);
+  }finally{await act(async()=>root.unmount());host.remove();}
 });

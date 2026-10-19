@@ -29,6 +29,8 @@ export function initialOffer(group:ProductGroup):ProductOffer|undefined {
       if(sku)return {product,sku};
     }
   }
+  const focused=group.records.flatMap(product=>product.skus.filter(sku=>sku.sku_id===product.requested_sku_id).map(sku=>({product,sku})));
+  if(focused.length===1)return focused[0];
   const selected=group.records.flatMap(product=>product.skus
     .filter(sku=>sku.sku_id===product.selected_sku_id).map(sku=>({product,sku})));
   if(selected.length===1)return selected[0];

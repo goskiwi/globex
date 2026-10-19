@@ -72,7 +72,10 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
         final = AIMessage(content=text, additional_kwargs={"execution_stop": reason})
         await session.graph.aupdate_state(session.config, {"messages": [*unfinished, final]}, as_node="model")
         await session.graph.aupdate_state(session.config, None, as_node=END)
-        return ExecutionResult(text, "partial" if evidence.successful_tools or evidence.delegated else "failed", reason)
+        from app.application.runtime.request_scope import ShoppingContext
+        context=ShoppingContext.current()
+        presentations=tuple(p for p in snapshot.values.get('presentations',[]) if not context or p['runId']==context.source_run_id)
+        return ExecutionResult(text, "partial" if evidence.successful_tools or evidence.delegated or presentations else "failed", reason,presentations)
     finally:
         budget = get_budget()
         if budget is not None:
@@ -83,11 +86,17 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
     reason = result.get("execution_stop") if isinstance(result, dict) else None
     if not text.strip():
         return ExecutionResult("本轮未形成有效答复，请重试或缩小任务范围。", "failed", reason or "empty_delivery")
-    plan_steps = result.get('task_plan', {}).get('steps', [])
-    delivery = result.get('delivery')
-    plan_incomplete = any(step['status'] not in {'delivered', 'reported'} for step in plan_steps)
-    delivery_status = delivery['status'] if delivery else None
-    return ExecutionResult(text, "needs_input" if delivery_status == 'needs_input' else
-                           "failed" if reason == "provider_refusal" else
-                           "partial" if reason or plan_incomplete or delivery_status == 'partial' else "completed", reason,
-                           delivery)
+    from app.application.runtime.request_scope import ShoppingContext
+    origin=ShoppingContext.current().source_run_id if ShoppingContext.current() else ''
+    presentations=tuple(p for p in result.get('presentations',[]) if not origin or p['runId']==origin)
+    from langchain_core.messages import HumanMessage
+    context=ShoppingContext.current()
+    latest=next((m for m in reversed(messages) if isinstance(m,HumanMessage) and context and m.name==context.buyer_id),None)
+    request_id=(context.source_run_id or (latest.id if latest else '')) if context else ''
+    current_tasks=[task for task in result.get('task_plan',{}).get('tasks',{}).values()
+                   if request_id and task.get('scope',{}).get('request_id')==request_id]
+    unfinished=any(task['status']!='completed' or not task.get('delivery') for task in current_tasks)
+
+    return ExecutionResult(text, 'needs_input' if any(p['status']=='needs_input' for p in presentations) else
+        'failed' if reason=='provider_refusal' else
+        'partial' if reason or unfinished or any(p['status']=='partial' for p in presentations) else 'completed',reason,presentations)
