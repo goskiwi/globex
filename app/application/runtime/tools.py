@@ -15,6 +15,10 @@ from app.application.runtime.results import ToolResult, input_failure
 from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 
 
+# 通用适配器不限定所属图的上下文类型；裸 ToolRuntime 的 context 默认为 None。
+InjectedRuntime = ToolRuntime[Any]
+
+
 def validation_feedback(error):
     return "参数校验失败：\n" + "\n".join(
         f"{'.'.join(map(str, item['loc'])) or '参数组合'}: {item['msg']}"
@@ -110,12 +114,15 @@ def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, 
             result = await result
         return _message(result, runtime, name or function.__name__)
 
-    invoke.__signature__ = signature if runtime_name == "runtime" else signature.replace(parameters=[
-        *signature.parameters.values(), inspect.Parameter(runtime_name, inspect.Parameter.KEYWORD_ONLY, annotation=ToolRuntime)])
-    invoke.__annotations__ = {**function.__annotations__, runtime_name: ToolRuntime}
+    parameters = [p.replace(annotation=InjectedRuntime) if p.name == runtime_name else p
+                  for p in signature.parameters.values()]
+    if runtime_name == "tool_runtime":
+        parameters.append(inspect.Parameter(runtime_name, inspect.Parameter.KEYWORD_ONLY, annotation=InjectedRuntime))
+    invoke.__signature__ = signature.replace(parameters=parameters)
+    invoke.__annotations__ = {**function.__annotations__, runtime_name: InjectedRuntime}
     if args_schema is not None:
         args_schema = create_model(args_schema.__name__ + "Runtime", __base__=args_schema,
-            __config__=ConfigDict(arbitrary_types_allowed=True), **{runtime_name: (ToolRuntime, ...)})
+            __config__=ConfigDict(arbitrary_types_allowed=True), **{runtime_name: (InjectedRuntime, ...)})
     tool = TypedTool.from_function(
         coroutine=invoke,
         name=name or function.__name__,
