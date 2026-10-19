@@ -30,9 +30,9 @@ def _load(path: Path, expected_version: str) -> tuple[dict, dict]:
         raise PromptRegistryError("发布证据缺少实际服务源代码版本匹配")
     health = manifest.get("server_health", {})
     version = health.get("prompt_registry", {}).get("effective_version") or {}
-    if (health.get("semantic_cache") is not False or version.get("version_id") != expected_version
+    if (version.get("version_id") != expected_version
             or version.get("content_sha256") != expected_version.removeprefix("p-")):
-        raise PromptRegistryError("报告未证明实际执行了待发布 Prompt 版本，或语义缓存未关闭")
+        raise PromptRegistryError("报告未证明实际执行了待发布 Prompt 版本")
     results = execution.get("results", [])
     if (not isinstance(results, list) or not results or any(not isinstance(row, dict) or not isinstance(row.get("id"), str) for row in results)
             or type(selection.get("selected_count")) is not int

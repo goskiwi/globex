@@ -37,7 +37,7 @@ RUNTIME_FIELDS = ('tool_result_limit', 'tool_failure_threshold', 'tool_circuit_r
                   'harness_enabled', 'loop_repeat_threshold', 'output_guard_enabled',
                   'reply_token_budget', 'token_budget_total', 'preference_relevance_enabled',
                   'preference_top_k', 'session_owner_binding',
-                  'semantic_cache_enabled', 'llm_max_retries', 'llm_fallback_model')
+                  'llm_max_retries', 'llm_fallback_model')
 
 
 def execution_environment(settings):

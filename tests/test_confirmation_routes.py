@@ -199,7 +199,7 @@ async def test_health_reports_runtime_and_refuses_readiness_without_required_sto
         confirmations=env.service, bus=env.bus, backplane=None,
         startup=AsyncMock(), shutdown=AsyncMock(), db_engine=env.engine,
         trade_db_engine=BrokenEngine() if broken_trade else env.engine,
-        settings=SimpleNamespace(llm_model="test-model"), semantic_cache=SimpleNamespace(enabled=False),
+        settings=SimpleNamespace(llm_model="test-model"),
         cache=SimpleNamespace(enabled=True, ping=AsyncMock(return_value=redis_ready)), task_queue=None,
         runtime={"app_source_sha256": "a" * 64},
     )

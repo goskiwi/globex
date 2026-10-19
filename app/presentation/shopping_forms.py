@@ -8,7 +8,7 @@ from app.infrastructure.shopping_forms import FormConflict
 from app.presentation.identity import require_buyer, require_session
 
 
-class NewForm(BaseModel):
+class FormSession(BaseModel):
     model_config = ConfigDict(extra="forbid")
     session_id: str = Field(min_length=1, max_length=200)
 
@@ -22,7 +22,7 @@ class FormAction(BaseModel):
     context: dict
 
 
-class SubmitForm(NewForm):
+class SubmitForm(FormSession):
     expected_revision: int = Field(strict=True, ge=1)
     request_id: str = Field(min_length=1, max_length=100)
     version: Literal["v0.9"] = "v0.9"
@@ -30,13 +30,6 @@ class SubmitForm(NewForm):
 
 
 def register_shopping_form_routes(api, get_store):
-    @api.post("/commerce/shopping-forms")
-    async def create(
-        body: NewForm, request: Request, buyer_id: str = Query(min_length=1)
-    ):
-        await require_buyer(request, buyer_id)
-        raise HTTPException(410, "固定选购表单入口已停用，请通过 Agent 调用澄清工具生成本次问题")
-
     @api.get("/commerce/shopping-forms")
     async def latest(
         request: Request,
@@ -45,7 +38,10 @@ def register_shopping_form_routes(api, get_store):
     ):
         await require_buyer(request, buyer_id)
         await require_session(request, buyer_id, session_id)
-        return {"forms": await get_store().list_for_session(buyer_id, session_id)}
+        try:
+            return {"forms": await get_store().list_for_session(buyer_id, session_id)}
+        except ValueError as error:
+            raise HTTPException(422, "保存的澄清定义不符合当前格式") from error
 
     @api.get("/commerce/shopping-forms/{form_id}")
     async def get(
@@ -60,6 +56,9 @@ def register_shopping_form_routes(api, get_store):
             return await get_store().get(buyer_id, session_id, form_id)
         except LookupError as error:
             raise HTTPException(404, str(error)) from error
+
+        except ValueError as error:
+            raise HTTPException(422, "保存的澄清定义不符合当前格式") from error
 
     @api.post("/commerce/shopping-forms/{form_id}/actions")
     async def submit(

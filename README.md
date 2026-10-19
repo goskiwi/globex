@@ -1,5 +1,8 @@
 # Globex · 从商品检索到交易确认的电商 Agent
 
+当前本地源码已完成[根因重构](docs/改动记录/2026-10-19/根因重构实施记录.md)：任务接纳和交付状态统一，搜索/详情共享SKU显示金额，页面、REST和worker共用持久运行服务。部署进程尚未更新。会话与流水只支持SQL，固定字段表单和语义回答缓存已移除；旧数据不自动转换。REST重试复用request_id，改内容需新ID；返回run_id用于恢复状态。版本冲突保留原会话提示处理，不自动新建会话重发最后一句。
+
+
 一个基于 **LangChain、LangGraph、AG-UI 和 React** 的全栈 Agent 实战项目，覆盖需求理解、商品检索、方案比较与交易确认。
 
 复杂选购研究可通过 `update_shopping_state.plan` 声明分项条件和依赖，完成状态由研究证据及最终交付产生；派发候选通过 `task_id` 保留局部约束。运行时使用图内 A/AB 重复检测，先提示，继续重复则按已有交付阶段收尾。普通单步查询不建立计划。实现与验证边界见[执行闭环修复记录](docs/改动记录/2026-10-03/任务计划与执行闭环修复.md)。
@@ -89,7 +92,7 @@ Main 可通过 `compare_products` 直接交付候选集合的比较，与手动�
 | 商品检索 | Embedding、Qdrant 稠密向量、应用层 BM25、加权 RRF | 权威目录过滤和补召回；专用 HTTP reranker 精排；未使用 Qdrant 稀疏索引 |
 | 品类知识 | 版本化 Markdown、Embedding、Qdrant | 语义召回与来源核验；服务不可用时明确标记词项降级 |
 | 持久化 | SQLite、本地文件 | 保存会话、运行事件、偏好、Skill、确认单、订单与库存 |
-| 缓存与队列 | Redis、Redis Streams | 缓存、共享限流，以及旧意图接口的异步任务消费 |
+| 缓存与队列 | Redis、Redis Streams | 缓存、共享限流，以及页面和 REST 共用的异步任务消费 |
 | 可观测性 | OpenTelemetry、OTLP、Langfuse | 关联 API、Agent、模型和工具调用，记录运行追踪与评分 |
 | 测试与评测 | 后端/前端回归测试、自定义评测脚本 | 验证业务行为，评估商品检索、知识检索、Agent 与上下文治理效果 |
 | 构建与部署 | uv、npm、Docker Compose、Nginx | 依赖管理、全栈部署、静态资源服务与 API 反向代理 |

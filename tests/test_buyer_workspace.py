@@ -1,3 +1,5 @@
+
+from tests.sql_fixtures import preference_store
 """个人 Skill / 偏好从页面持久化到 Agent 上下文的合同回归。"""
 import asyncio
 import json
@@ -25,7 +27,6 @@ from app.infrastructure.capability_registry import CapabilityRegistry
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.identity import IdentityPolicy
-from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
 from app.infrastructure.persistence.sql.repositories import SqlPreferenceStore, create_engine
 from app.infrastructure.persistence.sql.tables import Base
 from app.presentation.buyer_workspace import register_buyer_workspace_routes
@@ -33,9 +34,9 @@ from app.presentation.ag_ui import register_ag_ui_routes
 from tests.ag_ui_runtime_helpers import unused_runtime
 
 
-def fixture(tmp_path):
+async def fixture(tmp_path):
     skill_store=BuyerSkillStore(tmp_path/"personal.db")
-    preferences=JsonFilePreferenceStore(tmp_path)
+    preferences=await preference_store(tmp_path)
     registry=CapabilityRegistry(tmp_path/"global.db")
     factory=SimpleNamespace(buyer_skill_store=skill_store,capability_registry=registry,_preference_store=preferences,
         _search_factory=SimpleNamespace(build_tools=lambda: []),_trade_factory=SimpleNamespace(build_tools=lambda: []))
@@ -55,7 +56,7 @@ def headers(policy,buyer="alice"):
 
 
 async def test_http_private_crud_isolation_versions_and_restart(tmp_path):
-    api,o,store,prefs,registry,policy=fixture(tmp_path)
+    api,o,store,prefs,registry,policy=await fixture(tmp_path)
     raw={"title":"轻装旅行","description":"周末出游时","body":"先问预算，再比较重量。"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api),base_url="http://test") as c:
         assert (await c.post("/commerce/my-skills?buyer_id=alice",json=raw)).status_code==401
@@ -86,7 +87,7 @@ async def test_http_private_crud_isolation_versions_and_restart(tmp_path):
 
 @pytest.mark.parametrize("extra",[{"buyer_id":"bob"},{"allowed_tools":["create_order_tool"]},{"authority":"system"},{"id":"../global"}])
 async def test_personal_skill_http_cannot_claim_owner_or_permissions(tmp_path,extra):
-    api,*_,policy=fixture(tmp_path)
+    api,*_,policy=await fixture(tmp_path)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api),base_url="http://test") as c:
         response=await c.post("/commerce/my-skills?buyer_id=alice",headers=headers(policy),
             json={"title":"名称","description":"用途","body":"正文",**extra})
@@ -94,7 +95,7 @@ async def test_personal_skill_http_cannot_claim_owner_or_permissions(tmp_path,ex
 
 
 async def test_private_selected_read_checks_owner_hash_and_latest_version(tmp_path):
-    _,_,store,_,registry,_=fixture(tmp_path)
+    _,_,store,_,registry,_=await fixture(tmp_path)
     skill=store.save("alice","名称","用途","只回答已确认的需求")
     agent=SimpleNamespace(tool_names=frozenset({"load_agent_skill_tool"}))
     snapshot=ShoppingContextSnapshot("session","alice","zh-CN","CNY")
@@ -117,7 +118,7 @@ async def test_private_selected_read_checks_owner_hash_and_latest_version(tmp_pa
 
 
 async def test_personal_loader_is_scoped_and_old_tool_body_is_cleared(tmp_path):
-    _,_,store,_,registry,_=fixture(tmp_path)
+    _,_,store,_,registry,_=await fixture(tmp_path)
     skill=store.save("alice","名称","用途","私有正文")
     load,_=build_capability_tools(registry,set(),TradeEventBus(),store)
     token=ShoppingContext.set(ShoppingContextSnapshot("s","alice","zh-CN","CNY"))
@@ -151,7 +152,7 @@ async def test_personal_loader_is_scoped_and_old_tool_body_is_cleared(tmp_path):
 
 
 async def test_page_preferences_reenter_context_after_update_and_delete(tmp_path):
-    api,o,_,store,_,policy=fixture(tmp_path)
+    api,o,_,store,_,policy=await fixture(tmp_path)
     from app.application.memory.preference_resolution import resolve_preferences
     from app.application.memory.preference_selector import PreferenceSelector
     async def hint():
@@ -174,14 +175,10 @@ async def test_page_preferences_reenter_context_after_update_and_delete(tmp_path
     finally:ShoppingContext.reset(token)
 
 
-@pytest.mark.parametrize("backend",["json","sql"])
-async def test_atomic_tool_update_delete_and_optimistic_conflict(tmp_path,backend):
-    engine=None
-    if backend=="sql":
-        engine=create_engine(f"sqlite+aiosqlite:///{tmp_path/'preferences.db'}")
-        async with engine.begin() as c:await c.run_sync(Base.metadata.create_all)
-        store=SqlPreferenceStore(engine)
-    else:store=JsonFilePreferenceStore(tmp_path)
+async def test_atomic_tool_update_delete_and_optimistic_conflict(tmp_path):
+    engine=create_engine(f"sqlite+aiosqlite:///{tmp_path/'preferences.db'}")
+    async with engine.begin() as c:await c.run_sync(Base.metadata.create_all)
+    store=SqlPreferenceStore(engine)
     try:
         await store.append(BuyerPreference("alice","like","喜欢黑色"))
         await store.append(BuyerPreference("bob","like","喜欢黑色"))
@@ -210,7 +207,7 @@ async def test_atomic_tool_update_delete_and_optimistic_conflict(tmp_path,backen
     (build_forget_preference_tool,("喜欢黑色",)),
     (build_update_preference_tool,("喜欢黑色","like","喜欢蓝色"))])
 async def test_memory_tools_reject_missing_identity(tmp_path,builder,args):
-    store=JsonFilePreferenceStore(tmp_path)
+    store=await preference_store(tmp_path)
     result=await builder(store,TradeEventBus())(*args)
     assert result.state==ToolResultState.ERROR
     assert await store.list_by_buyer("anonymous")==[]

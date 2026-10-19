@@ -1,3 +1,5 @@
+
+from tests.sql_fixtures import session_store
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -119,7 +121,6 @@ async def test_agent_tools_are_read_only_and_revalidate_session_before_body(tmp_
 
 async def test_session_restore_is_blocked_before_agent_build_after_revoke(tmp_path):
     from app.application.agents.main_agent import SessionRegistry
-    from app.infrastructure.persistence.json_file_stores import JsonFileSessionStore
     capabilities = CapabilityRegistry(tmp_path / "caps.db")
     publish(capabilities, document())
     calls = []
@@ -127,7 +128,7 @@ async def test_session_restore_is_blocked_before_agent_build_after_revoke(tmp_pa
     factory = SimpleNamespace(capability_registry=capabilities,
         skill_catalog_mode="legacy",
         build=lambda: calls.append("build") or LocalFactory().build())
-    registry = SessionRegistry(factory, JsonFileSessionStore(tmp_path / "sessions"))
+    registry = SessionRegistry(factory, await session_store(tmp_path / "sessions"))
     token = ShoppingContext.set(ShoppingContextSnapshot("session", "buyer", "zh-CN", "CNY"))
     try:
         await registry.get_or_create("session")

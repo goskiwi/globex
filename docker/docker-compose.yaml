@@ -83,13 +83,11 @@ services:
       RERANKER_MODEL: ${RERANKER_MODEL-}
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-globex_products}
-      # 四期：存储走 SQLite（落在 app-data 卷）；DATABASE_URL=file 退回 JSON 文件存储
+      # 四期：存储走 SQLite（落在 app-data 卷）
       DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/globex.db}
-      # 四期：Redis 缓存（embedding 缓存 + 语义缓存 + 幂等键）；置空则全部缓存关闭
+      # 四期：Redis 缓存（embedding 缓存 + 幂等键）；置空则全部缓存关闭
       REDIS_URL: ${REDIS_URL-redis://redis:6379/0}
-      SEMANTIC_CACHE_THRESHOLD: ${SEMANTIC_CACHE_THRESHOLD:-0.95}
       # 跑评测回归时设为 0：开着缓存会把旧回复直接返回，评分变成评缓存
-      SEMANTIC_CACHE_ENABLED: ${SEMANTIC_CACHE_ENABLED:-1}
       # 四期：队列削峰（需 worker 服务一起跑）；QUEUE_ENABLED=0 则意图在 API 进程内直跑
       QUEUE_ENABLED: ${QUEUE_ENABLED:-1}
       QUEUE_WAIT_SECONDS: ${QUEUE_WAIT_SECONDS:-300}
@@ -141,7 +139,6 @@ services:
       DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/globex.db}
       REDIS_URL: ${REDIS_URL-redis://redis:6379/0}
       QUEUE_ENABLED: "1"
-      SEMANTIC_CACHE_ENABLED: ${SEMANTIC_CACHE_ENABLED:-1}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT-}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT-}

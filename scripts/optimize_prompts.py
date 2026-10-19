@@ -388,7 +388,6 @@ def main():
             replace(
                 load_settings(),
                 data_dir=args.output / "isolated",
-                semantic_cache_enabled=False,
             ),
             runner,
             public_skill=bool(args.public_skill),

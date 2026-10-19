@@ -1,6 +1,8 @@
 """本机签名身份、跨入口归属与 WebSocket 订阅；只访问临时 SQLite。"""
 from __future__ import annotations
 
+from tests.sql_fixtures import session_store
+
 import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
@@ -16,7 +18,6 @@ from starlette.websockets import WebSocketDisconnect
 from app.domain.session.ports.session_store import SessionNotFound, SessionOwnerMismatch
 from app.infrastructure.eventbus import TradeEvent, TradeEventBus
 from app.infrastructure.identity import IdentityError, IdentityPolicy
-from app.infrastructure.persistence.json_file_stores import JsonFileSessionStore
 from app.infrastructure.persistence.sql.repositories import SqlSessionStore
 from app.presentation.connection import ConnectionManager
 from tests.test_confirmation_routes import order_request, decision
@@ -73,7 +74,7 @@ def test_strict_mode_configuration_fails_closed():
 
 
 @pytest.fixture
-async def secured(confirmation_env, monkeypatch):
+async def secured(confirmation_env, monkeypatch,tmp_path):
     from app.presentation import server
     env = confirmation_env
     store = SqlSessionStore(env.engine)
@@ -82,12 +83,17 @@ async def secured(confirmation_env, monkeypatch):
         settings=SimpleNamespace(llm_model="test", session_owner_binding=True),
         bus=env.bus, backplane=None, startup=AsyncMock(), shutdown=AsyncMock(),
         task_queue=None, db_engine=env.engine, trade_db_engine=env.engine,
-        cache=SimpleNamespace(enabled=False), semantic_cache=SimpleNamespace(enabled=False),
+        cache=SimpleNamespace(enabled=False),
         orchestrator=SimpleNamespace(handle_intent=AsyncMock(return_value=SimpleNamespace(
-            status="completed", stop_reason=None, shopping_session_id="session-1", final_text="临时模型桩，仅验证身份链路"))),
+            status="completed", stop_reason=None, error=None, delivery=None, shopping_session_id="session-1", final_text="结果"))),
         query_order=SimpleNamespace(execute=AsyncMock(return_value={"order_id": "order"})),
         cancel_order=SimpleNamespace(execute=AsyncMock(return_value={"confirmation": {}})),
     )
+    from app.application.runtime.runs import RunService
+    from app.infrastructure.ag_ui_journal import AGUIJournal
+    container.runs=RunService(AGUIJournal(tmp_path/'runs.db'),container.orchestrator,session_store=store)
+    container.startup=container.runs.startup
+    container.shutdown=container.runs.shutdown
     monkeypatch.setattr(server, "build_container", AsyncMock(return_value=container))
     api = server.build_app()
     async with api.router.lifespan_context(api):
@@ -149,8 +155,12 @@ async def test_task_access_is_durable_and_bound_to_buyer_and_session(secured):
         await another.bind_task_owner("task-1", "other-session", "buyer-1")
     with pytest.raises(SessionNotFound):
         await another.assert_task_owner("missing", "buyer-1")
-    secured.container.task_queue = SimpleNamespace(get_status=AsyncMock(return_value=SimpleNamespace(
-        execution_status="completed", stop_reason=None, task_id="task-1", state="done", final_text="结果", error=None, queue_position=0)))
+    from ag_ui.core import RunAgentInput
+    body=RunAgentInput.model_validate({'runId':'task-1','threadId':'session-1','state':{},
+        'messages':[{'id':'u','role':'user','content':'只读商品搜索'}],'tools':[],'context':[],
+        'forwardedProps':{'buyerId':'buyer-1'}})
+    await secured.container.runs.start(body,'buyer-1')
+    await secured.container.runs.wait('task-1','buyer-1')
     response = await secured.client.get("/commerce/tasks/task-1", params={"buyer_id": "buyer-1"}, headers=auth())
     assert response.status_code == 200 and response.json()["final_text"] == "结果"
     response = await secured.client.get("/commerce/tasks/task-1", params={"buyer_id": "buyer-2"}, headers=auth("buyer-2"))
@@ -164,10 +174,10 @@ class ReadyEventBus(TradeEventBus):
         return queue
 
 
-def ws_app(tmp_path):
+async def ws_app(tmp_path):
     api = FastAPI()
     api.state.identity_policy = POLICY
-    api.state.session_store = JsonFileSessionStore(tmp_path)
+    api.state.session_store = await session_store(tmp_path)
     manager = ConnectionManager(ReadyEventBus())
     @api.websocket("/events")
     async def events(websocket: WebSocket):
@@ -175,15 +185,15 @@ def ws_app(tmp_path):
     return api
 
 
-def test_websocket_auth_protocol_is_not_echoed_and_owner_is_persistent(tmp_path):
-    api = ws_app(tmp_path)
+async def test_websocket_auth_protocol_is_not_echoed_and_owner_is_persistent(tmp_path):
+    api = await ws_app(tmp_path)
     with TestClient(api) as client:
         with client.websocket_connect("/events", subprotocols=["globex-events", "globex-auth." + POLICY.issue("buyer-1")]) as ws:
             assert ws.accepted_subprotocol == "globex-events"
             ws.send_json({"buyer_id": "buyer-1", "shopping_session_id": "session"})
             assert ws.receive_json()["payload"] == {"safe": True}
     # 新 app / 新 store 仍不能换买家读取该会话。
-    with TestClient(ws_app(tmp_path)) as client:
+    with TestClient(await ws_app(tmp_path)) as client:
         with client.websocket_connect("/events", subprotocols=["globex-events", "globex-auth." + POLICY.issue("buyer-2")]) as ws:
             ws.send_json({"buyer_id": "buyer-2", "shopping_session_id": "session"})
             with pytest.raises(WebSocketDisconnect) as error:
@@ -197,8 +207,8 @@ def test_websocket_auth_protocol_is_not_echoed_and_owner_is_persistent(tmp_path)
     ("", ["globex-events", "globex-auth.invalid"], {"buyer_id": "buyer-1", "shopping_session_id": "session"}, 4401),
     ("", ["globex-events", "globex-auth." + POLICY.issue("buyer-1")], {"shopping_session_id": "session"}, 4400),
 ])
-def test_websocket_invalid_identity_never_subscribes(tmp_path, query, protocols, payload, expected):
-    with TestClient(ws_app(tmp_path)) as client:
+async def test_websocket_invalid_identity_never_subscribes(tmp_path, query, protocols, payload, expected):
+    with TestClient(await ws_app(tmp_path)) as client:
         with client.websocket_connect("/events" + query, subprotocols=protocols) as ws:
             ws.send_json(payload)
             with pytest.raises(WebSocketDisconnect) as error:

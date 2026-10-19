@@ -118,7 +118,7 @@ async def run_profile(profile, output, *, suite_path=None, strategies=None, case
     from app.infrastructure.throttle import GatewayThrottle
     config=load_settings();runtime=suite['runtime']
     settings=replace(config,llm_fallback_model='',llm_max_retries=runtime['model_retries'],
-        semantic_cache_enabled=False,redis_url='',queue_enabled=False,tavily_api_key='',
+        redis_url='',queue_enabled=False,tavily_api_key='',
         context_size=runtime['context_size'],reply_token_budget=0,token_budget_total=0,otlp_endpoint='',
         otlp_traces_endpoint='',otlp_headers='',otlp_traces_headers='',harness_enabled=True,
         llm_min_interval_seconds=runtime['min_interval_seconds'],llm_max_concurrency=1)

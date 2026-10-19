@@ -54,6 +54,5 @@ async def test_live_keeps_native_retrieval_without_shared_index_writes(tmp_path,
         assert container.settings.hybrid_recall_enabled is True
         assert container.settings.data_dir == tmp_path/'live'
         assert container.settings.redis_url == ''
-        assert container.settings.semantic_cache_enabled is False
         assert not await container.vector_index._client.collection_exists(settings.qdrant_collection)
         bootstrap.assert_not_awaited()

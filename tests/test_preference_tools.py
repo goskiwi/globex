@@ -1,3 +1,5 @@
+
+from tests.sql_fixtures import preference_store
 # -*- coding: utf-8 -*-
 """长期记忆写/撤回两个工具的单测。
 
@@ -11,7 +13,6 @@ from app.application.tools.remember_preference_tool import build_remember_prefer
 from app.domain.buyer.preference import BuyerPreference
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus
-from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
 
 SNAPSHOT = ShoppingContextSnapshot(
     shopping_session_id="s1", buyer_id="buyer-001", locale="zh-CN", currency="CNY",
@@ -24,7 +25,7 @@ def _text(chunk) -> str:
 
 class TestForgetPreferenceTool:
     async def test_deletes_existing_preference(self, tmp_path):
-        store = JsonFilePreferenceStore(tmp_path)
+        store = await preference_store(tmp_path)
         await store.append(
             BuyerPreference(buyer_id="buyer-001", kind="dislike", statement="不要塑料材质"),
         )
@@ -41,7 +42,7 @@ class TestForgetPreferenceTool:
 
     async def test_miss_lists_remaining_and_deletes_nothing(self, tmp_path):
         """未命中不算错误，但必须如实说没删，并把现存偏好列出来。"""
-        store = JsonFilePreferenceStore(tmp_path)
+        store = await preference_store(tmp_path)
         await store.append(
             BuyerPreference(buyer_id="buyer-001", kind="dislike", statement="不要塑料材质"),
         )
@@ -59,7 +60,7 @@ class TestForgetPreferenceTool:
         assert len(await store.list_by_buyer("buyer-001")) == 1, "未命中不得删任何东西"
 
     async def test_miss_on_empty_store_is_explicit(self, tmp_path):
-        store = JsonFilePreferenceStore(tmp_path)
+        store = await preference_store(tmp_path)
         tool = build_forget_preference_tool(store, TradeEventBus())
 
         token = ShoppingContext.set(SNAPSHOT)
@@ -72,7 +73,7 @@ class TestForgetPreferenceTool:
 
     async def test_buyer_id_comes_from_context_not_model(self, tmp_path):
         """工具签名里没有 buyer_id：模型无从指定改谁的记忆。"""
-        store = JsonFilePreferenceStore(tmp_path)
+        store = await preference_store(tmp_path)
         await store.append(
             BuyerPreference(buyer_id="buyer-999", kind="dislike", statement="不要塑料材质"),
         )
@@ -88,11 +89,10 @@ class TestForgetPreferenceTool:
         assert len(await store.list_by_buyer("buyer-999")) == 1, "不得删到别人的记忆"
 
     async def test_store_failure_reported_not_swallowed(self, tmp_path):
-        class BrokenStore(JsonFilePreferenceStore):
-            async def delete(self, buyer_id: str, statement: str) -> bool:
-                raise RuntimeError("数据库连接断了")
-
-        tool = build_forget_preference_tool(BrokenStore(tmp_path), TradeEventBus())
+        store = await preference_store(tmp_path)
+        from unittest.mock import AsyncMock
+        store.delete = AsyncMock(side_effect=RuntimeError("数据库连接断了"))
+        tool = build_forget_preference_tool(store, TradeEventBus())
 
         token = ShoppingContext.set(SNAPSHOT)
         try:
@@ -110,7 +110,7 @@ class TestForgetPreferenceTool:
 
 class TestRememberForgetRoundTrip:
     async def test_remember_then_forget(self, tmp_path):
-        store = JsonFilePreferenceStore(tmp_path)
+        store = await preference_store(tmp_path)
         bus = TradeEventBus()
         remember = build_remember_preference_tool(store, bus)
         forget = build_forget_preference_tool(store, bus)
@@ -127,7 +127,7 @@ class TestRememberForgetRoundTrip:
 
     async def test_forget_then_remember_again(self, tmp_path):
         """买家撤回后又改主意，应能重新记住。"""
-        store = JsonFilePreferenceStore(tmp_path)
+        store = await preference_store(tmp_path)
         bus = TradeEventBus()
         remember = build_remember_preference_tool(store, bus)
         forget = build_forget_preference_tool(store, bus)

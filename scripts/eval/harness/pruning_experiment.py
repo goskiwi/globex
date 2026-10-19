@@ -144,7 +144,7 @@ async def run(args):
     (output / 'requests').mkdir()
     source = source_manifest()
     settings = replace(load_settings(), llm_fallback_model='', llm_max_retries=0,
-                       prompt_cache_mode='passthrough', semantic_cache_enabled=False)
+                       prompt_cache_mode='passthrough')
     manifest = {'schema_version': 'cache-pruning-diagnostic-v1', 'status': 'running',
         'scope': '诊断，不能作为正式成本收益验收', 'cases': args.cases,
         'repetitions': args.repetitions, 'planned_business_requests': len(args.cases) * 3 * args.repetitions * 6,

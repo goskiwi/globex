@@ -227,7 +227,7 @@ async def run(args):
     cases=[c for c in cases if c['split']==args.split and (not args.case or c['id']==args.case)]
     strategies=args.strategies.split(',') if args.strategies else ['legacy','deterministic','layered']
     folder=args.output.resolve();folder.mkdir(parents=True,exist_ok=True)
-    settings=replace(load_settings(),llm_fallback_model='',llm_max_retries=args.model_retries,semantic_cache_enabled=False,context_size=128000)
+    settings=replace(load_settings(),llm_fallback_model='',llm_max_retries=args.model_retries,context_size=128000)
     frozen=fingerprint();manifest={'fingerprint':frozen,'model':settings.llm_model,'split':args.split,'strategies':strategies,'timing':args.timing,'cases':[c['id'] for c in cases],'repetitions':args.repetitions,'status':'running','limitations':'隔离工具夹具，不测试生产检索排序或交易写路径。快照历史固定；long按冻结场景轮数运行真实Agent和两次整理、一次数据库重建。'}
     manifest['cases_sha256']=hashlib.sha256(cases_path.read_bytes()).hexdigest()
     manifest['baseline']='native-policy-comparison-not-comparable-to-agentscope-v1'

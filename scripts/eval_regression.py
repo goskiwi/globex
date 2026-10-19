@@ -485,33 +485,22 @@ def render_report(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def _guard_semantic_cache(allow: bool, *, strict: bool = False) -> dict:
-    """语义缓存开着时拒绝跑回归。
-
-    实测踩过：一条 case 的错误回复进了缓存，之后改 prompt 重跑，回复一字不差——
-    评测彻底失去了检验能力。回归必须评 Agent 真实行为。
-    """
+async def read_server_health(*, strict: bool = False) -> dict:
+    """读取服务实际版本与运行环境，正式发布时不可省略这份证据。"""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(f"{BASE_URL}/health")
             response.raise_for_status()
             health = response.json()
-        if not isinstance(health, dict) or type(health.get("semantic_cache")) is not bool:
-            raise ValueError("/health 缺少明确的 semantic_cache 布尔状态")
-    except Exception as err:  # noqa: BLE001 —— 拿不到 health 不阻断，后续请求自会报错
+        if not isinstance(health, dict):
+            raise ValueError("/health 必须返回对象")
+    except Exception as err:
         if strict:
-            raise RuntimeError(f"release 前置检查失败，无法证明服务和缓存状态：{err}") from err
-        print(f"警告：无法读取 /health（{err}），跳过缓存检查", flush=True)
-        return {"status": "UNVERIFIED", "semantic_cache": None}
-    if health.get("semantic_cache") and not allow:
-        raise SystemExit(
-            "拒绝跑回归：服务端语义缓存处于开启状态，评分会变成评缓存。\n"
-            "请用 SEMANTIC_CACHE_ENABLED=0 重启服务后重试，例如：\n"
-            "  SEMANTIC_CACHE_ENABLED=0 docker compose -f docker/docker-compose.yaml up -d app worker\n"
-            "确认要带缓存跑则加 --allow-semantic-cache。",
-        )
+            raise RuntimeError(f"release 前置检查失败，无法确认服务状态：{err}") from err
+        print(f"警告：无法读取 /health（{err}）", flush=True)
+        return {"status": "UNVERIFIED"}
     # 仅记录健康端点已有的白名单字段，不复制 URL、密钥或完整服务配置。
-    result = {key: health[key] for key in ("status", "model", "semantic_cache", "database", "redis", "queue") if key in health}
+    result = {key: health[key] for key in ("status", "model", "database", "redis", "queue") if key in health}
     if isinstance(health.get("runtime"), dict):
         result["runtime"] = {"app_source_sha256": health["runtime"].get("app_source_sha256")}
     if isinstance(health.get("prompt_registry"), dict):
@@ -558,11 +547,6 @@ async def main(argv: list[str] | None = None) -> None:
         default=str(PROJECT_ROOT / "eval"),
         help="报告输出目录（默认写入项目 eval 目录）",
     )
-    parser.add_argument(
-        "--allow-semantic-cache",
-        action="store_true",
-        help="允许在语义缓存开启的环境下跑（不推荐，评的会是缓存而不是 Agent）",
-    )
     args = parser.parse_args(argv)
     BASE_URL = args.base_url.rstrip("/")
     _RUN_NAMESPACE = uuid.uuid4().hex[:10]
@@ -573,14 +557,12 @@ async def main(argv: list[str] | None = None) -> None:
             validate_http_actions(case)
     except (ValueError, OSError, KeyError, TypeError) as err:
         parser.error(str(err))
-    if args.split == "release" and args.allow_semantic_cache:
-        parser.error("release 不允许使用 --allow-semantic-cache")
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / f"agent-{args.split}-report-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.md"
     manifest = build_manifest(
         runner="agent_regression", dataset=Path(args.cases), selection=selection, judge_prompt=JUDGE_SYSTEM_PROMPT,
-        parameters={"base_url": public_endpoint(BASE_URL), "allow_semantic_cache": args.allow_semantic_cache,
+        parameters={"base_url": public_endpoint(BASE_URL),
                     "dry_run": args.dry_run, "score_threshold": 0.7,
                     "buyer_namespace": _RUN_NAMESPACE,
                     "identity_mode": os.getenv("IDENTITY_MODE", "hmac"),
@@ -594,7 +576,7 @@ async def main(argv: list[str] | None = None) -> None:
         print(f"仅校验选集：split={args.split}，{len(cases)} 条；NOT_RUN，不代表通过。证据：{path}")
         return
     try:
-        health = await _guard_semantic_cache(args.allow_semantic_cache, strict=args.split == "release")
+        health = await read_server_health(strict=args.split == "release")
     except (Exception, SystemExit) as err:
         finish_manifest(manifest, actual_strategies={}, gate="BLOCK", status="ERROR", preflight_error=str(err))
         write_manifest(manifest, report_path)

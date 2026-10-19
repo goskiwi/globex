@@ -22,7 +22,7 @@ from app.application.runtime.request_scope import ShoppingContext, ShoppingConte
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.llm import create_chat_model, create_chat_client
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
-from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
+from app.infrastructure.persistence.sql.repositories import SqlPreferenceStore,create_engine,bootstrap_schema
 from app.infrastructure.resilience import CircuitBreakerRegistry
 from app.infrastructure.settings import load_settings
 from app.infrastructure.throttle import GatewayThrottle
@@ -31,13 +31,15 @@ from app.infrastructure.throttle import GatewayThrottle
 async def main(comparison=False):
     with tempfile.TemporaryDirectory(prefix="globex-pricing-live-") as folder:
         settings = replace(load_settings(), data_dir=Path(folder), llm_fallback_model="", llm_max_retries=0, harness_enabled=True)
+        engine=create_engine('sqlite+aiosqlite:///'+str(Path(folder)/'preferences.db'))
+        await bootstrap_schema(engine)
         bus, circuit, throttle = TradeEventBus(), CircuitBreakerRegistry(), GatewayThrottle(3, 0)
         catalog = CatalogSearchUseCase(InMemoryProductRepository())
         model = create_chat_model(settings, stream=False, client=create_chat_client(settings))
         model_client=model.client
         search = SearchAgentFactory(settings, catalog, bus, None, circuit, throttle, model_client=model_client)
         trade = TradeAgentFactory(settings, None, None, None, bus, circuit, throttle, model_client=model_client)
-        factory = MainAgentFactory(settings, search, trade, bus, JsonFilePreferenceStore(Path(folder)/"preferences"),
+        factory = MainAgentFactory(settings, search, trade, bus, SqlPreferenceStore(engine),
             circuit, throttle, checkpointer=InMemorySaver(), loop_detector=LoopDetector(), model_client=model_client)
         token = ShoppingContext.set(ShoppingContextSnapshot("pricing-live", "synthetic", "zh-CN", "CNY"))
         started = time.monotonic()
@@ -68,6 +70,7 @@ async def main(comparison=False):
         finally:
             ShoppingContext.reset(token)
             await model.aclose()
+            await engine.dispose()
 
 
 if __name__ == "__main__":

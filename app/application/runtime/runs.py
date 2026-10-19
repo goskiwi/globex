@@ -9,6 +9,7 @@ import time
 import uuid
 
 from ag_ui.core import RunAgentInput
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.agents.ag_ui_adapter import AGUIRunAdapter
 from app.application.usecases.intents import SubmitIntentInput
@@ -21,6 +22,14 @@ from app.infrastructure.ag_ui_journal import AGUIJournal, JournalLeaseLost
 from app.infrastructure.eventbus import observe_run_events
 
 logger = logging.getLogger(__name__)
+
+
+class RunProperties(BaseModel):
+    """入口只接受当前身份与地区字段；调度信息由服务端注入。"""
+    model_config = ConfigDict(extra='forbid', strict=True, str_strip_whitespace=True)
+    buyerId: str = Field(min_length=1)
+    locale: str = 'zh-CN'
+    currency: str = Field(default='CNY', pattern=r'^[A-Z]{3}$')
 
 
 @dataclass
@@ -86,7 +95,8 @@ class RunService:
         return await self._admit(body,buyer_id,request_id=request_id)
 
     async def _admit(self, body, buyer_id, *, request_id=None):
-        if (body.get('forwardedProps') or {}).get('buyerId') != buyer_id:
+        properties=RunProperties.model_validate(body.get('forwardedProps') or {})
+        if properties.buyerId != buyer_id:
             raise JournalForbidden('运行身份与请求买家不一致')
         session_id=body['threadId']
         if self.session_store is not None and session_id is not None:

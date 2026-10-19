@@ -80,7 +80,6 @@ class Settings:
     # ---- 四期：存储 ----
     # 默认 SQLite（零外部依赖，落在 DATA_DIR/globex.db）。
     # 换服务型数据库需自行装异步驱动（aiomysql / asyncpg）并改此 URL，本仓未验证。
-    # 特殊值 "file" = 退回三期的 JSON 文件存储（无数据库）
     context_strategy: str = "layered"  # 商品正文投影策略，不切换 Agent Runtime
     context_pruning_timing: str = "pressure"
     context_product_tokens: int = 6000
@@ -93,8 +92,6 @@ class Settings:
     database_url: str = ""
     # ---- 四期：Redis 缓存 ----
     redis_url: str = ""  # 空 = 全部缓存能力关闭（零外部依赖）
-    semantic_cache_enabled: bool = True  # Redis 可用时是否开启语义缓存
-    semantic_cache_threshold: float = 0.95  # 余弦相似度阈值，调低会提高答非所问风险
     # ---- 四期：队列削峰 ----
     queue_enabled: bool = True  # 需同时配上 REDIS_URL 才生效；否则意图在 API 进程内直跑
     queue_wait_seconds: float = 300.0  # 同步接口等待队列结果的上限
@@ -214,8 +211,6 @@ def load_settings() -> Settings:
             or f"sqlite+aiosqlite:///{data_dir / 'globex.db'}"
         ),
         redis_url=os.getenv("REDIS_URL", ""),
-        semantic_cache_enabled=os.getenv("SEMANTIC_CACHE_ENABLED", "1") not in ("0", "false", "False"),
-        semantic_cache_threshold=float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.95")),
         queue_enabled=os.getenv("QUEUE_ENABLED", "1") not in ("0", "false", "False"),
         queue_wait_seconds=float(os.getenv("QUEUE_WAIT_SECONDS", "300")),
         worker_concurrency=int(os.getenv("WORKER_CONCURRENCY", "2")),

@@ -39,7 +39,7 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
     from app.infrastructure.buyer_skills import BuyerSkillStore
     from app.infrastructure.capability_registry import CapabilityRegistry
     from app.infrastructure.eventbus import TradeEventBus
-    from app.infrastructure.persistence.json_file_stores import JsonFileSessionStore
+    from app.infrastructure.persistence.sql.repositories import SqlSessionStore,create_engine,bootstrap_schema
 
     folder.mkdir(parents=True, exist_ok=True)
     buyer, session = "synthetic-skill-buyer", "synthetic-skill-session"
@@ -71,7 +71,9 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
         async def list_by_buyer(self, *args): return []
     factory = SimpleNamespace(capability_registry=registry, buyer_skill_store=personal,
                               skill_catalog_mode=mode, build=build)
-    stores = [JsonFileSessionStore(folder / "sessions")]
+    engine=create_engine("sqlite+aiosqlite:///"+str(folder/"sessions.db"))
+    await bootstrap_schema(engine)
+    stores = [SqlSessionStore(engine)]
     saver.session_store = stores[-1]
     sessions = SessionRegistry(factory, stores[-1])
     orchestrator = MainAgentOrchestrator(sessions, TradeEventBus())
@@ -91,7 +93,7 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
                 personal.delete(buyer, skill["id"], "1")
             if turn == 2 and case["scenario"] in {"edit", "delete"}:
                 # 新注册表从磁盘恢复；不是只在内存中保留水位。
-                stores.append(JsonFileSessionStore(folder / "sessions"))
+                stores.append(SqlSessionStore(engine))
                 saver.session_store = stores[-1]
                 sessions = SessionRegistry(factory, stores[-1])
                 orchestrator = MainAgentOrchestrator(sessions, TradeEventBus())
@@ -125,8 +127,7 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
             await agent.graph.aupdate_state(agent.config, {"messages": changes})
             await sessions.persist(session)
     finally:
-        for store in stores:
-            await store.close()
+        await engine.dispose()
         context_usage_sink.reset(sink)
         ShoppingContext.reset(scope)
         await saver_context.__aexit__(None, None, None)

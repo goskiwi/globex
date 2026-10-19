@@ -1,6 +1,8 @@
 """Prompt 生命周期测试全部使用临时 SQLite 和测试证据，不声称真实候选已评测发布。"""
 from __future__ import annotations
 
+from tests.sql_fixtures import session_store
+
 import asyncio
 import copy
 import json
@@ -13,7 +15,6 @@ import pytest
 import yaml
 
 from app.application.prompts.loader import load_prompts
-from app.infrastructure.cache.semantic_cache import SemanticCache
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.prompt_registry import PromptRegistry, PromptRegistryError
 from app.infrastructure.prompt_release import compare_release_manifests
@@ -46,7 +47,7 @@ def report(env, version, **metric_changes):
         "selected_count": 1, "split_count": 1, "case_ids": ["c1"], "selected_content_sha256": "a" * 64},
         "parameters": {"gate_scope": "release", "dry_run": False}, "data": {"sha256": "b" * 64}, "code": {"sha256": "c" * 64},
         "models": {"main_configured": "test-model"}, "service_runtime": {"status": "matched", "matching": True, "local_app_source_sha256": "c" * 64, "server_app_source_sha256": "c" * 64},
-        "server_health": {"semantic_cache": False, "prompt_registry": {"effective_version": {
+        "server_health": {"prompt_registry": {"effective_version": {
             "version_id": version, "content_sha256": version[2:], "toolset_sha256": env.registry.contract_hash}}},
         "execution": {"gate": "PASS", "status": "COMPLETED", "inputs_unchanged": True,
             "actual_strategies": {"vector_rerank": 1}, "release_metrics": metrics,
@@ -114,20 +115,17 @@ async def test_evaluation_pin_does_not_silently_switch_existing_session(env):
 
 
 async def test_current_version_drives_loader_cache_key_and_event_correlation(env):
-    cache = SemanticCache(SimpleNamespace(enabled=True), None, namespace="same-model")
     first = await env.registry.assign("baseline-session", "buyer")
     second = await PromptRegistry(env.path, env.contract, pinned_version=env.candidate).assign("candidate-session", "buyer")
     token = ShoppingContext.set(ShoppingContextSnapshot("session", "buyer", "zh-CN", "CNY", ("plastic",), session_fence=42))
     try:
         ShoppingContext.set_prompt_assignment(first)
-        baseline_key = cache._bucket_key("buyer", "same-preference")
         doc = load_prompts()
         assert doc["main_agent"]["system_prompt"] == "基线正文"
         doc["main_agent"]["system_prompt"] = "调用方改动"
         assert load_prompts()["main_agent"]["system_prompt"] == "基线正文"
         ShoppingContext.set_prompt_assignment(second)
         assert load_prompts()["main_agent"]["system_prompt"] == "候选正文"
-        assert cache._bucket_key("buyer", "same-preference") != baseline_key
         assert ShoppingContext.current().preference_facts == ("plastic",)
         assert ShoppingContext.current().session_fence == 42
         assert current_correlation()["prompt_version"] == env.candidate
@@ -144,7 +142,6 @@ async def test_current_version_drives_loader_cache_key_and_event_correlation(env
     lambda m: m["execution"]["results"][0].update(p0_pass=False),
     lambda m: m["execution"]["results"][0].update(verdict="ERROR"),
     lambda m: m["execution"].update(results=[]),
-    lambda m: m["server_health"].update(semantic_cache=True),
     lambda m: m["server_health"].pop("prompt_registry"),
     lambda m: m["service_runtime"].update(status="UNKNOWN"),
     lambda m: m["execution"].pop("release_metrics"),
@@ -195,13 +192,12 @@ def test_real_case_metrics_regression_is_blocked_even_when_summary_matches(env, 
 async def test_session_registry_build_uses_pinned_prompt_after_publish(env, tmp_path):
     from tests.test_session_fencing import LocalFactory
     from app.application.agents.main_agent import SessionRegistry
-    from app.infrastructure.persistence.json_file_stores import JsonFileSessionStore
     class Factory(LocalFactory):
         def build(self):
             session = super().build()
             session.prompt = load_prompts()["main_agent"]["system_prompt"]
             return session
-    store = JsonFileSessionStore(tmp_path / "sessions")
+    store = await session_store(tmp_path / "sessions")
     registry = SessionRegistry(Factory(), store, prompt_registry=env.registry)
     token = ShoppingContext.set(ShoppingContextSnapshot("conversation", "buyer", "zh-CN", "CNY"))
     try:
@@ -215,7 +211,6 @@ async def test_session_registry_build_uses_pinned_prompt_after_publish(env, tmp_
         assert ShoppingContext.current().prompt_version == env.baseline
     finally:
         ShoppingContext.reset(token)
-        await store.close()
 
 
 async def test_concurrent_first_bootstrap_has_one_initial_deployment(env):

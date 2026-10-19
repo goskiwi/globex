@@ -109,3 +109,23 @@ async def test_precise_missing_ids_and_all_skus_even_when_specific_sku_requested
         p=json.loads((await tool('P3020','P3020-S2')).text)['hits'][0]
         assert p['default_sku_id']=='P3020-S2' and len(p['skus'])==2
     finally:ShoppingContext.reset(token)
+
+
+async def test_readonly_quote_uses_details_without_granting_candidate_permission(confirmation_env):
+    from app.application.tools.recommendation_tools import build_quote_tool,Choice
+    e=confirmation_env;session='detail-quote'
+    catalog=CatalogSearchUseCase(e.products,pricing=e.service._pricing)
+    token=ShoppingContext.set(ShoppingContextSnapshot(session,'buyer','zh-CN','CNY',
+        effective_search=compile_search(ShoppingWork(filters=Filters(price_max_major=1,target_currency='CNY')))))
+    try:
+        details=await build_product_details_tool(catalog,e.bus,e.evidence)('P3021','P3021-S2')
+        assert details.ok
+        quote=await build_quote_tool(catalog.pricing,e.evidence,e.bus)(
+            [Choice(product_id='P3021',sku_id='P3021-S2',quantity=1)],'CN','CNY')
+        assert quote.ok and quote.data['quote']['items'][0]['sku_id']=='P3021-S2'
+        assert await e.evidence.find_product('buyer',session,product_id='P3021',sku_id='P3021-S2') is None
+        with pytest.raises(ValueError):
+            await _verified_order_items(e.evidence,'buyer',session,[{'product_id':'P3021','sku_id':'P3021-S2','quantity':1}])
+        assert await e.evidence.find_observed_product('other',session,product_id='P3021',sku_id='P3021-S2') is None
+        assert (await e.store.list_orders(buyer_id='buyer'))['total']==0
+    finally:ShoppingContext.reset(token)

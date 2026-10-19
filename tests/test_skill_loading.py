@@ -198,8 +198,11 @@ async def test_active_refs_restore_from_sqlite_without_replaying_load(env,tmp_pa
         assert sum(isinstance(m,ToolMessage) and m.name=='load_agent_skill_tool' for m in result['messages'])==1
 
 
-async def test_journal_does_not_accept_legacy_manual_execution(tmp_path):
-    journal=AGUIJournal(tmp_path/'runs.db')
-    body=request_data(forwardedProps={'buyerId':'buyer','selectedSkill':{'id':'x','version':'1'}})
-    with pytest.raises(JournalConflict,match='selectedSkill'):
-        await journal.reserve(body,'buyer','owner')
+async def test_run_admission_accepts_only_declared_properties(tmp_path):
+    from app.application.runtime.runs import RunService
+    from ag_ui.core import RunAgentInput
+    service=RunService(AGUIJournal(tmp_path/'runs.db'),None)
+    body=RunAgentInput.model_validate(request_data(forwardedProps={'buyerId':'buyer','tool_policy':{'allow_all':True}}))
+    with pytest.raises(ValueError):
+        await service.start(body,'buyer')
+    assert not await service.journal.queued()

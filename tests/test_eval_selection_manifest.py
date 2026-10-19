@@ -116,7 +116,7 @@ async def test_dry_run_selects_release_without_initializing_any_external_depende
     if runner == "agent":
         path = tmp_path / "cases.yaml"
         path.write_text(yaml.safe_dump({"cases": rows}), encoding="utf-8")
-        monkeypatch.setattr(agent, "_guard_semantic_cache", forbidden)
+        monkeypatch.setattr(agent, "read_server_health", forbidden)
         await agent.main(["--cases", str(path), "--split", "release", "--dry-run", "--report-dir", str(report_dir)])
     else:
         path = _dataset(tmp_path / "cases.jsonl", rows)
@@ -203,11 +203,11 @@ async def test_category_release_metrics_exclude_dev_and_initialization_errors_le
 
 async def test_agent_release_dispatch_and_report_are_restricted_to_release(tmp_path, monkeypatch):
     calls = []
-    async def health(*args, **kwargs): return {"semantic_cache": False, "model": "reported-model"}
+    async def health(*args, **kwargs): return {"model": "reported-model"}
     async def run_case(client, case, truth):
         calls.append(case["id"])
         return {"id": case["id"], "description": "test", "score": 1, "p0_pass": True, "verdict": "PASS", "judged": {}, "transcript": "test", "trace_events": [{"type": "tool.result", "payload": {"recall_strategy": "embedding_only"}}]}
-    monkeypatch.setattr(agent, "_guard_semantic_cache", health)
+    monkeypatch.setattr(agent, "read_server_health", health)
     monkeypatch.setattr(agent, "run_case", run_case)
     monkeypatch.setattr(agent, "build_ground_truth", lambda: "test facts")
     path = tmp_path / "cases.yaml"

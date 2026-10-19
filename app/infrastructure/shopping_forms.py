@@ -14,20 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.domain.catalog.exchange_rate import ExchangeRateTable
-from app.domain.shipping.tariff_schedule import TariffSchedule
-
 CATALOG_ID = "globex.local/shopping-v2"
-# 仅用于读取历史表单；新工具使用 Agent 提供的 questions，不受这些业务字段限制。
-FIELDS = ("query", "budget", "ship_to", "currency", "excluded_material_tags", "airline", "size_limit", "weight_priority")
-WEIGHT_PRIORITIES = {
-    "lightest": "尽量轻",
-    "balanced": "轻便与容量平衡",
-    "not_priority": "重量不是优先项",
-}
-MATERIALS = ("合成聚合物", "金属", "天然纤维", "真皮", "玻璃", "陶瓷", "木材")
-COUNTRIES = tuple(sorted(TariffSchedule(ExchangeRateTable()).supported_destinations()))
-CURRENCIES = tuple(ExchangeRateTable().rates_to_cny)
 
 
 class FormConflict(ValueError):
@@ -87,6 +74,17 @@ class ClarificationRequest(BaseModel):
         return self
 
 
+class PersistedForm(ClarificationRequest):
+    """持久记录与当前问题定义使用同一种类型，读取时不转换历史业务字段。"""
+    form_id: str
+    definition_version: Literal[2]
+    defaults: dict
+    session_id: str
+    revision: int
+    origin_run_id: str
+    origin_message_id: str
+
+
 def validate_answers(values: dict, questions: list[dict], *, complete=False) -> dict:
     definitions = {q["id"]: ClarificationQuestion.model_validate(q) for q in questions}
     if not isinstance(values, dict) or set(values) - definitions.keys():
@@ -120,66 +118,6 @@ def validate_answers(values: dict, questions: list[dict], *, complete=False) -> 
     return clean
 
 
-def legacy_questions(form: dict) -> list[dict]:
-    """将数据库里的旧字段表单转换为通用问题，前端不承担历史业务映射。"""
-    choices = lambda values: [{"value": v, "label": v} for v in values]
-    definitions = {
-        "query": {"type": "text", "label": "想找什么", "required": True},
-        "budget": {"type": "number", "label": "商品单价上限", "minimum": 0, "maximum": 1000000},
-        "currency": {"type": "single_select", "label": "报价币种", "options": choices(CURRENCIES)},
-        "ship_to": {"type": "single_select", "label": "配送国家", "options": choices(COUNTRIES)},
-        "excluded_material_tags": {"type": "multi_select", "label": "希望避开的材质", "options": choices(MATERIALS)},
-        "airline": {"type": "text", "label": "航空公司"},
-        "size_limit": {"type": "text", "label": "行李尺寸要求", "help_text": "买家提供的要求仍需核验适用范围"},
-        "weight_priority": {"type": "single_select", "label": "重量优先程度", "options": [{"value": k, "label": v} for k, v in WEIGHT_PRIORITIES.items()]},
-    }
-    return [ClarificationQuestion(id=key, **definitions[key]).model_dump() for key in form["fields"]]
-
-
-def validate_values(values: dict, fields: list, *, complete=False) -> dict:
-    if not isinstance(values, dict) or set(values) - set(fields):
-        raise ValueError("表单包含未允许的字段")
-    clean = dict(values)
-    query = clean.get("query", "")
-    if (
-        not isinstance(query, str)
-        or len(query) > 1000
-        or (complete and not query.strip())
-    ):
-        raise ValueError("请填写 1 到 1000 字的选购需求")
-    if "query" in clean:
-        clean["query"] = query.strip()
-    budget = clean.get("budget")
-    if budget is not None and (
-        type(budget) not in (int, float)
-        or not math.isfinite(budget)
-        or not 0 <= budget <= 1000000
-    ):
-        raise ValueError("预算须为 0 到 1000000 的有限金额")
-    for key, choices in (("ship_to", COUNTRIES), ("currency", CURRENCIES)):
-        if key in clean and clean[key] not in choices:
-            raise ValueError("不支持的配送国家或币种")
-    tags = clean.get("excluded_material_tags", [])
-    if (
-        not isinstance(tags, list)
-        or len(tags) > len(MATERIALS)
-        or any(t not in MATERIALS for t in tags)
-    ):
-        raise ValueError("不支持的材质选项")
-    for key, limit in (("airline", 80), ("size_limit", 200)):
-        if key in clean:
-            if not isinstance(clean[key], str) or len(clean[key]) > limit:
-                raise ValueError("航空公司或尺寸限制的格式不正确")
-            clean[key] = clean[key].strip()
-            if not clean[key]:
-                del clean[key]
-    if "weight_priority" in clean and (
-        not isinstance(clean["weight_priority"], str) or clean["weight_priority"] not in WEIGHT_PRIORITIES
-    ):
-        raise ValueError("不支持的重量偏好选项")
-    return clean
-
-
 def envelopes(form: dict) -> list[dict]:
     surface = form["form_id"]
     return [
@@ -196,7 +134,7 @@ def envelopes(form: dict) -> list[dict]:
                         "id": "root",
                         "component": "ShoppingForm",
                         "title": form["title"],
-                        "questions": form.get("questions") or legacy_questions(form),
+                        "questions": form["questions"],
                         "context": form.get("context", ""),
                         "description": form.get("description", ""),
                         "value": {"path": "/requirements"},
@@ -254,7 +192,7 @@ class ShoppingFormStore:
     def _public(row):
         if row is None:
             raise LookupError("选购表单不存在或不属于当前买家和会话")
-        form = json.loads(row["body"])
+        form = PersistedForm.model_validate_json(row["body"]).model_dump()
         form.update(
             created_at=row["created"] * 1000,
             revision=row["revision"],
@@ -294,36 +232,6 @@ class ShoppingFormStore:
                                (buyer,session,run_id)).fetchone()
                 return self._public(row) if row else None
         return await __import__('asyncio').to_thread(read)
-
-    async def create(self, buyer, session, title, fields, defaults):
-        if (
-            not buyer
-            or not session
-            or not isinstance(title, str)
-            or not title.strip()
-            or len(title) > 100
-            or not isinstance(fields, list)
-            or not fields
-            or len(fields) > len(FIELDS)
-            or any(not isinstance(field, str) for field in fields)
-            or len(set(fields)) != len(fields)
-            or set(fields) - set(FIELDS)
-        ):
-            raise ValueError("无效的选购表单定义")
-        # 需求文本始终存在，避免只填预算却没有商品目标。
-        fields = list(dict.fromkeys(["query", *fields]))
-        if "budget" in fields and "currency" not in fields:
-            fields.append("currency")
-        defaults = validate_values(defaults, fields)
-        form = {
-            "form_id": "form_" + uuid.uuid4().hex,
-            "title": title.strip(),
-            "fields": fields,
-            "defaults": defaults,
-            "session_id": session,
-            "revision": 1,
-        }
-        return await self._insert(buyer, session, form)
 
     async def _insert(self, buyer, session, form):
         def write():
@@ -391,9 +299,7 @@ class ShoppingFormStore:
                     (form_id, buyer, session),
                 ).fetchone()
                 form = self._public(row)
-                dynamic = form.get("definition_version") == 2
-                clean = (validate_answers(values, form["questions"], complete=True) if dynamic
-                         else validate_values(values, form["fields"], complete=True))
+                clean = validate_answers(values, form["questions"], complete=True)
                 digest = hashlib.sha256(
                     json.dumps(clean, sort_keys=True, ensure_ascii=False).encode()
                 ).hexdigest()
@@ -406,56 +312,34 @@ class ShoppingFormStore:
                     raise FormConflict("该表单已提交，请恢复已保存的需求或新建表单")
                 if row["revision"] != revision:
                     raise FormConflict("表单版本已变化，请刷新")
-                if dynamic:
-                    # 使用持久化的问题定义解释答案，不接受客户端改写题目、选项或单位。
-                    answers = []
-                    for question in form["questions"]:
-                        key = question["id"]
-                        if key not in clean:
-                            continue
-                        value = clean[key]
-                        labels = {o["value"]: o["label"] for o in question["options"]}
-                        display = ([labels[v] for v in value] if question["type"] == "multi_select"
-                                   else labels[value] if question["type"] == "single_select" else value)
-                        answers.append({"id": key, "question": question["label"], "value": value,
-                                        "display_value": display, "unit": question["unit"]})
-                    payload = {
-                        "form_id": form_id, "title": form["title"],
-                        "agent_context": form["context"], "answers": answers,
-                        "unanswered": [{"id": q["id"], "question": q["label"]}
-                                       for q in form["questions"] if q["id"] not in clean],
-                    }
-                    query = ("买家已提交本轮澄清答案。agent_context 仅为 Agent 整理的背景；"
-                             "未回答的问题仍未知，以下答案不是交易/记忆审批，也不是已核实的商品或政策事实。\n"
-                             + json.dumps(payload, ensure_ascii=False))
-                else:
-                    parts = [clean.get("query", "")]
-                    if clean.get("budget") is not None:
-                        parts.append(
-                            f"商品单价不超过{clean['budget']:g} {clean.get('currency', 'CNY')}"
-                        )
-                    if clean.get("ship_to"):
-                        parts.append("收货国家 " + clean["ship_to"])
-                    if clean.get("currency"):
-                        parts.append("报价币种 " + clean["currency"])
-                    if clean.get("excluded_material_tags"):
-                        parts.append(
-                            "排除材质：" + "、".join(clean["excluded_material_tags"])
-                        )
-                    if clean.get("airline"):
-                        parts.append("乘坐航空公司：" + clean["airline"])
-                    if clean.get("size_limit"):
-                        parts.append("买家提供的尺寸要求（请核验适用范围）：" + clean["size_limit"])
-                    if clean.get("weight_priority"):
-                        parts.append("本次重量取舍：" + WEIGHT_PRIORITIES[clean["weight_priority"]])
-                    query = "；".join(parts)
+                # 使用持久化的问题定义解释答案，不接受客户端改写题目、选项或单位。
+                answers = []
+                for question in form["questions"]:
+                    key = question["id"]
+                    if key not in clean:
+                        continue
+                    value = clean[key]
+                    labels = {o["value"]: o["label"] for o in question["options"]}
+                    display = ([labels[v] for v in value] if question["type"] == "multi_select"
+                               else labels[value] if question["type"] == "single_select" else value)
+                    answers.append({"id": key, "question": question["label"], "value": value,
+                                    "display_value": display, "unit": question["unit"]})
+                payload = {
+                    "form_id": form_id, "title": form["title"],
+                    "agent_context": form["context"], "answers": answers,
+                    "unanswered": [{"id": q["id"], "question": q["label"]}
+                                   for q in form["questions"] if q["id"] not in clean],
+                }
+                query = ("买家已提交本轮澄清答案。agent_context 仅为 Agent 整理的背景；"
+                         "未回答的问题仍未知，以下答案不是交易/记忆审批，也不是已核实的商品或政策事实。\n"
+                         + json.dumps(payload, ensure_ascii=False))
                 result = {
                     "status": "submitted",
                     "query": query,
                     "revision": revision + 1,
                     "run_id": "form-run-" + uuid.uuid4().hex,
                     "values": clean,
-                    "display_text": "\n".join(f"{answer['question']}：{answer['display_value']}" for answer in answers) if form.get('definition_version')==2 else query,
+                    "display_text": "\n".join(f"{answer['question']}：{answer['display_value']}" for answer in answers),
                 }
                 db.execute(
                     "UPDATE shopping_forms SET revision=?,submission=?,request_id=?,request_hash=? WHERE id=?",

@@ -22,10 +22,9 @@ import signal
 import socket
 import uuid
 
-from app.application.usecases.intents import SubmitIntentInput
 from app.application.runtime.execution import ExecutionResult
 from app.composition import build_container
-from app.domain.queue.ports.task_queue import IntentTask, NonRetryableTaskError
+from app.domain.queue.ports.task_queue import IntentTask
 from app.infrastructure.queue.redis_stream_queue import current_execution_lease
 from app.infrastructure.tracing import install_log_correlation, trace_worker_task
 

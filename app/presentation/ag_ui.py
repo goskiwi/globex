@@ -14,7 +14,7 @@ from app.application.usecases.confirmation_service import ConfirmationService
 from app.application.agents.orchestrator import MainAgentOrchestrator
 from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.ag_ui_journal import JournalConflict, JournalForbidden, JournalNotFound
-from app.application.runtime.runs import RunService
+from app.application.runtime.runs import RunService, RunProperties
 from app.presentation.identity import require_buyer, require_session
 from app.infrastructure.capability_registry import CapabilityVersionChanged
 import json
@@ -41,12 +41,12 @@ def parse_intent(body: RunAgentInput) -> SubmitIntentInput:
     content = body.messages[-1].content
     if not isinstance(content, str) or not content.strip():
         raise HTTPException(status_code=422, detail="当前接口需要非空的纯文本 user 消息")
-    props = body.forwarded_props if isinstance(body.forwarded_props, dict) else {}
-    buyer_id = props.get("buyerId")
-    if not isinstance(buyer_id, str) or not buyer_id.strip():
-        raise HTTPException(status_code=422, detail="forwardedProps.buyerId 不能为空")
-    if "selectedSkill" in props:
-        raise HTTPException(status_code=422, detail="不再支持 selectedSkill；直接提交购物需求，由 Agent 按需加载流程")
+    try:
+        properties=RunProperties.model_validate(body.forwarded_props)
+    except ValueError as error:
+        raise HTTPException(status_code=422,detail="forwardedProps不符合当前请求格式") from error
+    props=properties.model_dump()
+    buyer_id=properties.buyerId
     return SubmitIntentInput(
         shopping_session_id=body.thread_id,
         buyer_id=buyer_id,

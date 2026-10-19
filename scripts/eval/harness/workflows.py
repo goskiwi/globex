@@ -29,7 +29,7 @@ from unittest.mock import patch
 from app.infrastructure.context_usage import context_usage_sink, context_diagnostic_sink
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
-from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
+from app.infrastructure.persistence.sql.repositories import SqlPreferenceStore
 from app.infrastructure.persistence.seed_products import _product_from_record
 from app.infrastructure.persistence.sql.repositories import create_engine
 from app.infrastructure.persistence.sql.session_store import SqlFencedSessionStore
@@ -138,7 +138,7 @@ async def _run_workflow(case, settings, throttle, folder, repetition, usage_hook
     forms = ShoppingFormStore(folder / 'forms.db')
     saver=await resources.enter_async_context(FencedSqliteSaver.from_conn_string(str(folder/'graph.db')))
     saver.session_store=state_store
-    factory = MainAgentFactory(settings, search, orders, bus, JsonFilePreferenceStore(folder), circuit,
+    factory = MainAgentFactory(settings, search, orders, bus, SqlPreferenceStore(engine), circuit,
                                throttle, shopping_form_store=forms, checkpointer=saver,
                                loop_detector=LoopDetector(), model_client=model_client)
     diagnostics=[]

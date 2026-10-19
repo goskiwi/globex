@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from app.application.tools.order_tools import _verified_order_items, _ok, _fail
+from app.application.catalog_evidence import verified_sku_items
 from app.application.usecases.pricing import QuoteItem
 from app.domain.catalog.product_search_spec import ProductSearchSpec
 from app.application.runtime.request_scope import ShoppingContext
@@ -74,7 +75,7 @@ def build_quote_tool(pricing, evidence_store, bus):
     async def quote_products(items: list[Choice], ship_to: str, currency: str) :
         """查询指定 SKU、数量、目的地和币种的完整报价。不选购、不准备确认、不下单。
 
-        items 每项必须含 product_id、sku_id、quantity；必须来自当前会话检索结果。
+        items 每项必须含 product_id、sku_id、quantity；必须来自当前会话原始搜索或详情资料。
         多商品按一起购买报价；比较替代选项时分别报价。金额由代码计算。
         """
         context = ShoppingContext.current()
@@ -82,7 +83,7 @@ def build_quote_tool(pricing, evidence_store, bus):
             return _fail("缺少买家会话")
         try:
             request = QuoteInput(items=items, ship_to=ship_to, currency=currency)
-            verified = await _verified_order_items(evidence_store, context.buyer_id, context.shopping_session_id,
+            verified = await verified_sku_items(evidence_store.find_observed_product, context.buyer_id, context.shopping_session_id,
                                                    [item.model_dump() for item in request.items])
             quote = await pricing.quote([QuoteItem(x.product_id, x.sku_id, x.quantity) for x in verified],
                                         request.ship_to, request.currency)

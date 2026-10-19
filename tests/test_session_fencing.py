@@ -1,6 +1,8 @@
 """独立连接/Registry 的持久 fencing 验证，不依赖 Redis 和外部模型。"""
 from __future__ import annotations
 
+from tests.sql_fixtures import preference_store
+
 import asyncio
 import json
 from types import SimpleNamespace
@@ -17,7 +19,6 @@ from app.application.agents.main_agent import SessionRegistry, GraphSession
 from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
 from app.domain.session.ports.session_store import SessionOwnerMismatch, SessionOwnerUnbound, StaleSessionWrite
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
-from app.infrastructure.persistence.json_file_stores import JsonFileSessionStore
 from app.infrastructure.persistence.sql.repositories import SqlSessionStore, create_engine
 from app.infrastructure.persistence.sql.tables import ConversationSessionRow
 
@@ -141,40 +142,8 @@ async def test_unowned_legacy_snapshot_requires_explicit_migration(stores):
     assert (await store.claim("legacy", buyer_id="buyer")).state_json == '{"v":1}'
 
 
-async def test_file_mode_migrates_once_and_rejects_cross_instance_stale_writer(tmp_path):
-    (tmp_path / "sessions").mkdir()
-    (tmp_path / "conversations").mkdir()
-    legacy = tmp_path / "sessions" / "session.json"
-    legacy.write_text('{"legacy":true}', encoding="utf-8")
-    (tmp_path / "conversations" / "session.jsonl").write_text('{"buyer_id":"buyer"}\n', encoding="utf-8")
-    one, two = JsonFileSessionStore(tmp_path), JsonFileSessionStore(tmp_path)
-    try:
-        first = await one.claim("session", buyer_id="buyer")
-        assert first.state_json == '{"legacy":true}'
-        second = await two.claim("session", buyer_id="buyer")
-        await two.save_claim(second, '{"fresh":true}')
-        with pytest.raises(StaleSessionWrite):
-            await one.save_claim(first, '{"stale":true}')
-        legacy.write_text('{"changed_file":true}', encoding="utf-8")
-        assert await JsonFileSessionStore(tmp_path).load("session") == '{"fresh":true}'
-        with pytest.raises(SessionOwnerMismatch):
-            await one.assert_owner("session", "another")
-    finally:
-        await one.close()
-        await two.close()
 
 
-async def test_file_mode_does_not_guess_owner_or_allow_filename_aliasing(tmp_path):
-    (tmp_path / "sessions").mkdir()
-    (tmp_path / "sessions" / "old.json").write_text('{}', encoding="utf-8")
-    store = JsonFileSessionStore(tmp_path)
-    try:
-        with pytest.raises(SessionOwnerUnbound):
-            await store.claim("old", buyer_id="buyer")
-        with pytest.raises(SessionOwnerUnbound):
-            await store.claim("o/ld", buyer_id="buyer")
-    finally:
-        await store.close()
 
 
 class LocalFactory:
@@ -263,10 +232,9 @@ async def test_claim_fence_is_inherited_without_losing_context_constraints(store
     assert ShoppingContext.current() is None
 
 
-async def test_file_preferences_do_not_alias_distinct_authenticated_buyers(tmp_path):
-    from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
+async def test_sql_preferences_do_not_alias_distinct_authenticated_buyers(tmp_path):
     from app.domain.buyer.preference import BuyerPreference
-    store = JsonFilePreferenceStore(tmp_path)
+    store = await preference_store(tmp_path)
     await store.append(BuyerPreference("a/b", "dislike", "隐私偏好"))
     assert await store.list_by_buyer("ab") == []
     await store.append(BuyerPreference("ab", "like", "另一个人的偏好"))

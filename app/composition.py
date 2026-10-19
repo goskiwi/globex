@@ -5,13 +5,12 @@ API 进程与 worker 进程共用同一份接线，避免两处各自 new 一套
 洋葱由内向外装配：infrastructure → application → （presentation 在 server.py）。
 
 所有外部依赖都是可选的，按「不配就降级」设计：
-    DATABASE_URL 未配 → SQLite；= "file" → JSON 文件存储
+    DATABASE_URL 未配 → SQLite，所有会话与审计使用 SQL 存储
     REDIS_URL    未配 → 无缓存、无队列、无跨进程事件背板
     QUEUE_ENABLED=0  → 不入队，请求在 API 进程内直接跑（三期行为）
 """
 from __future__ import annotations
 
-import hashlib
 import asyncio
 import logging
 from dataclasses import dataclass, field
@@ -36,15 +35,10 @@ from app.application.usecases.order_usecases import (
 from app.domain.queue.ports.task_queue import TaskQueue
 from app.infrastructure.cache.cached_embedding_client import CachedEmbeddingClient
 from app.infrastructure.cache.redis_cache import RedisCache
-from app.infrastructure.cache.semantic_cache import SemanticCache
 from app.infrastructure.embedding.openai_embedding_client import OpenAIEmbeddingClient
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.persistence.in_memory_repositories import (
     InMemoryProductRepository,
-)
-from app.infrastructure.persistence.json_file_stores import (
-    JsonFileConversationStore,
-    JsonFileSessionStore,
 )
 from app.infrastructure.persistence.sql.repositories import (
     SqlConversationStore,
@@ -82,26 +76,12 @@ from app.infrastructure.vector.qdrant_product_index import QdrantProductIndex
 logger = logging.getLogger(__name__)
 
 
-def _prompt_fingerprint() -> str:
-    """提示词文件指纹，用作语义缓存 namespace 的一部分。
-
-    prompt 一改，旧缓存的回复就不再代表当前 Agent 行为，必须作废。
-    读不到文件时返回固定值，不因此阻断启动。
-    """
-    path = Path(__file__).resolve().parent / "application" / "prompts" / "globex.yml"
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()[:8]
-    except OSError:
-        return "noprompt"
-
-
 @dataclass
 class Container:
     settings: Settings
     bus: TradeEventBus
     orchestrator: MainAgentOrchestrator
     cache: RedisCache
-    semantic_cache: SemanticCache
     task_queue: Optional[TaskQueue]
     backplane: Optional[RedisEventBackplane]
     query_order: QueryOrderUseCase
@@ -155,8 +135,6 @@ class Container:
                 await self.context_service.shutdown()
             if self.runs is not None:
                 await self.runs.shutdown()
-            if isinstance(self.session_store, JsonFileSessionStore):
-                await self.session_store.close()
             await self.vector_index.close()
             if hasattr(self.knowledge_base, "close"):
                 await self.knowledge_base.close()
@@ -194,14 +172,6 @@ async def build_container() -> Container:
         if cache.enabled
         else raw_embedder
     )
-    semantic_cache = SemanticCache(
-        cache,
-        embedder,
-        threshold=settings.semantic_cache_threshold,
-        enabled=settings.semantic_cache_enabled,
-        # 模型名 + 提示词指纹入 key：改 prompt 或换模型后旧回复自动失效
-        namespace=f"{settings.llm_model}:{_prompt_fingerprint()}",
-    )
     knowledge_base = build_category_knowledge_base(settings)
     from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
     graph_checkpointer_context = FencedSqliteSaver.from_conn_string(
@@ -222,27 +192,12 @@ async def build_container() -> Container:
     else:
         logger.info("队列未启用，意图在当前进程内直接执行")
 
-    # 存储形态
-    use_database = settings.database_url != "file"
-    db_engine = create_engine(settings.database_url) if use_database else None
-    if db_engine is not None:
-        session_store = SqlSessionStore(db_engine)
-        conversation_store = SqlConversationStore(db_engine)
-        logger.info("持久化形态：%s", db_engine.url.get_backend_name())
-    else:
-        session_store = JsonFileSessionStore(settings.data_dir)
-        conversation_store = JsonFileConversationStore(settings.data_dir)
-        logger.info("持久化形态：本地 JSON 文件（DATABASE_URL=file）")
-
+    db_engine = create_engine(settings.database_url)
+    session_store = SqlSessionStore(db_engine)
+    conversation_store = SqlConversationStore(db_engine)
     graph_checkpointer.session_store = session_store
-
-    # 旧版 file 订单无法按未知格式自动并账，必须先显式迁移。
-    if not use_database:
-        legacy_orders = settings.data_dir / "orders.json"
-        if legacy_orders.exists() and legacy_orders.read_text().strip() not in {"", "[]", "{}"}:
-            raise RuntimeError("检测到旧 orders.json，请先核对并迁移至交易账本，不能忽略历史订单后启动")
-    # file 模式只影响会话和偏好；交易仍使用持久 SQLite 原子账本。
-    trade_db_engine = db_engine or create_engine(f"sqlite+aiosqlite:///{settings.data_dir / 'trade.db'}")
+    logger.info("持久化形态：%s", db_engine.url.get_backend_name())
+    trade_db_engine = db_engine
     trade_store = SqlTradeStore(trade_db_engine)
     from app.application.usecases.pricing import PricingService
     pricing = PricingService(product_repo)
@@ -347,7 +302,6 @@ async def build_container() -> Container:
             orchestrator=orchestrator,
             context_service=ContextService(orchestrator, session_store, search_factory.evidence_store, confirmations),
             cache=cache,
-            semantic_cache=semantic_cache,
             task_queue=task_queue,
             backplane=backplane,
             query_order=query_order,

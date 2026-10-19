@@ -24,7 +24,7 @@ from app.infrastructure.context_usage import evaluation_evidence_sink
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.llm import create_chat_model, create_chat_client
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
-from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
+from app.infrastructure.persistence.sql.repositories import SqlPreferenceStore,create_engine,bootstrap_schema
 from app.infrastructure.resilience import CircuitBreakerRegistry
 from app.infrastructure.settings import load_settings
 from app.infrastructure.throttle import GatewayThrottle
@@ -34,6 +34,8 @@ async def main():
     reports=[]
     with tempfile.TemporaryDirectory(prefix='globex-skill-live-') as folder:
         settings=replace(load_settings(),data_dir=Path(folder),llm_fallback_model='',llm_max_retries=0,harness_enabled=True)
+        engine=create_engine('sqlite+aiosqlite:///'+str(Path(folder)/'preferences.db'))
+        await bootstrap_schema(engine)
         registry=CapabilityRegistry(Path(folder)/'skills.db')
         personal=BuyerSkillStore(Path(folder)/'personal.db')
         skill=personal.save('synthetic','通勤背包比较','需要从用途、重量、预算出发，比较多款通勤背包并说明取舍时使用。',
@@ -51,7 +53,7 @@ async def main():
                 bus=TradeEventBus();circuits=CircuitBreakerRegistry();throttle=GatewayThrottle(3,0)
                 search=SearchAgentFactory(settings,CatalogSearchUseCase(InMemoryProductRepository()),bus,None,circuits,throttle, model_client=model_client)
                 trade=TradeAgentFactory(settings,None,None,None,bus,circuits,throttle, model_client=model_client)
-                factory=MainAgentFactory(settings,search,trade,bus,JsonFilePreferenceStore(Path(folder)/'preferences'),
+                factory=MainAgentFactory(settings,search,trade,bus,SqlPreferenceStore(engine),
                     circuits,throttle,checkpointer=InMemorySaver(),loop_detector=LoopDetector(),
                     capability_registry=registry,buyer_skill_store=personal, model_client=model_client)
                 try:
@@ -102,7 +104,9 @@ async def main():
                                  'result':s['payload'].get('result')} for s in samples if s['kind']=='tool_result'],
                     scope='真实模型；生产工厂和加载链；测试目录及合成 Skill；无真实交易')
                 print(json.dumps(report,ensure_ascii=False),flush=True);reports.append(report)
-        finally:await model.aclose()
+        finally:
+            await model.aclose()
+            await engine.dispose()
     if not all(r['passed'] for r in reports):raise SystemExit(1)
 
 

@@ -1,3 +1,5 @@
+
+
 """结构化分类与偏好：不猜原话、不扩大材质范围、不丢作用域和原始依据。"""
 from tests.shopping_state_helpers import run_search
 import json
@@ -104,12 +106,11 @@ async def test_offline_migration_preserves_text_and_does_not_invent_conditions(t
 
 @pytest.mark.asyncio
 async def test_all_stores_preserve_constraint_scope_and_evidence(tmp_path):
-    from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
     from app.infrastructure.persistence.sql.repositories import SqlPreferenceStore, create_engine, bootstrap_schema
     engine=create_engine(f"sqlite+aiosqlite:///{tmp_path/'plain.db'}")
     await bootstrap_schema(engine)
     try:
-        for store in (JsonFilePreferenceStore(tmp_path),SqlPreferenceStore(engine)):
+        for store in (SqlPreferenceStore(engine),):
             p=preference("厨房餐饮不要合成聚合物",category="厨房餐饮")
             await store.append(p)
             actual=(await store.list_by_buyer("b"))[0]

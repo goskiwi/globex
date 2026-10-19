@@ -62,7 +62,7 @@ async def test_stale_extraction_does_not_ignore_concurrent_new_memory(tmp_path):
 async def test_http_id_version_and_history_isolation(tmp_path):
     import httpx
     from tests.test_buyer_workspace import fixture,headers
-    api,o,*_,policy=fixture(tmp_path)
+    api,o,*_,policy=await fixture(tmp_path)
     o.buyer_workspace.preferences=make(tmp_path)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api),base_url='http://test') as client:
         path='/commerce/preferences?buyer_id=alice'

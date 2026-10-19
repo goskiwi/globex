@@ -1,3 +1,5 @@
+
+from tests.sql_fixtures import preference_store
 """预算、持久证据和压缩的行为回归。"""
 from app.application.runtime.execution import ExecutionResult
 import asyncio
@@ -166,14 +168,13 @@ async def test_retry_cannot_bypass_exhausted_budget(tmp_path,monkeypatch):
 async def test_preference_withdrawal_is_authoritative_after_restart(tmp_path):
     from app.application.memory.preference_resolution import resolve_preferences
     from app.application.memory.preference_selector import PreferenceSelector
-    from app.infrastructure.persistence.json_file_stores import JsonFilePreferenceStore
     from app.domain.buyer.preference import BuyerPreference
-    store = JsonFilePreferenceStore(tmp_path / "preferences")
+    store = await preference_store(tmp_path / "preferences")
     await store.append(BuyerPreference("buyer", "dislike", "不要塑料材质"))
     first = await resolve_preferences(store, PreferenceSelector(), "buyer", "推荐背包", 5)
     assert "不要塑料材质" in first.hint and first.facts
     await store.delete("buyer", "不要塑料材质")
-    second = await resolve_preferences(JsonFilePreferenceStore(tmp_path / "preferences"),
+    second = await resolve_preferences(await preference_store(tmp_path / "preferences"),
                                        PreferenceSelector(), "buyer", "推荐背包", 5)
     assert "历史已撤回偏好不得恢复" in second.hint and not second.facts
 

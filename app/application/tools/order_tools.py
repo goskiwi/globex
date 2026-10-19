@@ -16,6 +16,7 @@ from app.application.usecases.order_usecases import (
     QueryOrderUseCase,
 )
 from app.domain.order.address import Address
+from app.application.catalog_evidence import verified_sku_items
 from app.application.tools.order_inputs import CreateOrderInput, ShippingAddressInput
 from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
@@ -41,24 +42,7 @@ async def _verified_order_items(evidence_store, buyer_id: str, session_id: str, 
     """从会话原始工具证据核对来源，模型文字及当前目录不能替代检索记录。"""
     if evidence_store is None:
         raise ValueError("商品检索证据未接入，不能准备下单确认")
-    verified = []
-    for item in items:
-        product_id, sku_id = item.get("product_id"), item.get("sku_id")
-        if not isinstance(product_id, str) or not product_id.strip():
-            raise ValueError("订单行必须提供 product_id")
-        if not isinstance(sku_id, str) or not sku_id.strip():
-            raise ValueError("sku_id 必须为非空文字")
-        evidence = await evidence_store.find_product(buyer_id, session_id, product_id=product_id, sku_id=sku_id or "")
-        if evidence is None:
-            raise ValueError(f"当前会话未检索返回商品或规格：{sku_id or product_id}；请先用 product_search_tool 精确核验")
-        card = next((hit for hit in evidence["data"].get("hits", []) if hit.get("product_id") == product_id), None)
-        if card is None:
-            raise ValueError("商品检索证据与请求不匹配")
-        sku_ids = {sku["sku_id"] for sku in card.get("skus", []) if sku.get("sku_id")}
-        if sku_id not in sku_ids:
-            raise ValueError(f"商品 {product_id} 缺少可核对的规格，请先检索并明确 sku_id")
-        verified.append(OrderItemInput(product_id, sku_id, item["quantity"]))
-    return verified
+    return await verified_sku_items(evidence_store.find_product, buyer_id, session_id, items)
 
 
 def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evidence_store=None):

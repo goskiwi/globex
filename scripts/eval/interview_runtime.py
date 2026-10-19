@@ -36,7 +36,7 @@ async def isolated_runtime(folder: Path, settings, *, model_factory=None):
     from app.composition import build_container
     from app.presentation.server import build_app
     configuration = replace(settings, data_dir=folder, database_url=f"sqlite+aiosqlite:///{folder / 'globex.db'}",
-        redis_url="", queue_enabled=False, semantic_cache_enabled=False, tavily_api_key="",
+        redis_url="", queue_enabled=False, tavily_api_key="",
         otlp_endpoint="", otlp_traces_endpoint="", langfuse_base_url="", langfuse_public_key="", langfuse_secret_key="",
         llm_fallback_model="", llm_max_retries=0, harness_enabled=True,
         identity_mode="hmac")

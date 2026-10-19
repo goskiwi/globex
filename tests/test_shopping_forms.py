@@ -17,10 +17,18 @@ def store(path):
     return ShoppingFormStore(path)
 
 
+def questions():
+    return [
+        {"id":"query","type":"text","label":"想买什么？","required":True},
+        {"id":"budget","type":"number","label":"预算？","unit":"CNY","minimum":0,"maximum":1000000},
+        {"id":"ship_to","type":"text","label":"收货国家？"},
+    ]
+
+
 async def test_form_restores_after_restart_and_is_owner_scoped(tmp_path):
     forms = store(tmp_path / "forms.db")
-    form = await forms.create(
-        "b", "s", "选购背包", ["query", "budget", "ship_to"], {"query": "背包"}
+    form = await forms.create_clarification(
+        "b", "s", "选购背包", questions()
     )
     restored = await store(tmp_path / "forms.db").get("b", "s", form["form_id"])
     assert restored == form
@@ -33,12 +41,12 @@ async def test_form_restores_after_restart_and_is_owner_scoped(tmp_path):
 
 async def test_form_submission_has_cas_and_idempotent_recovery(tmp_path):
     forms = store(tmp_path / "forms.db")
-    form = await forms.create(
-        "b", "s", "选购", ["query", "budget", "ship_to", "currency"], {}
+    form = await forms.create_clarification(
+        "b", "s", "选购", questions()
     )
-    values = {"query": "轻便背包", "budget": 300, "ship_to": "JP", "currency": "CNY"}
+    values = {"query": "轻便背包", "budget": 300, "ship_to": "JP"}
     result = await forms.submit("b", "s", form["form_id"], 1, "action-1", values)
-    assert "商品单价不超过300 CNY" in result["query"]
+    assert json.loads(result["query"].split("\n",1)[1])["answers"][1]["unit"] == "CNY"
     assert "JP" in result["query"] and result["status"] == "submitted"
     assert (
         await forms.submit("b", "s", form["form_id"], 1, "action-1", values) == result
@@ -56,30 +64,6 @@ async def test_form_submission_has_cas_and_idempotent_recovery(tmp_path):
     ] == result
 
 
-async def test_form_rejects_unknown_components_actions_and_invalid_numbers(tmp_path):
-    forms = store(tmp_path / "forms.db")
-    with pytest.raises(ValueError):
-        await forms.create("b", "s", "攻击", ["html"], {})
-    form = await forms.create("b", "s", "选购", ["query", "budget"], {})
-    for value in [float("nan"), float("inf"), -1, True, 1000001]:
-        with pytest.raises(ValueError):
-            await forms.submit(
-                "b",
-                "s",
-                form["form_id"],
-                1,
-                "request",
-                {"query": "包", "budget": value},
-            )
-    with pytest.raises(ValueError):
-        await forms.submit(
-            "b",
-            "s",
-            form["form_id"],
-            1,
-            "request",
-            {"query": "包", "tool": "create_order_tool"},
-        )
 
 
 async def test_form_routes_validate_actions_and_ownership(tmp_path):
@@ -94,7 +78,7 @@ async def test_form_routes_validate_actions_and_ownership(tmp_path):
         result = await c.post(
             "/commerce/shopping-forms?buyer_id=b", json={"session_id": "s"}
         )
-        assert result.status_code == 410
+        assert result.status_code == 405
         form = await forms.create_clarification("b", "s", "补充需求", [
             {"id": "query", "type": "text", "label": "这次想买什么？", "required": True},
             {"id": "budget", "type": "number", "label": "预算是多少？", "unit": "CNY"},
@@ -159,12 +143,12 @@ async def test_messages_follow_official_a2ui_schema_and_local_catalog(tmp_path):
     validator = Draft202012Validator(
         json.loads((root / "server_to_client.json").read_text()), registry=registry
     )
-    form = await store(tmp_path / "forms.db").create(
-        "b", "s", "预算与配送", ["query", "budget"], {}
+    form = await store(tmp_path / "forms.db").create_clarification(
+        "b", "s", "预算与配送", questions()
     )
     for message in form["messages"]:
         validator.validate(message)
-    # 旧记录与新问题统一输出同一通用控件合同。
+    # 当前问题定义输出通用控件。
     dynamic = await store(tmp_path / "forms.db").create_clarification("b", "s", "耳机需求", [
         {"id": "purpose", "type": "single_select", "label": "使用场景？",
          "options": [{"value": "metro", "label": "地铁通勤"}, {"value": "home", "label": "家中"}]},
@@ -190,43 +174,13 @@ async def test_messages_follow_official_a2ui_schema_and_local_catalog(tmp_path):
 
 async def test_buyer_can_restore_unstarted_draft_without_browser_cache(tmp_path):
     forms = store(tmp_path / "forms.db")
-    await forms.create("other", "secret", "不应该可见", ["query"], {})
+    await forms.create_clarification("other", "secret", "不应该可见", questions())
     assert await forms.latest_for_buyer("buyer") is None
-    form = await forms.create("buyer", "draft-session", "尚未开始对话", ["query"], {})
+    form = await forms.create_clarification("buyer", "draft-session", "尚未开始对话", questions())
     restored = await store(tmp_path / "forms.db").latest_for_buyer("buyer")
     assert restored["form_id"] == form["form_id"] and restored["created_at"] > 0
 
 
-async def test_clarification_preserves_travel_answers_and_only_requested_fields(tmp_path):
-    forms = store(tmp_path/'clarification.db')
-    form = await forms.create('b','s','确认登机背包条件',
-        ['budget','airline','size_limit','weight_priority'],{'query':'登机背包'})
-    assert 'currency' in form['fields']
-    assert 'ship_to' not in form['fields']
-    values={'query':'登机背包','budget':80,'currency':'USD','airline':'示例航空',
-            'size_limit':'随身包40×30×20cm，包含把手','weight_priority':'lightest'}
-    answer=await forms.submit('b','s',form['form_id'],1,'once',values)
-    assert answer['values']==values
-    assert '80 USD' in answer['query'] and '示例航空' in answer['query']
-    assert '40×30×20cm' in answer['query'] and '请核验适用范围' in answer['query']
-    assert '尽量轻' in answer['query']
-    restored=await store(tmp_path/'clarification.db').get('b','s',form['form_id'])
-    assert restored['submission']==answer
-    assert await forms.submit('b','s',form['form_id'],1,'once',values)==answer
-    with pytest.raises(LookupError):
-        await forms.submit('another','s',form['form_id'],1,'once',values)
-
-
-@pytest.mark.parametrize('extra',[
-    {'airline':'a'*81},{'size_limit':'x'*201},{'airline':42},
-    {'weight_priority':'anything'},{'weight_priority':{}}, {'create_order':True},
-])
-async def test_clarification_rejects_invalid_answers(tmp_path,extra):
-    forms=store(tmp_path/'form.db')
-    f=await forms.create('b','s','补充条件',['airline','size_limit','weight_priority'],{})
-    with pytest.raises(ValueError):
-        await forms.submit('b','s',f['form_id'],1,'r',{'query':'包',**extra})
-    assert (await forms.get('b','s',f['form_id']))['submission'] is None
 
 
 async def test_native_graph_calls_clarification_tool_then_accepts_answer(tmp_path):
@@ -272,45 +226,6 @@ async def test_native_graph_calls_clarification_tool_then_accepts_answer(tmp_pat
         ShoppingContext.reset(token);await model.aclose()
 
 
-async def test_agent_questions_are_not_limited_to_travel_or_legacy_fields(tmp_path):
-    forms = store(tmp_path / 'dynamic.db')
-    questions = [
-        {'id': 'use_case', 'type': 'single_select', 'label': '主要在什么场景听音乐？', 'required': True,
-         'options': [{'value': 'metro', 'label': '地铁通勤'}, {'value': 'running', 'label': '户外跑步'}]},
-        {'id': 'features', 'type': 'multi_select', 'label': '更看重哪些特性？',
-         'options': [{'value': 'anc', 'label': '主动降噪'}, {'value': 'comfort', 'label': '长时间佩戴舒适'}]},
-        {'id': 'wear_hours', 'type': 'number', 'label': '每天大约佩戴多久？', 'unit': '小时', 'minimum': 0, 'maximum': 24},
-        # 同名也不能触发历史预算语义，问题定义是唯一依据。
-        {'id': 'budget', 'type': 'text', 'label': '还有哪些想补充的？'},
-    ]
-    form = await forms.create_clarification('b', 's', '补充耳机需求', questions, '买家已经明确要耳机', '了解使用方式才能比较')
-    assert 'fields' not in form and form['defaults'] == {}
-    assert [q['id'] for q in form['questions']] == [q['id'] for q in questions]
-    result = await forms.submit('b', 's', form['form_id'], 1, 'once', {
-        'use_case': 'metro', 'features': ['anc', 'comfort'], 'wear_hours': 2.5, 'budget': '不要入耳式',
-    })
-    payload = json.loads(result['query'].split('\n', 1)[1])
-    assert payload['answers'][0] == {'id': 'use_case', 'question': '主要在什么场景听音乐？',
-                                    'value': 'metro', 'display_value': '地铁通勤', 'unit': ''}
-    assert payload['answers'][1]['display_value'] == ['主动降噪', '长时间佩戴舒适']
-    assert payload['answers'][2]['unit'] == '小时'
-    assert '商品单价不超过' not in result['query']
-    restored = await store(tmp_path / 'dynamic.db').get('b', 's', form['form_id'])
-    assert restored['questions'] == form['questions'] and restored['submission'] == result
-    assert await forms.submit('b', 's', form['form_id'], 1, 'once', result['values']) == result
-    with pytest.raises(LookupError):
-        await forms.submit('other', 's', form['form_id'], 1, 'once', result['values'])
-    from app.infrastructure.shopping_forms import FormConflict
-    with pytest.raises(FormConflict):
-        await forms.submit('b', 's', form['form_id'], 1, 'once', {'use_case': 'running'})
-    followup = await forms.create_clarification('b', 's', '再确认一下', [
-        {'id': 'fit', 'type': 'text', 'label': '可以接受头戴式吗？'},
-    ])
-    assert [q['id'] for q in followup['questions']] == ['fit']
-    # 未回答不能用选项第一项或背景替代答案。
-    blank = await forms.submit('b', 's', followup['form_id'], 1, 'blank', {})
-    payload = json.loads(blank['query'].split('\n', 1)[1])
-    assert payload['answers'] == [] and payload['unanswered'][0]['id'] == 'fit'
 
 
 @pytest.mark.parametrize('questions', [
@@ -383,3 +298,44 @@ def test_tool_schema_exposes_question_types_and_no_fixed_business_fields():
     assert set(schema['$defs']['ClarificationQuestion']['properties']['type']['enum']) == {
         'text','number','single_select','multi_select'
     }
+
+
+async def test_agent_questions_are_not_limited_to_travel_or_legacy_fields(tmp_path):
+    forms = store(tmp_path / 'dynamic.db')
+    questions = [
+        {'id': 'use_case', 'type': 'single_select', 'label': '主要在什么场景听音乐？', 'required': True,
+         'options': [{'value': 'metro', 'label': '地铁通勤'}, {'value': 'running', 'label': '户外跑步'}]},
+        {'id': 'features', 'type': 'multi_select', 'label': '更看重哪些特性？',
+         'options': [{'value': 'anc', 'label': '主动降噪'}, {'value': 'comfort', 'label': '长时间佩戴舒适'}]},
+        {'id': 'wear_hours', 'type': 'number', 'label': '每天大约佩戴多久？', 'unit': '小时', 'minimum': 0, 'maximum': 24},
+        # 同名也不能触发历史预算语义，问题定义是唯一依据。
+        {'id': 'budget', 'type': 'text', 'label': '还有哪些想补充的？'},
+    ]
+    form = await forms.create_clarification('b', 's', '补充耳机需求', questions, '买家已经明确要耳机', '了解使用方式才能比较')
+    assert 'fields' not in form and form['defaults'] == {}
+    assert [q['id'] for q in form['questions']] == [q['id'] for q in questions]
+    result = await forms.submit('b', 's', form['form_id'], 1, 'once', {
+        'use_case': 'metro', 'features': ['anc', 'comfort'], 'wear_hours': 2.5, 'budget': '不要入耳式',
+    })
+    payload = json.loads(result['query'].split('\n', 1)[1])
+    assert payload['answers'][0] == {'id': 'use_case', 'question': '主要在什么场景听音乐？',
+                                    'value': 'metro', 'display_value': '地铁通勤', 'unit': ''}
+    assert payload['answers'][1]['display_value'] == ['主动降噪', '长时间佩戴舒适']
+    assert payload['answers'][2]['unit'] == '小时'
+    assert '商品单价不超过' not in result['query']
+    restored = await store(tmp_path / 'dynamic.db').get('b', 's', form['form_id'])
+    assert restored['questions'] == form['questions'] and restored['submission'] == result
+    assert await forms.submit('b', 's', form['form_id'], 1, 'once', result['values']) == result
+    with pytest.raises(LookupError):
+        await forms.submit('other', 's', form['form_id'], 1, 'once', result['values'])
+    from app.infrastructure.shopping_forms import FormConflict
+    with pytest.raises(FormConflict):
+        await forms.submit('b', 's', form['form_id'], 1, 'once', {'use_case': 'running'})
+    followup = await forms.create_clarification('b', 's', '再确认一下', [
+        {'id': 'fit', 'type': 'text', 'label': '可以接受头戴式吗？'},
+    ])
+    assert [q['id'] for q in followup['questions']] == ['fit']
+    # 未回答不能用选项第一项或背景替代答案。
+    blank = await forms.submit('b', 's', followup['form_id'], 1, 'blank', {})
+    payload = json.loads(blank['query'].split('\n', 1)[1])
+    assert payload['answers'] == [] and payload['unanswered'][0]['id'] == 'fit'

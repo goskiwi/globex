@@ -214,7 +214,7 @@ async def test_model_write_tools_prepare_only_and_cannot_choose_identity_approva
         from dataclasses import asdict
         item = {"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 1}
         unverified = await create(sku_ids=['P1001-S1'], shipping_address=asdict(address()))
-        assert "未检索返回" in unverified.text
+        assert not unverified.ok and unverified.error_code == "business_rejected"
         assert not await env.store.list_confirmations(buyer_id="buyer-1", session_id="session-1")
         await run_search(search, product_id="P1001", sku_id="P1001-S1")
         prepared = json.loads((await create(sku_ids=['P1001-S1'], shipping_address=asdict(address()))).text)

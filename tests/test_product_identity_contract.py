@@ -73,7 +73,7 @@ async def test_order_rejects_unsearched_product_and_does_not_create_confirmation
     await run_search(env.search, product_id="P1001")
     before = await env.store.get_inventory()
     failed = await env.create(sku_ids=["P1002-S1"], shipping_address=asdict(address()))
-    assert "当前会话未检索返回" in failed.text
+    assert not failed.ok and failed.error_code == "business_rejected"
     assert not await env.store.list_confirmations(buyer_id="identity-buyer", session_id="identity-session")
     assert await env.store.get_inventory() == before
 
@@ -98,10 +98,10 @@ async def test_specification_must_have_been_returned(tools_env):
     env = tools_env
     await run_search(env.search, sku_id="P1003-S1")
     result = await env.create(sku_ids=["P1003-S2"], shipping_address=asdict(address()))
-    assert "未检索返回" in result.text
+    assert not result.ok and result.error_code == "business_rejected"
     ShoppingContext.set(replace(ShoppingContext.current(), selected_lines=({'product_id':'P1001','sku_id':'P1003-S1','quantity':1},)))
     wrong_owner = await env.create(sku_ids=["P1003-S1"], shipping_address=asdict(address()))
-    assert "未检索返回" in wrong_owner.text
+    assert not wrong_owner.ok and wrong_owner.error_code == "business_rejected"
 
 
 @pytest.mark.parametrize("buyer,session", [("another-buyer", "identity-session"), ("identity-buyer", "another-session")])
@@ -110,7 +110,7 @@ async def test_order_evidence_is_scoped_to_buyer_and_session(tools_env, buyer, s
     await run_search(env.search, product_id="P1001")
     token = ShoppingContext.set(ShoppingContextSnapshot(session, buyer, "zh-CN", "CNY", selected_lines=selected_lines('P1001-S1')))
     try:
-        assert "未检索返回" in (await env.create(sku_ids=["P1001-S1"], shipping_address=asdict(address()))).text
+        assert not (await env.create(sku_ids=["P1001-S1"], shipping_address=asdict(address()))).ok
     finally:
         ShoppingContext.reset(token)
 
