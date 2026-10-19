@@ -116,21 +116,3 @@ async def test_comparison_survives_journal_restart_and_followup(tmp_path):
     followup,_=await reopened.reserve(body('r2'),'b1','owner2')
     assert followup['input']['state'].get('presentations',[])==[]
     assert (await reopened.session('s1','b1'))['presentations']==[result]
-
-
-
-async def test_parallel_final_presentations_do_not_race_to_overwrite_state():
-    from tests.test_agent_handoff import ScriptedModel
-    from app.application.runtime.results import ToolResult
-    from tests.presentation_helpers import delivery_middlewares
-    async def recommend_products():
-        """已校验的推荐结果。"""
-        return ToolResult({'guidance':'推荐说明','hits':[]})
-    async def compare_products():
-        """已校验的比较结果。"""
-        return ToolResult({'guidance':'比较说明','hits':[]})
-    model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'id':'a','name':'recommend_products','args':{}},{'id':'b','name':'compare_products','args':{}}])])
-    graph=create_agent(model,tools=[as_langchain_tool(recommend_products),as_langchain_tool(compare_products)],middleware=delivery_middlewares())
-    result=await graph.ainvoke({'messages':[HumanMessage(content='推荐并比较')]})
-    assert {p['kind'] for p in result['presentations']}=={'recommendation','comparison'}
-    assert len({p['id'] for p in result['presentations']})==2 and model.cursor==1

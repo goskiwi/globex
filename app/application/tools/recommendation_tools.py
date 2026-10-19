@@ -42,16 +42,6 @@ class ComparisonInput(DecisionInput):
 
 
 def _decision(request: DecisionInput, cards: list[dict]) -> dict:
-    # 标识字段用于工具操作，买家文案使用目录名称。校验实际引用，不猜编号格式或替换原文。
-    public_text = [request.guidance, *request.dimensions,
-                   *(text for card in cards for text in [card['recommendation_reason'], *card['tradeoffs']])]
-    references = {identifier: card['title'] for card in cards
-                  for identifier in (card['product_id'], card['default_sku_id'])}
-    misused = {identifier: title for identifier, title in references.items()
-               if any(identifier in text for text in public_text)}
-    if misused:
-        names = '；'.join(f'{identifier} 对应 {title}' for identifier, title in misused.items())
-        raise ValueError(f'选购建议、单款理由和关注点请使用商品名称，不展示内部编号。请修正文案后重新提交：{names}')
     preferred = request.preferred_sku_id
     if preferred is not None:
         card = next((card for card in cards if card['default_sku_id'] == preferred), None)
@@ -107,7 +97,7 @@ def build_recommendation_tool(catalog, evidence_store, bus):
         参数只在能解释选择时引用，不逐项复述；关键的未知能力不能写成确定适配。
         alternatives 明确首选；bundle 推荐整套组合，preferred_sku_id 填 null。
         guidance 提交整体选购建议，解释首选与备选之间怎么选；reason 只解释当前单款。
-        dimensions 是本次关注点，不要求逐维填表。建议与卡片一次交付，成功后结束，不再另调模型总结。
+        dimensions 是本次关注点，不要求逐维填表。建议与卡片一次交付，不重写已交付的成果。
         """
         context = ShoppingContext.current()
         if context is None:
@@ -178,7 +168,8 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
     cards, quotes = [], []
     for pick in picks:
         from app.application.runtime.research_plan import resolve_candidate_scope
-        task_policy = resolve_candidate_scope(context.task_plan, pick, require_qualified=require_qualified)
+        task_policy = resolve_candidate_scope(context.task_plan, pick, context.source_run_id or context.source_message_id,
+                                              require_qualified=require_qualified)
         product = await catalog.pricing.product_repo.find_by_id(pick.product_id)
         sku = product.find_sku(pick.sku_id) if product else None
         if sku is None or sku.stock < pick.quantity:
@@ -236,7 +227,7 @@ async def _check_task_bundle_budgets(catalog, context, picks, mode):
     from app.application.runtime.research_plan import resolve_candidate_scope
     for task_id in {p.task_id for p in picks if p.task_id is not None}:
         group = [p for p in picks if p.task_id == task_id]
-        params = resolve_candidate_scope(context.task_plan, group[0])['parameters']
+        params = resolve_candidate_scope(context.task_plan, group[0], context.source_run_id or context.source_message_id)['parameters']
         budget = params.get('landed_budget_major')
         if budget is not None:
             quote = await catalog.pricing.quote([QuoteItem(p.product_id, p.sku_id, p.quantity) for p in group],

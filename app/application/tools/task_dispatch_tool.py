@@ -90,7 +90,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 parent_conditions = condition_identity(compile_search(scoped, context.preference_facts, context.currency))
                 definition = None
                 filters = task.filters
-                if scoped.plan:
+                if task.step_id is not None:
                     if subagent_type != 'search_agent':
                         raise DelegationInputError('计划步骤用于选购研究；交易准备按独立确认流程执行')
                     step = next((s for s in scoped.plan if s.id == task.step_id), None)
@@ -105,8 +105,6 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                     task = task.model_copy(update={'goal': step.goal})
                     filters = step.filters
                     scoped.requirements = list(dict.fromkeys([*scoped.requirements, *step.requirements]))
-                elif task.step_id is not None:
-                    raise DelegationInputError('不存在研究计划，不能使用step_id')
                 if subagent_type == "trade_agent" and filters is not None:
                     raise DelegationInputError("交易任务不能覆盖购物条件，请先由 Main 更新状态")
                 if filters is not None:
@@ -121,7 +119,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                     scoped.preferences = task.preferences
                 effective = compile_search(scoped, context.preference_facts, context.currency)
                 scope = {'task_id': task.step_id or call_id or uuid.uuid4().hex, 'step_id': task.step_id,
-                         'goal': step.goal if scoped.plan else task.goal,
+                         'goal': task.goal,
                          'definition': definition, 'parent_conditions': parent_conditions,
                          'effective_search': effective}
                 parent["effective_search"] = effective
@@ -129,18 +127,8 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 # 子任务只看到解析后的一份条件，不再同时接收原条件和覆盖值。
                 task_context = task.model_dump(exclude={"filters", "requirements", "preferences"})
                 evidence.requirements=list(effective.get('requirements',[]))
-                # 同一请求/同一范围的成果已经执行过，纠正或再次展示不重建研究。
                 request_id=context.source_run_id or context.source_message_id
                 scope['request_id']=request_id
-                if subagent_type=='search_agent':
-                    for previous in context.task_plan.get('tasks',{}).values():
-                        if ({k:v for k,v in (previous.get('scope') or {}).items() if k!='task_id'}==
-                            {k:v for k,v in scope.items() if k!='task_id'} and previous.get('execution_status')=='completed'):
-                            saved={key:deepcopy(value) for key,value in previous.items() if key not in {'stale','delivery'}}
-                            return ToolResult(saved,model_data=await bounded_tool_view(saved,search_factory.evidence_store,
-                                context,kind='handoff',token_limit=model_token_limit),
-                                state=ToolResultState.ERROR if saved['status']=='failed' else ToolResultState.SUCCESS,
-                                error_code='business_rejected' if saved['status']=='failed' else None)
                 inputs = [HumanMessage(name="delegated_task", content=json.dumps({
                     "delegated_task": task_context, "parent_context": parent}, ensure_ascii=False))]
                 bus.publish(session_id, "agent.dispatch", {"agent": subagent_type,

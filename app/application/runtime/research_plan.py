@@ -74,11 +74,13 @@ def project_plan(work: ShoppingWork, policy: dict, saved: ResearchPlan) -> Resea
     return {'steps': steps, 'tasks': tasks, 'last_batch': saved.get('last_batch')}
 
 
-def resolve_candidate_scope(plan: ResearchPlan, pick, *, require_qualified=True):
+def resolve_candidate_scope(plan: ResearchPlan, pick, request_id: str, *, require_qualified=True):
     tasks = {k: v for k, v in plan.get('tasks', {}).items() if not v.get('stale')}
-    related = [key for key, value in tasks.items() if pick.product_id in value.get('observed_products', [])]
+    related = [key for key, value in tasks.items()
+               if value['scope']['request_id'] == request_id
+               and pick.product_id in value.get('observed_products', [])]
     if pick.task_id is None:
-        if related or plan.get('steps'):
+        if related:
             raise ValueError('研究候选必须填写对应 task_id，不能丢弃子任务或计划条件')
         return None
     value = tasks.get(pick.task_id)

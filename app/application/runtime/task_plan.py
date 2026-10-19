@@ -6,11 +6,9 @@ import json
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
-from langgraph.types import Command
 from app.application.agents.shopping_state import ShoppingWork, compile_search
 from app.domain.buyer.preference import BuyerPreference
 from app.application.runtime.request_scope import ShoppingContext
-from app.application.runtime.results import tool_receipts
 
 from app.application.runtime.research_plan import (
     ResearchPlan, project_plan, dependent_steps, record_research, apply_delivery,
@@ -38,13 +36,22 @@ class TaskPlanMiddleware(AgentMiddleware):
         last = next((m for m in reversed(state['messages']) if isinstance(m, AIMessage)), None)
         if last and last.tool_calls and last.id != plan.get('last_batch'):
             calls = {c['id'] for c in last.tool_calls}
-            for receipt in state['messages']:
-                if not isinstance(receipt, ToolMessage) or receipt.tool_call_id not in calls or receipt.name != 'task_dispatch':
-                    continue
+            receipts = [m for m in state['messages']
+                        if isinstance(m, ToolMessage) and m.tool_call_id in calls]
+            for receipt in receipts:
                 data = (receipt.artifact or {}).get('data')
-                if not isinstance(data, dict) or not data.get('scope'):
+                if receipt.name == 'task_dispatch' and isinstance(data, dict) and data.get('scope'):
+                    record_research(plan, work, data)
+            plan = project_plan(work, policy, plan)
+            # 工具可以并行产生独立成果，计划只在整批回执到齐后写一次。
+            for receipt in receipts:
+                data = (receipt.artifact or {}).get('data')
+                if receipt.status != 'success' or not isinstance(data, dict):
                     continue
-                record_research(plan, work, data)
+                if receipt.name == 'present_research':
+                    plan = apply_delivery(plan, data['completed_task_ids'], 'research', work, policy)
+                elif receipt.name in {'recommend_products', 'compare_products'}:
+                    plan = apply_delivery(plan, data['plan_outcome']['delivered_tasks'], 'products', work, policy)
             plan['last_batch'] = last.id
         plan = project_plan(work, policy, plan)
         # 无计划且只做直接查询时，不额外制造计划步骤。
@@ -81,20 +88,6 @@ class TaskPlanMiddleware(AgentMiddleware):
                                content='研究任务和最终交付必须分批执行，本批均未执行。')
         token = ShoppingContext.set(replace(context, task_plan=plan))
         try:
-            output = await handler(request)
-            for receipt in tool_receipts(output):
-                data = (receipt.artifact or {}).get('data', {})
-                if receipt.status != 'success' or not isinstance(data, dict):
-                    continue
-                if receipt.name == 'present_research':
-                    updated = apply_delivery(plan, data['completed_task_ids'], 'research', work, context.effective_search)
-                elif data.get('plan_outcome'):
-                    updated = apply_delivery(plan, data['plan_outcome']['delivered_tasks'], 'products', work, context.effective_search)
-                else:
-                    continue
-                if isinstance(output, Command):
-                    return Command(update={**output.update, 'task_plan': updated})
-                return Command(update={'messages': [receipt], 'task_plan': updated})
-            return output
+            return await handler(request)
         finally:
             ShoppingContext.reset(token)
