@@ -26,6 +26,7 @@ class ChatModelAdapter(BaseChatModel):
     max_tokens: int = 8192
     temperature: float | None = None
     thinking_mode: Literal['default','off','low','high','max'] = 'default'
+    thinking_protocol: Literal['bailian','deepseek'] = 'bailian'
     gateway: Any = Field(default=None, exclude=True)
     cache_mode: str = "passthrough"
     cache_policy: str = "static"
@@ -37,7 +38,8 @@ class ChatModelAdapter(BaseChatModel):
 
     @property
     def _identifying_params(self):
-        return {"model_name": self.model_name, "thinking_mode": self.thinking_mode}
+        return {"model_name": self.model_name, "thinking_mode": self.thinking_mode,
+                "thinking_protocol": self.thinking_protocol}
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         raise NotImplementedError("本项目模型入口使用 ainvoke，不输出半成品工具参数")
@@ -77,9 +79,12 @@ class ChatModelAdapter(BaseChatModel):
         if self.temperature is not None: payload["temperature"] = self.temperature
         if stop is not None: payload["stop"] = stop
         if self.thinking_mode == 'off':
-            payload['extra_body'] = {'enable_thinking': False}
+            payload['extra_body'] = ({'thinking': {'type': 'disabled'}}
+                if self.thinking_protocol == 'deepseek' else {'enable_thinking': False})
         elif self.thinking_mode != 'default':
             payload['reasoning_effort'] = self.thinking_mode
+            if self.thinking_protocol == 'deepseek':
+                payload['extra_body'] = {'thinking': {'type': 'enabled'}}
         payload.update({k:v for k,v in kwargs.items() if k in {
             "model", "tools", "tool_choice", "temperature", "max_completion_tokens", "response_format", "seed"}})
         if self.streaming: payload["stream_options"] = {"include_usage": True}

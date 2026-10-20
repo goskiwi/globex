@@ -16,7 +16,8 @@ from app.infrastructure.operational_metrics import begin_request, finish_request
 
 @pytest.mark.parametrize('mode,expected', [('default',{}),('off',{'enable_thinking':False}),
     ('low',{'reasoning_effort':'low'}),('high',{'reasoning_effort':'high'}),('max',{'reasoning_effort':'max'})])
-async def test_thinking_setting_reaches_actual_sdk_request_without_fallback(tmp_path,mode,expected):
+@pytest.mark.parametrize('protocol',['bailian','deepseek'])
+async def test_thinking_setting_reaches_actual_sdk_request_without_fallback(tmp_path,mode,expected,protocol):
     from dataclasses import replace
     from tests.test_retrieval import _settings
     from tests.test_prompt_cache import completion
@@ -28,12 +29,26 @@ async def test_thinking_setting_reaches_actual_sdk_request_without_fallback(tmp_
     client=AsyncOpenAI(api_key='test-key',base_url='https://model.test/v1',max_retries=0,
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     try:
-        model=create_chat_model(replace(_settings(tmp_path),llm_thinking_mode=mode),client=client,stream=False)
+        model=create_chat_model(replace(_settings(tmp_path),llm_thinking_mode=mode,
+            llm_thinking_protocol=protocol),client=client,stream=False)
         await model.ainvoke([HumanMessage(content='合成测试')])
         assert len(seen)==1
-        assert {key:seen[0][key] for key in ('enable_thinking','reasoning_effort') if key in seen[0]}==expected
+        if protocol=='deepseek' and mode!='default':
+            expected={'thinking':{'type':'disabled' if mode=='off' else 'enabled'}}
+            if mode!='off':expected['reasoning_effort']=mode
+        assert {key:seen[0][key] for key in ('enable_thinking','reasoning_effort','thinking') if key in seen[0]}==expected
     finally:
         await client.close()
+
+
+@pytest.mark.parametrize('setting', [{'llm_thinking_protocol':'unknown'}, {'llm_thinking_mode':'unknown'}])
+def test_invalid_thinking_configuration_fails_before_request(tmp_path,setting):
+    from dataclasses import replace
+    from pydantic import ValidationError
+    from tests.test_retrieval import _settings
+    from app.infrastructure.llm import create_chat_model
+    with pytest.raises(ValidationError):
+        create_chat_model(replace(_settings(tmp_path),**setting),client=object())
 
 
 async def test_streamed_tool_call_has_first_output_time_and_reported_reasoning_usage():

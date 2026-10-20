@@ -71,6 +71,7 @@ class Settings:
     # 这组给默认值：前面几期每次扩字段都会打断测试里手工构造的 Settings，
     # 新增可选配置一律带默认值，避免同样的修改成本反复发生。
     llm_thinking_mode: str = "default"  # default沿用服务端；off关闭，low/high/max指定强度
+    llm_thinking_protocol: str = "bailian"  # 显式指定思考参数协议：bailian/deepseek
     llm_fallback_model: str = ""  # 空 = 不回退，重试用尽直接报错
     llm_max_concurrency: int = 2  # 同时在飞的模型请求上限
     llm_min_interval_seconds: float = 1.0  # 相邻请求起跑最小间隔，治速率爬升过快
@@ -161,6 +162,7 @@ def load_settings() -> Settings:
         llm_api_key=llm_api_key,
         llm_model=os.getenv("LLM_MODEL", "qwen3-max"),
         llm_thinking_mode=os.getenv("LLM_THINKING_MODE", "default"),
+        llm_thinking_protocol=os.getenv("LLM_THINKING_PROTOCOL", "bailian"),
         reranker_mode=os.getenv("RERANKER_MODE", "http"),
         reranker_api_key=os.getenv("RERANKER_API_KEY") or llm_api_key,
         reranker_protocol=os.getenv("RERANKER_PROTOCOL", "flat"),

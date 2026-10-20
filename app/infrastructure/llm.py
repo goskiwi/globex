@@ -26,6 +26,7 @@ def create_chat_model(settings: Settings, *, client: Any, stream: bool = True,
     model = ChatModelAdapter(
         model_name=settings.llm_model, streaming=stream,
         thinking_mode=settings.llm_thinking_mode,
+        thinking_protocol=settings.llm_thinking_protocol,
         client=client,
         max_tokens=min(8192,settings.reply_token_budget) if settings.reply_token_budget>0 else 8192,
     )
