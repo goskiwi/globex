@@ -2,7 +2,7 @@
 from copy import deepcopy
 import json
 from langchain_core.messages import ToolMessage
-from app.infrastructure.context_products import business_view, result_identity, token_estimate
+from app.infrastructure.context_products import result_identity, token_estimate
 from app.application.runtime.results import message_data, project_data
 from app.application.runtime.model_views import product_result_view
 

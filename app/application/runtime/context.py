@@ -10,7 +10,7 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.types import Command
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from app.application.runtime.request_scope import ShoppingContext
-from app.infrastructure.context_products import token_estimate, result_identity
+from app.infrastructure.context_products import token_estimate
 from app.application.runtime.errors import ContextCapacityError
 from app.application.runtime.results import message_data, project_data
 from app.infrastructure.budget import get_budget
@@ -192,6 +192,23 @@ class RequestContextMiddleware(AgentMiddleware):
         selected = set(re.findall(r"P\d+(?:-S\d+)?", latest_query))
         from app.application.agents.shopping_state import protected_products
         selected.update(protected_products(state.get('shopping_work')))
+        updates = []
+        archived_count = 0
+        from app.application.runtime.model_views import historical_products
+        for index, message in enumerate(messages[:latest_turn]):
+            if not isinstance(message, ToolMessage) or message.id not in read or message.status != 'success':
+                continue
+            payload = message_data(message)
+            if not isinstance(payload, dict) or not payload.get('hits') or payload.get('history_view') or payload.get('archived'):
+                continue
+            reference = payload.get('result_ref') or await self.store.save(
+                context.buyer_id, context.shopping_session_id, 'products', payload)
+            replacement = historical_products(payload, selected)
+            replacement['result_ref'] = reference
+            changed = project_data(message, replacement)
+            updates.append(changed)
+            messages[index] = changed
+            archived_count += 1
         candidates = []
         for index, message in enumerate(messages):
             if not isinstance(message, ToolMessage) or not isinstance(message.content, str):
@@ -201,19 +218,9 @@ class RequestContextMiddleware(AgentMiddleware):
             payload = message_data(message)
             if not isinstance(payload,dict):
                 payload={'text':message.content,'tool':message.name} if len(message.content)>1000 else None
-            if isinstance(payload, dict) and not payload.get('archived') and ('hits' in payload or len(message.content)>1000):
+            if isinstance(payload, dict) and not payload.get('archived') and not payload.get('history_view') and ('hits' in payload or len(message.content)>1000):
                 candidates.append((index, message, payload))
-        protected = {m.id for _, m, p in [c for c in candidates if 'hits' in c[2]][-2:]}
-        protected.update(m.id for m in messages if isinstance(m, ToolMessage) and m.id not in read)
-        newest={}
-        for _,message,payload in reversed(candidates):
-            for hit in payload.get('hits',[]):
-                identity=result_identity(hit,payload.get('query_conditions',{}))
-                if identity not in newest:
-                    newest[identity]=message.id
-                    if selected & set(re.findall(r'P\d+(?:-S\d+)?',json.dumps(hit))):protected.add(message.id)
-        updates = []
-        archived_count = 0
+        protected = {m.id for m in messages if isinstance(m, ToolMessage) and m.id not in read}
         total = sum(token_estimate(payload) for _, _, payload in candidates)
         initial_total=total
         ratio=getattr(self.settings,'context_prune_low_ratio',1)

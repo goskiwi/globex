@@ -158,11 +158,11 @@ async def test_actual_context_usage_and_diagnostics_generate_harness_report(tmp_
         graph=create_agent(model,middleware=[middleware])
         await graph.ainvoke(history())
         assert len(usage)==1
-        assert usage[0]['request_context']['archived_result_count']==6
+        assert usage[0]['request_context']['archived_result_count']==7
         data=rows();data[0]['usage']=usage;data[0]['context_diagnostics']=diagnostics
         report=render(tmp_path,manifest(),data)
         result=report['strategies']['current']['efficiency_diagnostics']
-        assert result['archived_results']==6 and result['archive_passes']==1
+        assert result['archived_results']==7 and result['archive_passes']==1
         assert result['request_statuses']=={'completed':1}
         assert sum(result['estimated_sections'].values())==usage[0]['request_context']['request_parts_after']['total_tokens']
         assert (tmp_path/'report.html').exists()

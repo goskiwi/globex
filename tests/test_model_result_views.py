@@ -4,7 +4,7 @@ import json
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from app.application.runtime.model_views import product_result_view
+from app.application.runtime.model_views import product_result_view, historical_products
 from app.application.usecases.intents import SubmitIntentInput
 from tests.test_agent_handoff import ScriptedModel, call
 from tests.test_langgraph_runtime import _container
@@ -23,6 +23,21 @@ def test_only_identical_default_quote_is_shared_and_other_sku_quote_survives():
     assert hit['landed_price'] == quote and hit['skus'][1]['landed_price']['ship_to'] == 'JP'
     assert hit['weight_kg'] == .68 and hit['description'] == raw['hits'][0]['description']
     assert raw == saved
+
+
+def test_history_retains_only_selected_sku_facts_and_keeps_recoverable_candidate_order():
+    raw = {'result_ref': 'saved', 'observed_at': '2026-10-20', 'hits': [
+        {'product_id': 'P1003', 'title': '背包', 'default_sku_id': 'P1003-S1',
+         'price_major': 99, 'landed_price': {'currency': 'CNY', 'total_amount_minor': 9900},
+         'weight_kg': .68, 'description': '保留实际规格事实',
+         'skus': [{'sku_id': 'P1003-S1'}, {'sku_id': 'P1003-S2', 'price_major': 20, 'currency': 'USD'}]},
+        {'product_id': 'P1049', 'title': '另一个背包', 'skus': [{'sku_id': 'P1049-S1'}]}]}
+    view = historical_products(raw, {'P1003', 'P1003-S2'})
+    assert len(view['hits']) == 1 and view['hits'][0]['skus'] == raw['hits'][0]['skus'][1:]
+    assert view['hits'][0]['weight_kg'] == .68 and 'landed_price' not in view['hits'][0]
+    assert [x['product_id'] for x in view['candidate_index']] == ['P1003', 'P1049']
+    assert view['result_ref'] == 'saved' and view['historical']
+    assert len(raw['hits']) == 2 and len(raw['hits'][0]['skus']) == 2
 
 
 async def test_delivered_card_stays_complete_while_next_model_receives_only_receipt(tmp_path, monkeypatch):

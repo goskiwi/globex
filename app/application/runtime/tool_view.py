@@ -1,7 +1,7 @@
 """工具原文与模型视图分离；首次结果也必须在分配的容量内。"""
 from contextvars import ContextVar
 
-from app.infrastructure.context_products import business_view, product_page, token_estimate
+from app.infrastructure.context_products import product_page, token_estimate
 from app.application.runtime.model_views import product_result_view
 
 

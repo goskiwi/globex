@@ -32,3 +32,30 @@ def presentation_receipt(kind, data):
     if kind == 'research':
         receipt['task_ids'] = list(data['task_ids'])
     return receipt
+
+
+def historical_products(data, selected):
+    """旧搜索保留候选顺序索引；完整事实只保留本次涉及的具体规格。"""
+    source = product_result_view(data)
+    sku_ids = {value for value in selected if '-S' in value}
+    product_ids = {value for value in selected if '-S' not in value
+                   and not any(sku.split('-S')[0] == value for sku in sku_ids)}
+    index, retained = [], []
+    for hit in source['hits']:
+        index.append({'product_id': hit['product_id'], 'title': hit.get('title'),
+                      'sku_ids': [sku['sku_id'] for sku in hit.get('skus', [])]})
+        matching = [sku for sku in hit.get('skus', []) if sku['sku_id'] in sku_ids]
+        if hit['product_id'] not in product_ids and not matching:
+            continue
+        if matching:
+            hit['skus'] = matching
+            if hit.get('default_sku_id') not in sku_ids:
+                # 原顶层价可能属于另一个默认规格，不能冒充本次选中的规格。
+                for key in ('default_sku_id', 'price_major', 'currency', 'source_price_major',
+                            'source_currency', 'landed_price'):
+                    hit.pop(key, None)
+            hit['selected_sku_ids'] = [sku['sku_id'] for sku in matching]
+        retained.append(hit)
+    return {**{key: source[key] for key in ('result_ref', 'query_conditions', 'observed_at') if key in source},
+            'historical': True, 'history_view': True, 'archived': not retained,
+            'candidate_index': index, 'hits': retained}

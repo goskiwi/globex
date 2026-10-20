@@ -24,8 +24,8 @@ def history():
             }]),
             ToolMessage(id=f"t{index}", name="product_search_tool", tool_call_id=f"c{index}",
                 content=json.dumps({"hits": [{"product_id": f"P100{index}",
-                    "description": "商品描述" * 100}]}, ensure_ascii=False), artifact={"data":{"hits": [{"product_id": f"P100{index}",
-                    "description": "商品描述" * 100}]}}),
+                    "description": "商品描述" * 100, "skus": [{"sku_id": f"P100{index}-S1"}]}]}, ensure_ascii=False), artifact={"data":{"hits": [{"product_id": f"P100{index}",
+                    "description": "商品描述" * 100, "skus": [{"sku_id": f"P100{index}-S1"}]}]}}),
         ])
     return messages
 
@@ -38,14 +38,14 @@ def policy(tmp_path, response=None):
                                     system_prompt="",tools=[])
 
 
-async def test_unread_and_latest_two_results_are_protected(tmp_path):
+async def test_unread_is_protected_and_completed_turns_become_recoverable_indexes(tmp_path):
     middleware = policy(tmp_path)
     messages = history()
     state = {"messages": messages, "read_tool_messages": ["t1", "t2", "t3", "t4"]}
     token = ShoppingContext.set(ShoppingContextSnapshot("s", "buyer", "zh-CN", "CNY"))
     try:
         update = await middleware.compact_checkpoint(state)
-        assert [message.id for message in update["messages"]] == ["t1", "t2"]
+        assert [message.id for message in update["messages"]] == ["t1", "t2", "t3"]
         archived = json.loads(update["messages"][0].content)
         assert archived["archived"]
         saved = await middleware.store.get("buyer", "s", archived["result_ref"])
@@ -64,7 +64,10 @@ async def test_checkpoint_selection_protects_evidence_when_latest_query_omits_sk
     token=ShoppingContext.set(ShoppingContextSnapshot('s','buyer','zh-CN','CNY'))
     try:
         update=await middleware.compact_checkpoint(state)
-        assert [message.id for message in update['messages']]==['t1','t2']
+        assert [message.id for message in update['messages']]==['t0','t1','t2','t3']
+        kept=json.loads(update['messages'][0].content)
+        assert kept['hits'][0]['product_id']=='P1000' and kept['hits'][0]['description']=='商品描述'*100
+        assert len(kept['hits'])==1 and kept['history_view']
         assert 'archived' not in messages[2].content
     finally:ShoppingContext.reset(token)
 
