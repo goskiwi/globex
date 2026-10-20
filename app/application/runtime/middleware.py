@@ -20,6 +20,7 @@ from app.infrastructure.resilience import DEFAULT_TIMEOUTS, _allow, _record_fail
 from app.infrastructure.transient import is_transient_error
 from app.application.harness.assertions import check_schema
 from app.infrastructure.security.content_filter import sanitize_tool_output
+from app.infrastructure.security.output_guard import audit_output
 from app.infrastructure.context_usage import record_evaluation_evidence
 from app.application.runtime.errors import ExecutionStopped
 from app.infrastructure.operational_metrics import observe_tool_result
@@ -30,8 +31,14 @@ class BusinessToolMiddleware(AgentMiddleware):
 
     state_schema = DeliveryState
 
-    def __init__(self, loops, bus):
+    def __init__(self, loops, bus, *, output_guard_enabled=True):
         self.loops, self.bus = loops, bus
+        self.output_guard_enabled = output_guard_enabled
+
+    def public_data(self, value):
+        """公开业务数据共用既有审核；协议标识与内部事实不经过此投影。"""
+        from copy import deepcopy
+        return audit_output(value)[1] if self.output_guard_enabled else deepcopy(value)
 
     async def awrap_tool_call(self, request, handler):
         from app.application.runtime.results import message_data, project_data, tool_receipts, replace_receipts, receipt_failure
@@ -41,8 +48,9 @@ class BusinessToolMiddleware(AgentMiddleware):
         event_id = f"{execution.task_id}:{execution.node_attempt}:{call_id}"
         def emit(kind, delta="", state="success", data=None, failure=None):
             self.bus.publish(session, "tool.lifecycle", {"type":kind,"tool_call_id":event_id,
-                "tool_call_name":name,"delta":delta,"state":state,"data":data,"failure":failure,
-                "arguments":request.tool_call["args"] if kind=="TOOL_CALL_START" else None})
+                "tool_call_name":name,"delta":self.public_data(delta),"state":state,
+                "data":self.public_data(data),"failure":self.public_data(failure),
+                "arguments":self.public_data(request.tool_call["args"]) if kind=="TOOL_CALL_START" else None})
         emit("TOOL_CALL_START")
         emit("TOOL_CALL_DELTA", json.dumps(request.tool_call["args"],ensure_ascii=False))
         emit("TOOL_CALL_END");emit("TOOL_RESULT_START")
@@ -75,6 +83,7 @@ class BusinessToolMiddleware(AgentMiddleware):
                     public=(receipt.artifact or {}).get("event_data",full)
                     hit,data=clean(data); full_hit,full=clean(full)
                     _,public=clean(public)
+                    public=self.public_data(public)
                     if hit or full_hit:
                         notices.append("工具结果中的疑似提示词注入已过滤。")
                     if receipt.status == "success":
@@ -113,11 +122,11 @@ class BusinessToolMiddleware(AgentMiddleware):
                         if isinstance(public.get("hits"),list):payload["hit_count"]=len(public["hits"])
                     else:payload["result"]=public
                     if receipt.status=="error":
-                        payload["error"]=receipt.text
-                        payload['failure'] = receipt_failure(receipt)
+                        payload["error"]=self.public_data(receipt.text)
+                        payload['failure'] = self.public_data(receipt_failure(receipt))
                         span.set_status(Status(StatusCode.ERROR))
                     if receipt.status == 'success' and name in DELIVERY_KINDS:
-                        accepted=presentation(name,full,event_id)
+                        accepted=presentation(name,self.public_data(full),event_id)
                         presentations.append(accepted)
                         self.bus.publish(session,'presentation.result',accepted)
                         from app.application.runtime.model_views import presentation_receipt
@@ -287,7 +296,8 @@ class ToolResilienceMiddleware(AgentMiddleware):
 def runtime_middlewares(settings, throttle, circuit_registry, bus, loops=None) -> list[AgentMiddleware]:
     from app.application.runtime.loops import LoopMiddleware
     return [
-        BusinessToolMiddleware(loops if settings.harness_enabled else None, bus),
+        BusinessToolMiddleware(loops if settings.harness_enabled else None, bus,
+                               output_guard_enabled=settings.output_guard_enabled),
         ToolResilienceMiddleware(circuit_registry, bus),
         *([LoopMiddleware(loops)] if settings.harness_enabled and loops is not None else []),
     ]

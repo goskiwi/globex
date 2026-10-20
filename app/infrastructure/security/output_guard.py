@@ -47,14 +47,20 @@ SENSITIVE_PATTERNS: list[str] = [
 _compiled = [re.compile(pattern) for pattern in SENSITIVE_PATTERNS]
 
 
-def audit_output(text: str) -> tuple[bool, str]:
+def audit_output(text):
     """审核最终输出。
 
     Returns:
         (是否安全, 处理后的文本)。安全 = 未命中任何敏感模式；
         命中时文本已就地脱敏，可直接下发。
     """
-    if not text:
+    if isinstance(text, dict):
+        values = {key: audit_output(value) for key, value in text.items()}
+        return all(safe for safe, _ in values.values()), {key: value for key, (_, value) in values.items()}
+    if isinstance(text, list):
+        values = [audit_output(value) for value in text]
+        return all(safe for safe, _ in values), [value for _, value in values]
+    if not isinstance(text, str) or not text:
         return True, text
 
     safe = True
