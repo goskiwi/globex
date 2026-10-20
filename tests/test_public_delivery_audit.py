@@ -58,3 +58,18 @@ async def test_component_and_lifecycle_cannot_bypass_configured_output_policy(tm
         stored=await c.orchestrator._evidence_store.search('b','s',kind='recommendation')
         assert marker in stored[0]['data']['guidance']
     finally:await c.shutdown()
+
+
+async def test_handoff_events_keep_internal_reasons_and_publish_audited_results(tmp_path,monkeypatch):
+    from tests.test_agent_handoff import factories,task,submission
+    marker='sk-'+'SYNTHETICONLY'*3
+    factory,model,dispatch,bus=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id':'P1001','sku_id':'P1001-S1','assessment':marker}])])
+    from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
+    token=ShoppingContext.set(ShoppingContextSnapshot('handoff','buyer','zh-CN','CNY'))
+    events=[]
+    try:
+        with observe_run_events(events.append):result=await dispatch('search_agent',task())
+        accepted=next(e for e in events if e.type=='handoff.result' and e.payload['decision']=='accepted')
+        assert marker in json.dumps(accepted.payload) and marker not in json.dumps(accepted.to_dict())
+        assert result.data['candidates'][0]['assessment']==marker
+    finally:ShoppingContext.reset(token)

@@ -262,8 +262,9 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
     state_schema = HandoffState
     max_corrections = 2
 
-    def __init__(self, schema=ResearchSubmission, bus=None):
+    def __init__(self, schema=ResearchSubmission, bus=None, *, output_guard_enabled=True):
         self.schema, self.bus = schema, bus
+        self.output_guard_enabled = output_guard_enabled
 
     async def awrap_tool_call(self, request, handler):
         result = await handler(request)
@@ -352,13 +353,17 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
             if isinstance(receipt, ToolMessage) and receipt.tool_call_id in call_ids:
                 execution_id = (receipt.artifact or {}).get("execution_id")
                 if execution_id and bus is not None:
-                    bus.publish(context.evidence.session_id, "handoff.result", {
+                    from app.infrastructure.security.output_guard import audit_output
+                    payload = {
                         "tool_call_id": execution_id,
                         "decision": "rejected" if errors else "accepted",
                         "status": "failed" if errors else accepted["status"],
                         "result": accepted,
                         "errors": errors,
-                    })
+                    }
+                    bus.publish(context.evidence.session_id, "handoff.result", payload,
+                        public_payload={**payload, 'result':audit_output(accepted)[1], 'errors':audit_output(errors)[1]}
+                            if self.output_guard_enabled else None)
         if errors:
             update = self._reject(state, errors, replacements)
             if update["jump_to"] == "model":

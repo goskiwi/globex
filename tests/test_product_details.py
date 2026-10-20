@@ -90,10 +90,10 @@ def test_repeated_detail_reads_ignore_new_refs_but_notice_stock_changes():
                                   'result_ref':f'new-{index}','observed_at':index}
     state={}
     for index in (1,2,3):
-        observation=detector.observation('get_product_details',{'product_id':'P3020'},result(index,0),'success',{})
+        observation=detector.observation('get_product_details',{'product_id':'P3020'},result(index,0),'success',{}, read_only=True)
         state,hint=detector.advance(state,[observation])
         assert bool(hint)==(index==3)
-    state,hint=detector.advance(state,[detector.observation('get_product_details',{'product_id':'P3020'},result(4,1),'success',{})])
+    state,hint=detector.advance(state,[detector.observation('get_product_details',{'product_id':'P3020'},result(4,1),'success',{}, read_only=True)])
     assert hint is None and not state['stop']
 
 

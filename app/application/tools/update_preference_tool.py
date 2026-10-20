@@ -9,6 +9,7 @@ from app.application.runtime.request_scope import ShoppingContext
 def build_update_preference_tool(store, bus):
     async def update_preference_tool(previous_statement: str, kind: Literal["like","dislike"], statement: str, memory_id: str = "", expected_version: int = 0) -> ToolResult:
         """买家明确要求长期修改偏好时，原子替换旧偏好。本轮临时例外不要保存。
+        记忆变更单独成批申请，不与业务调用混用；买家批准后才执行，拒绝后不绕过审批。
 
         Args:
             memory_id (`str`): 当前记忆的稳定 ID，必须从最新偏好提示中读取。

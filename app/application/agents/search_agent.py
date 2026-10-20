@@ -75,14 +75,14 @@ class SearchAgentFactory:
         ]
         if self._settings.tavily_api_key:
             functions.append(build_web_search_tool(self._settings, self._bus))
-        return [as_langchain_tool(function) for function in functions]
+        return [as_langchain_tool(function, read_only=True) for function in functions]
 
     def build(self):
         prompts = load_prompts()["sub_agents"]["search"]
         tools = self.build_tools()
         names = {t.name for t in tools}
         if self.capability_registry is not None:
-            tools.extend(as_langchain_tool(fn) for fn in build_capability_tools(
+            tools.extend(as_langchain_tool(fn, read_only=True) for fn in build_capability_tools(
                 self.capability_registry,names,self._bus,self.buyer_skill_store))
         tools.append(build_submission_tool(ResearchSubmission))
         system_prompt=prompts["system_prompt"]+"\n"+HANDOFF_POLICY+(
@@ -101,7 +101,7 @@ class SearchAgentFactory:
                 self._settings, self._throttle, self._circuit_registry, self._bus,
                 self._loop_detector,
             ),*([skills] if skills is not None else []),
-                HandoffMiddleware(ResearchSubmission, self._bus), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
+                HandoffMiddleware(ResearchSubmission, self._bus, output_guard_enabled=self._settings.output_guard_enabled), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, budget_lite_model=self._settings.llm_fallback_model,
                                     delivery_tools=("SubagentResult",)),
                 context, ],

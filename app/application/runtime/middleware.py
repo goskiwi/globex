@@ -106,7 +106,8 @@ class BusinessToolMiddleware(AgentMiddleware):
                             facts = tuple(BuyerPreference(**p) for p in request.state.get("preference_snapshot", {}).get("facts", []))
                             conditions = compile_search(ShoppingWork.model_validate(work),
                                                         facts, context.currency if context else "CNY")
-                        observation = self.loops.observation(name, request.tool_call['args'], full, receipt.status, conditions)
+                        observation = self.loops.observation(name, request.tool_call['args'], full, receipt.status, conditions,
+                            read_only=bool(request.tool and (request.tool.metadata or {}).get('read_only')))
                         if observation:
                             receipt = receipt.model_copy(update={'artifact': {**(receipt.artifact or {}),
                                                                             'loop_observation': observation}})

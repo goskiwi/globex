@@ -89,13 +89,13 @@ def test_new_search_reference_is_not_progress_but_inventory_is():
     state={}
     for i in range(3):
         current={**payload,'result_ref':f'ctx_{i}','observed_at':str(i)}
-        state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'包'},[current],'success',{})])
+        state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'包'},[current],'success',{}, read_only=True)])
         assert bool(hint)==(i==2)
     assert payload==original
     changed=deepcopy(payload);changed['hits'][0]['skus'][0]['stock']=1
-    state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'包'},[changed],'success',{})])
+    state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'包'},[changed],'success',{}, read_only=True)])
     assert hint is None and not state['stop']
-    state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'另一个包'},[changed],'success',{})])
+    state,hint=detector.advance(state,[detector.observation('product_search_tool',{'normalized_query':'另一个包'},[changed],'success',{}, read_only=True)])
     assert hint is None
 
 

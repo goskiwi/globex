@@ -25,6 +25,7 @@ def build_forget_preference_tool(store: PreferenceStore, bus: TradeEventBus):
 
         仅在买家明确表示某条历史偏好不再适用时调用，例如"以后不用避开塑料了"。
         本轮的一次性例外（如"这次可以接受塑料"）不要调用，那属于临时要求。
+        记忆变更单独成批申请，不与业务调用混用；买家批准后才执行，拒绝后不绕过审批。
 
         Args:
             memory_id (`str`): 最新记忆提示中的稳定 ID。

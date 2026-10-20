@@ -80,7 +80,7 @@ async def test_evaluation_observes_business_results_and_task_loop_notice():
     detector=LoopDetector(repeat_threshold=2)
     model=ScriptedModel(responses=[call('product_search_tool',{}),call('product_search_tool',{}),AIMessage(content='结束')])
     graph=create_agent(
-        model,tools=[as_langchain_tool(product_search_tool)],middleware=[BusinessToolMiddleware(detector,TradeEventBus()),LoopMiddleware(detector)])
+        model,tools=[as_langchain_tool(product_search_tool,read_only=True)],middleware=[BusinessToolMiddleware(detector,TradeEventBus()),LoopMiddleware(detector)])
     try:
         await graph.ainvoke({'messages':[HumanMessage(content='查询')]})
         observations=[s['payload'] for s in samples if s['kind']=='tool_result']

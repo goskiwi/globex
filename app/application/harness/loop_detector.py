@@ -5,8 +5,6 @@ import json
 
 DEFAULT_REPEAT_THRESHOLD = 3
 DEFAULT_WINDOW = 6
-READ_TOOLS = frozenset({'product_search_tool', 'get_product_details', 'category_insight_tool',
-                        'conversation_fact_lookup', 'web_search_tool'})
 PROGRESS_HINT = '同一任务内的操作路径已经重复，完整业务结果未变化。'
 
 
@@ -29,8 +27,8 @@ class LoopDetector:
     repeat_threshold: int = DEFAULT_REPEAT_THRESHOLD
     window: int = DEFAULT_WINDOW
 
-    def observation(self, tool, arguments, result, status, conditions):
-        if tool not in READ_TOOLS or status not in {'success', 'error'}:
+    def observation(self, tool, arguments, result, status, conditions, *, read_only):
+        if not read_only or status not in {'success', 'error'}:
             return None
         return {'tool': tool, 'arguments': arguments,
                 'action': _fingerprint([tool, arguments, conditions]),

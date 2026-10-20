@@ -59,17 +59,17 @@ class TradeAgentFactory:
     def build_tools(self, *, turn_delivery: bool = False) -> list[BaseTool]:
         return [
             as_langchain_tool(build_create_order_tool(self._place_order, self._bus, self.evidence_store), turn_delivery=turn_delivery),
-            as_langchain_tool(build_query_order_tool(self._query_order, self._bus)),
+            as_langchain_tool(build_query_order_tool(self._query_order, self._bus), read_only=True),
             as_langchain_tool(build_cancel_order_tool(self._cancel_order, self._bus), turn_delivery=turn_delivery),
         ]
 
     def build(self):
         prompts = load_prompts()["sub_agents"]["trade"]
         tools = [*self.build_tools(),as_langchain_tool(build_conversation_fact_lookup(
-            self.evidence_store))]
+            self.evidence_store), read_only=True)]
         names = {t.name for t in tools}
         if self.capability_registry is not None:
-            tools.extend(as_langchain_tool(fn) for fn in build_capability_tools(
+            tools.extend(as_langchain_tool(fn, read_only=True) for fn in build_capability_tools(
                 self.capability_registry,names,self._bus,self.buyer_skill_store))
         tools.append(build_submission_tool(TradeSubmission))
         system_prompt=prompts["system_prompt"]+"\n"+HANDOFF_POLICY+(
@@ -88,7 +88,7 @@ class TradeAgentFactory:
                 self._settings, self._throttle, self._circuit_registry, self._bus,
                 self._loop_detector,
             ),*([skills] if skills is not None else []),
-                HandoffMiddleware(TradeSubmission, self._bus), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
+                HandoffMiddleware(TradeSubmission, self._bus, output_guard_enabled=self._settings.output_guard_enabled), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, budget_lite_model=self._settings.llm_fallback_model,
                                     delivery_tools=("SubagentResult",)),
                 context, ],

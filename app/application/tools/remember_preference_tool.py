@@ -23,8 +23,9 @@ def build_remember_preference_tool(store: PreferenceStore, bus: TradeEventBus):
         kind: Literal["like", "dislike"],
         statement: str,
     ) -> ToolResult:
-        """记住买家的一条长期偏好（跨会话生效）。仅在买家表达出稳定偏好时调用，
+        """仅在买家明确要求记住这条长期偏好时调用（跨会话生效）；表达偏好本身不等于要求保存。
         一次性的临时要求（如"这次要军绿色"）不要记。
+        记忆变更单独成批申请，不与业务调用混用；买家批准后才执行，拒绝后不绕过审批。
 
         Args:
             kind (`str`):

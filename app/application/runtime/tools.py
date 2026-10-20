@@ -105,7 +105,7 @@ async def _collect_async_generator(generator: AsyncGenerator[Any, None], runtime
 
 
 def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, args_schema=None,
-                      turn_delivery: bool = False) -> StructuredTool:
+                      turn_delivery: bool = False, read_only: bool = False) -> StructuredTool:
     """保留原函数签名和文档，统一异步函数及异步生成器的输出。"""
     signature = inspect.signature(function)
     args_schema = args_schema or getattr(function, "input_model", None)
@@ -142,6 +142,7 @@ def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, 
         name=name or function.__name__,
         description=inspect.getdoc(function) or function.__name__,
         args_schema=args_schema,
+        metadata={'read_only': read_only},
     )
     tool.args_schema = create_model(tool.args_schema.__name__ + "Input", __base__=tool.args_schema,
                                    __config__=ConfigDict(extra="forbid", arbitrary_types_allowed=True))

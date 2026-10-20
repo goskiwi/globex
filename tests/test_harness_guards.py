@@ -76,7 +76,7 @@ class TestOutputGuardL4:
 class TestLoopDetector:
     @staticmethod
     def feed(detector, state, tool='product_search_tool', args=None, result=None):
-        observation=detector.observation(tool,args or {},result or {'hits':[]},'success',{})
+        observation=detector.observation(tool,args or {},result or {'hits':[]},'success',{}, read_only=True)
         return detector.advance(state,[observation])
 
     def test_a_warns_then_stops_without_mutating_policy(self):
@@ -102,8 +102,8 @@ class TestLoopDetector:
         for i in range(6):
             state,hint=self.feed(detector,state,result={'stock':i})
             assert hint is None and not state['stop']
-        a=detector.observation('product_search_tool',{},[], 'success',{'budget':100})
-        b=detector.observation('product_search_tool',{},[], 'success',{'budget':200})
+        a=detector.observation('product_search_tool',{},[], 'success',{'budget':100}, read_only=True)
+        b=detector.observation('product_search_tool',{},[], 'success',{'budget':200}, read_only=True)
         assert a['action']!=b['action']
 
     def test_result_metadata_is_not_progress_but_input_reference_is(self):
@@ -111,8 +111,8 @@ class TestLoopDetector:
         for i in range(3):
             state,hint=self.feed(detector,state,result={'hits':[],'result_ref':str(i),'observed_at':str(i)})
         assert hint
-        a=detector.observation('conversation_fact_lookup',{'result_ref':'a'},[], 'success',{})
-        b=detector.observation('conversation_fact_lookup',{'result_ref':'b'},[], 'success',{})
+        a=detector.observation('conversation_fact_lookup',{'result_ref':'a'},[], 'success',{}, read_only=True)
+        b=detector.observation('conversation_fact_lookup',{'result_ref':'b'},[], 'success',{}, read_only=True)
         assert a['action']!=b['action']
 
     def test_independent_task_windows_and_transaction_checks_are_not_combined(self):
@@ -120,8 +120,10 @@ class TestLoopDetector:
         for _ in range(3):state,hint=self.feed(detector,state)
         other,hint=self.feed(detector,{})
         assert hint is None and not other['stop']
-        for tool in ['quote_products','create_order_tool','query_order_tool','remember_preference_tool']:
-            assert detector.observation(tool,{}, {},'success',{}) is None
+        for tool in ['create_order_tool','remember_preference_tool']:
+            assert detector.observation(tool,{}, {},'success',{}, read_only=False) is None
+        for tool in ['quote_products','query_order_tool']:
+            assert detector.observation(tool,{}, {},'success',{}, read_only=True) is not None
 
 
 class TestSchemaAssertion:
