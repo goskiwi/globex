@@ -115,6 +115,9 @@ class BusinessToolMiddleware(AgentMiddleware):
                         accepted=presentation(name,full,event_id)
                         presentations.append(accepted)
                         self.bus.publish(session,'presentation.result',accepted)
+                        from app.application.runtime.model_views import presentation_receipt
+                        receipt=project_data(receipt,presentation_receipt(accepted['kind'],full),notices=notices)
+                        processed[-1]=receipt
                     self.bus.publish(session,"tool.result",payload)
                     emit("TOOL_RESULT_TEXT_DELTA",receipt.text)
                     emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))

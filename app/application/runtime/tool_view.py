@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 
 from app.infrastructure.context_products import business_view, product_page, token_estimate
+from app.application.runtime.model_views import product_result_view
 
 
 tool_view_budget: ContextVar[int | None] = ContextVar('tool_view_budget', default=None)
@@ -9,7 +10,7 @@ tool_view_budget: ContextVar[int | None] = ContextVar('tool_view_budget', defaul
 
 def research_result_view(data, *, minimal=False):
     """待交付研究保留候选事实；观察全集和明细仍由原始证据承载。"""
-    view = business_view(data)
+    view = product_result_view(data)
     scope = view.get('scope')
     if isinstance(scope, dict):
         view['scope'] = {key: value for key, value in scope.items()
@@ -46,7 +47,7 @@ async def bounded_tool_view(data, store, context, *, kind, token_limit=12000):
     """保留完整证据，以商品页或引用代替过大正文；预算包含完整包装。"""
     assigned = tool_view_budget.get()
     limit = min(token_limit, assigned) if assigned is not None else token_limit
-    view = business_view(data)
+    view = product_result_view(data)
     if token_estimate(view) <= limit:
         return view
     if kind == 'handoff':

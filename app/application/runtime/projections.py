@@ -4,6 +4,7 @@ import json
 from langchain_core.messages import ToolMessage
 from app.infrastructure.context_products import business_view, result_identity, token_estimate
 from app.application.runtime.results import message_data, project_data
+from app.application.runtime.model_views import product_result_view
 
 
 def project_skill_history(messages):
@@ -32,7 +33,7 @@ def share_identical_products(messages, *, compact_rules=False):
         original=read_output(message)
         if not original:continue
         # 所有结构化工具回执共用模型投影，推荐/比较和回查不能重新带入展示或目录管理字段。
-        payload=business_view(original)
+        payload=product_result_view(original)
         projected=payload!=original
         shared=False
         if isinstance(payload.get('hits'),list) and not payload.get('archived'):
