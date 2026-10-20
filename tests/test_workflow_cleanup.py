@@ -163,7 +163,7 @@ async def test_existing_delivery_and_independent_research_can_progress_in_same_b
     from app.application.usecases.intents import SubmitIntentInput
     from langchain_core.messages import AIMessage
     dispatch={'name':'task_dispatch','id':'research','args':{'subagent_type':'search_agent',
-        'task':{'step_id':'cup','goal':'水杯研究'}}}
+        'task':{'step_id':'cup'}}}
     deliver={'name':'recommend_products','id':'cards','args':{'picks':[{'product_id':'P1003',
         'sku_id':'P1003-S1','quantity':1,'reason':'已读背包候选'}],'guidance':'先交付已读背包。','turn_action':'continue'}}
     parent=ScriptedModel(responses=[call('set_research_plan',{'plan':[{'id':'cup','goal':'水杯研究'}]}),

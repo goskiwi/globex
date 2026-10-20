@@ -150,9 +150,9 @@ async def test_delegation_keeps_prior_conditions_and_current_source_without_subs
 
 
 def test_delegation_rejects_removed_research_dimensions_without_alias():
-    from app.application.agents.handoff import DelegatedTask
+    from app.application.agents.handoff import IndependentTask
     with pytest.raises(ValidationError):
-        DelegatedTask(goal='找通勤背包', research_dimensions=['电脑隔层'])
+        IndependentTask(goal='找通勤背包', research_dimensions=['电脑隔层'])
 
 
 @pytest.mark.parametrize('sku', ['', ' ', '\t\n'])

@@ -14,18 +14,29 @@ class SkillReference(BaseModel):
     version: str = Field(min_length=1)
 
 
-class DelegatedTask(BaseModel):
-    """模型填写任务范围；当前买家原文和购物状态由服务端另外注入。"""
-    step_id: str | None = Field(default=None, description="已创建计划时必须引用步骤ID；该步骤的条件来自计划，不能在task.filters中重复覆盖")
-    filters: Filters | None = Field(default=None, description="仅本品类与当前条件不同的字段；未提供字段继承当前状态，不写回主状态。多品类预算分别填写，禁止把全局总预算当每品类预算。")
+class TaskReferences(BaseModel):
+    """任务背景与证据引用；不承载条件或授权。"""
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    goal: str = Field(min_length=1, description="本次子任务需要解决的问题")
-    requirements: list[str] | None = Field(default=None, description="filters 无法表达的用户明确要求；未填则继承当前购物状态。保留否定和条件含义，不加入研究者凭品类常识想到的属性")
-    preferences: list[str] | None = Field(default=None, description="买家明确表达的本品类软偏好；不填则继承，不得把品类常识当用户要求")
     known_facts: list[str] = Field(default_factory=list, description="当前原文之外的必要背景，如此前提供的地址；不重复 filters、候选商品事实或已选数量")
     skill_refs: list[SkillReference] = Field(default_factory=list, max_length=8,
         description="相关 Skill 的 id/version，来自当前目录或加载记录；不是正文或授权，子任务按需读取")
     evidence_refs: list[str] = Field(default_factory=list, description="已有证据引用，需要时通过工具读取")
+
+
+class PlannedTask(TaskReferences):
+    """只引用计划；目标、要求和条件均由服务端从计划解析。"""
+    step_id: str = Field(min_length=1, description="已有研究计划中的步骤ID，不另外填写目标、条件或偏好")
+
+
+class IndependentTask(TaskReferences):
+    """独立任务的局部条件；当前买家原文和购物状态由服务端注入。"""
+    goal: str = Field(min_length=1, description="本次子任务需要解决的问题")
+    filters: Filters | None = Field(default=None, description="仅本品类与当前条件不同的字段；未提供字段继承当前状态，不写回主状态。多品类预算分别填写，禁止把全局总预算当每品类预算。")
+    requirements: list[str] | None = Field(default=None, description="filters无法表达的买家明确要求；未填则继承，保留否定与条件，不增加研究者自拟要求")
+    preferences: list[str] | None = Field(default=None, description="买家明确表达的本品类软偏好；不填则继承")
+
+
+DelegatedTask = PlannedTask | IndependentTask
 
 
 class Candidate(BaseModel):

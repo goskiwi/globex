@@ -7,12 +7,13 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Literal
+from pydantic import TypeAdapter
 
 from langchain.tools import ToolRuntime
 from langchain_core.messages import HumanMessage
 from langgraph.errors import GraphRecursionError
 
-from app.application.agents.handoff import DelegatedTask, SubagentResult
+from app.application.agents.handoff import DelegatedTask, PlannedTask, SubagentResult
 from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.runtime.handoff import TaskEvidence, HandoffContext, issue
@@ -22,7 +23,7 @@ from app.infrastructure.budget import get_budget
 from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import observe_run_events
 from app.infrastructure.context_products import token_estimate
-from app.application.runtime.tool_view import bounded_tool_view
+from app.application.runtime.tool_view import bounded_tool_view, dependency_research_view
 from opentelemetry import trace
 
 
@@ -62,10 +63,12 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
 
         Args:
             subagent_type: search_agent 负责商品研究，trade_agent 负责已选商品的交易准备。
-            task: 目标、仅本品类的条件差异、待核验要求及必要上下文。候选输出固定为 ID 与简短理由，不重复描述交付格式。
+            task: 计划任务只填step_id和背景引用；独立任务填写goal及局部条件，二者不能混用。
             runtime: LangGraph 自动注入，不属于模型参数。
         """
-        task = DelegatedTask.model_validate(task)
+        task = TypeAdapter(DelegatedTask).validate_python(task)
+        planned = isinstance(task, PlannedTask)
+        step_id = task.step_id if planned else None
         session_id = ShoppingContext.current_session_id()
         call_id = runtime.tool_call_id if runtime is not None else None
         started_at = datetime.now(timezone.utc).isoformat()
@@ -89,43 +92,46 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                 from app.application.runtime.research_plan import condition_identity
                 parent_conditions = condition_identity(compile_search(scoped, context.preference_facts, context.currency))
                 definition = None
-                filters = task.filters
-                if task.step_id is not None:
+                if planned:
                     if subagent_type != 'search_agent':
                         raise DelegationInputError('计划步骤用于选购研究；交易准备按独立确认流程执行')
-                    step = next((s for s in scoped.plan if s.id == task.step_id), None)
-                    if step is None or task.filters is not None:
-                        raise DelegationInputError('计划任务须指定有效step_id，条件只从计划读取，不在task.filters重复填写')
+                    step = next((s for s in scoped.plan if s.id == step_id), None)
+                    if step is None:
+                        raise DelegationInputError('计划步骤不存在，请按当前计划引用step_id')
                     statuses = {s['id']: s['status'] for s in context.task_plan.get('steps', [])}
                     if any(statuses.get(key) not in {'verified', 'reported', 'delivered'} for key in step.depends_on):
                         raise DelegationInputError('前置研究尚未取得合格候选，不能跳过依赖执行')
-                    parent['dependency_research'] = {key: deepcopy(context.task_plan['tasks'][key])
-                                                     for key in step.depends_on}
+                    parent['dependency_research'] = await dependency_research_view(
+                        {key: context.task_plan['tasks'][key] for key in step.depends_on},
+                        getattr(search_factory, 'evidence_store', None), context, token_limit=model_token_limit)
                     definition = step.model_dump()
-                    task = task.model_copy(update={'goal': step.goal})
+                    goal = step.goal
                     filters = step.filters
                     scoped.requirements = list(dict.fromkeys([*scoped.requirements, *step.requirements]))
-                if subagent_type == "trade_agent" and filters is not None:
-                    raise DelegationInputError("交易任务不能覆盖购物条件，请先由 Main 更新状态")
+                else:
+                    goal, filters = task.goal, task.filters
+                    if subagent_type == "trade_agent" and filters is not None:
+                        raise DelegationInputError("交易任务不能覆盖购物条件，请先由 Main 更新状态")
+                    if task.requirements is not None:
+                        scoped.requirements = list(dict.fromkeys([*scoped.requirements, *task.requirements]))
+                    if task.preferences is not None:
+                        scoped.preferences = task.preferences
                 if filters is not None:
                     changes = filters.model_dump(exclude_unset=True)
                     for field in ("excluded_material_tags", "required_material_tags"):
                         if field in changes:
                             changes[field] = list(dict.fromkeys([*getattr(scoped.filters, field), *changes[field]]))
                     scoped.filters = Filters.model_validate({**scoped.filters.model_dump(), **changes})
-                if task.requirements is not None:
-                    scoped.requirements = list(dict.fromkeys([*scoped.requirements, *task.requirements]))
-                if task.preferences is not None:
-                    scoped.preferences = task.preferences
                 effective = compile_search(scoped, context.preference_facts, context.currency)
-                scope = {'task_id': task.step_id or call_id or uuid.uuid4().hex, 'step_id': task.step_id,
-                         'goal': task.goal,
+                scope = {'task_id': step_id or call_id or uuid.uuid4().hex, 'step_id': step_id,
+                         'goal': goal,
                          'definition': definition, 'parent_conditions': parent_conditions,
                          'effective_search': effective}
                 parent["effective_search"] = effective
                 parent["selected_products"] = list(context.selected_lines)
                 # 子任务只看到解析后的一份条件，不再同时接收原条件和覆盖值。
                 task_context = task.model_dump(exclude={"filters", "requirements", "preferences"})
+                task_context['goal'] = goal
                 evidence.requirements=list(effective.get('requirements',[]))
                 request_id=context.source_run_id or context.source_message_id
                 scope['request_id']=request_id
@@ -141,7 +147,7 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                         # 子任务边界持有时限，超时后仍能交回该任务已收集的证据。
                         async with asyncio.timeout(DEFAULT_TIMEOUTS["task_dispatch"]):
                             reply = await factory.build().ainvoke(
-                                {"messages": inputs, "handoff_task": task.model_dump()},
+                                {"messages": inputs, "handoff_task": task_context},
                                 context=HandoffContext(evidence))
                     finally:
                         if token is not None:

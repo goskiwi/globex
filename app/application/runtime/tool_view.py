@@ -1,5 +1,6 @@
 """工具原文与模型视图分离；首次结果也必须在分配的容量内。"""
 from contextvars import ContextVar
+from copy import deepcopy
 
 from app.infrastructure.context_products import product_page, token_estimate
 from app.application.runtime.model_views import product_result_view
@@ -47,13 +48,10 @@ async def bounded_tool_view(data, store, context, *, kind, token_limit=12000):
     """保留完整证据，以商品页或引用代替过大正文；预算包含完整包装。"""
     assigned = tool_view_budget.get()
     limit = min(token_limit, assigned) if assigned is not None else token_limit
-    view = product_result_view(data)
+    view = research_result_view(data) if kind == 'handoff' else product_result_view(data)
     if token_estimate(view) <= limit:
         return view
     if kind == 'handoff':
-        view = research_result_view(data)
-        if token_estimate(view) <= limit:
-            return view
         view = research_result_view(data, minimal=True)
         if token_estimate(view) <= limit:
             return view
@@ -81,3 +79,13 @@ async def bounded_tool_view(data, store, context, *, kind, token_limit=12000):
                 return candidate
             page_budget -= max(128, token_estimate(candidate) - limit)
     return pointer
+
+
+async def dependency_research_view(tasks, store, context, *, token_limit):
+    """父→子与子→父共用研究视图；各依赖分享同一输入预算，完整记录留存。"""
+    if not tasks:
+        return {}
+    # 先为键和包装预留空间，避免每个依赖各自占用一整份结果预算。
+    allocation = (token_limit - token_estimate({key: None for key in tasks})) // len(tasks)
+    return {key: await bounded_tool_view(deepcopy(data), store, context,
+                kind='handoff', token_limit=allocation) for key, data in tasks.items()}

@@ -70,7 +70,7 @@ async def test_main_supplies_public_title_without_copying_internal_goal(tmp_path
         'product_id':'P1003','sku_id':'P1003-S1','assessment':'根据已读目录比较收纳需求'}])])
     main=ScriptedModel(responses=[
         call('set_research_plan',{'plan': [{'id':'bag','goal':internal}]}),
-        call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag','goal':internal}}),
+        call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),
         call('present_research',{'reports':[{'task_id':'bag','title':title}]}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,main)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**k:child)

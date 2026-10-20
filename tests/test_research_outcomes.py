@@ -24,7 +24,7 @@ async def test_saved_report_is_presented_by_reference_without_dispatching_again(
     from tests.test_langgraph_runtime import _container
     from tests.test_task_execution import ask
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment':'依据目录提供候选'}])])
-    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'比较背包候选'}]}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag','goal':'比较背包候选'}}),call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag']]}, turn_action='finish')])
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'比较背包候选'}]}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag']]}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:
@@ -40,7 +40,7 @@ async def test_one_report_does_not_complete_two_goal_plan(tmp_path,monkeypatch):
     from tests.test_langgraph_runtime import _container
     from tests.test_task_execution import ask
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment':'已核验背包'}])])
-    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'研究背包'},{'id':'ear','goal':'研究耳机'}]}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag','goal':'研究背包'}}),call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag']]}, turn_action='finish'),AIMessage(content='还有1项计划任务尚未完成，耳机研究尚未执行。')])
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'研究背包'},{'id':'ear','goal':'研究耳机'}]}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag']]}, turn_action='finish'),AIMessage(content='还有1项计划任务尚未完成，耳机研究尚未执行。')])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:

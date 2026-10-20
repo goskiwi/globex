@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from app.application.runtime.tools import as_langchain_tool
-from app.application.agents.handoff import DelegatedTask, build_submission_tool
+from app.application.agents.handoff import IndependentTask, build_submission_tool
 from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 from app.application.tools.product_search_tool import build_product_search_tool, SearchQuery
 from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
@@ -27,9 +27,9 @@ def test_exported_search_schema_matches_runtime_and_rejects_old_fields():
 
 def test_delegation_and_submission_have_no_duplicate_input_channels():
     with pytest.raises(ValidationError):
-        DelegatedTask(goal='研究',search_filters={'price_max_major':300})
+        IndependentTask(goal='研究',search_filters={'price_max_major':300})
     with pytest.raises(ValidationError):
-        DelegatedTask(goal='研究',hard_constraints=['预算300'],expected_output='价格')
+        IndependentTask(goal='研究',hard_constraints=['预算300'],expected_output='价格')
     schema=convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
     assert 'evidence_refs' not in schema['properties'] and 'notes' not in schema['properties']
     assert 'facts' not in schema['properties']['candidates']['items'].get('properties',{})

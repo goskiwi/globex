@@ -188,7 +188,7 @@ async def test_exclusions_before_topk_and_default_sku_quote(strategy):
 
 async def test_parallel_research_filters_are_local_and_do_not_change_main_state():
     from app.application.tools.task_dispatch_tool import build_task_dispatch_tool
-    from app.application.agents.handoff import DelegatedTask
+    from app.application.agents.handoff import IndependentTask
     import asyncio
     seen=[]
     class Child:
@@ -202,7 +202,7 @@ async def test_parallel_research_filters_are_local_and_do_not_change_main_state(
     factory=SimpleNamespace(build=lambda:Child())
     dispatch=build_task_dispatch_tool(factory,factory,TradeEventBus())
     original=ShoppingContext.current()
-    await asyncio.gather(*(dispatch('search_agent',DelegatedTask(goal='研究',
+    await asyncio.gather(*(dispatch('search_agent',IndependentTask(goal='研究',
         filters=Filters(price_max_major=cap,target_currency='CNY'))) for cap in (200,500)))
     assert sorted(seen)==[200,500]
     assert ShoppingContext.current()==original
