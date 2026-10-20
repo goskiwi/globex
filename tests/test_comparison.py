@@ -41,7 +41,8 @@ async def test_compare_sibling_skus_quotes_and_terminal_delivery(comparison_env)
         assert model.i == 1 and output["messages"][-1].content == env.guidance
         receipt = next(m for m in output["messages"] if isinstance(m, ToolMessage))
         assert receipt.status == "success"
-        result = json.loads(receipt.content)
+        result = receipt.artifact['data']
+        assert json.loads(receipt.content)['displayed']
         assert [c["default_sku_id"] for c in result["hits"]] == ["P1001-S1", "P1001-S2"]
         assert [c["landed_price"]["total_amount_minor"] for c in result["hits"]] == [41800,43800]
         assert result['dimensions'] == ['颜色偏好']

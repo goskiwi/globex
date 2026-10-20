@@ -17,7 +17,7 @@ from app.infrastructure.eventbus import TradeEventBus
 
 def test_exported_search_schema_matches_runtime_and_rejects_old_fields():
     schema=convert_to_openai_tool(as_langchain_tool(build_product_search_tool(None,TradeEventBus())))['function']['parameters']
-    assert set(schema['properties'])=={'normalized_query','category','top_k','product_id','sku_id'}
+    assert set(schema['properties'])=={'normalized_query','category','top_k','product_id','sku_id','conditions'}
     assert schema['additionalProperties'] is False and len(schema['anyOf'])==3
     assert schema['properties']['top_k']['minimum']==1
     assert schema['properties']['top_k']['maximum']==50

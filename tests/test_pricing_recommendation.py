@@ -1,3 +1,4 @@
+import json
 from tests.presentation_helpers import delivery_middlewares
 """完整报价与推荐链：使用真实目录、证据库和 SQLite，不调用外部模型。"""
 import pytest
@@ -129,7 +130,8 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
         result = await graph.ainvoke({"messages": [HumanMessage(content="推荐两件") ]})
         outputs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
         assert len(outputs) == 1 and outputs[0].status == "success"
-        assert '41800' in outputs[0].content
+        assert outputs[0].artifact['data']['quote']['total_amount_minor'] == 41800
+        assert json.loads(outputs[0].content)['displayed']
         assert model.i == 1  # 推荐后没有第二次模型调用。
         assert result["messages"][-1].content == "两件用于分开收纳旅行用品，费用请查看具体报价。"
     finally:

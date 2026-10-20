@@ -66,6 +66,7 @@ class BusinessToolMiddleware(AgentMiddleware):
                 if not receipts: raise TypeError("工具必须返回 ToolMessage 或含对应回执的 Command")
                 processed=[]
                 presentations=[]
+                operations=[]
                 failed=any(r.status=="error" for r in receipts)
                 for receipt in receipts:
                     notices=[]
@@ -119,15 +120,25 @@ class BusinessToolMiddleware(AgentMiddleware):
                         from app.application.runtime.model_views import presentation_receipt
                         receipt=project_data(receipt,presentation_receipt(accepted['kind'],full),notices=notices)
                         processed[-1]=receipt
+                    if receipt.status == 'success' and isinstance(full, dict) and full.get('confirmation_required') is True:
+                        from app.application.runtime.delivery import confirmation_delivery
+                        operation=confirmation_delivery(full,event_id)
+                        operations.append(operation)
+                        receipt=project_data(receipt,{'confirmation_required':True,
+                            'confirmation_id':operation['confirmation_id'], 'action':operation['action'], 'status':'pending'},notices=notices)
+                        processed[-1]=receipt
                     self.bus.publish(session,"tool.result",payload)
                     emit("TOOL_RESULT_TEXT_DELTA",receipt.text)
                     emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))
                 observe_tool_result(failed=failed)
                 normalized=replace_receipts(output,processed)
-                if not presentations:return normalized
+                if not presentations and not operations:return normalized
+                updates={}
+                if presentations:updates['presentations']=presentations
+                if operations:updates['operation_receipts']=operations
                 if isinstance(normalized,Command):
-                    return replace(normalized,update={**normalized.update,'presentations':presentations})
-                return Command(update={'messages':processed,'presentations':presentations})
+                    return replace(normalized,update={**normalized.update,**updates})
+                return Command(update={'messages':processed,**updates})
             except BaseException as error:
                 observe_tool_result(failed=True)
                 span.set_attribute("error.type",type(error).__name__);span.set_status(Status(StatusCode.ERROR))

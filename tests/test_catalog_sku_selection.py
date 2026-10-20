@@ -133,7 +133,7 @@ async def test_search_recommendation_details_and_confirmation_use_the_same_sku(c
         assert rows[pick.sku_id]["constraint_issues"] == []
         create = build_create_order_tool(PlaceOrderUseCase(e.service), e.bus, e.evidence)
         before = await e.store.get_inventory()
-        prepared = await create([pick.sku_id], asdict(replace(address(), country="EU")))
+        prepared = await create([{'product_id': pick.product_id, 'sku_id': pick.sku_id, 'quantity': 1}], asdict(replace(address(), country="EU")))
         assert prepared.ok
         confirmation = json.loads(prepared.text)["confirmation"]
         assert confirmation["payload"]["items"][0]["sku_id"] == pick.sku_id
