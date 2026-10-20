@@ -308,7 +308,7 @@ async def test_duplicate_plan_step_in_parallel_batch_does_not_execute(tmp_path,m
     try:
         _,state=await ask(c,'研究背包')
         receipts=[m for m in state['messages'] if isinstance(m,ToolMessage) and m.name=='task_dispatch']
-        assert len(receipts)==2 and all(m.status=='error' and '本批均未执行' in m.content for m in receipts)
+        assert len(receipts)==2 and all(m.status=='error' and m.artifact['executed'] is False for m in receipts)
         assert child.cursor==0
     finally:await c.shutdown()
 

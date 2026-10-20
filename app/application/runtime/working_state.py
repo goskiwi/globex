@@ -17,6 +17,43 @@ class WorkingState(AgentState):
     shopping_work_owner: NotRequired[str]
 
 
+def shopping_access(call):
+    """现有业务操作对购物状态的实际读写范围；订单查询、报价、历史回查不读取该状态。"""
+    name, args = call['name'], call['args']
+    conditions = {'filters','preferences','sort','ignored_preferences','requirements','excluded_products','excluded_skus'}
+    reads = (conditions if name in {'product_search_tool','get_product_details','category_insight_tool',
+        'show_product_details','recommend_products','recommend_bundle','compare_products','create_order_tool'} else set())
+    if name == 'task_dispatch':
+        reads = conditions | {'plan','selections'}
+    elif name in {'recommend_products','recommend_bundle','compare_products'}:
+        reads = conditions | {'plan'}
+    elif name == 'present_research':
+        reads = {'plan'}
+    elif name == 'select_products':
+        reads = {'selections','excluded_products','excluded_skus'}
+    if name in {'select_products','create_order_tool'}:
+        return reads, {'selections'}
+    if name == 'set_research_plan':
+        return reads, {'plan'}
+    change = args.get('changes') if name == 'set_shopping_requirements' else args.get('conditions') if name == 'product_search_tool' else None
+    if change is not None:
+        return reads, (set(ShoppingWork.model_fields) if not isinstance(change,dict) or change.get('reset')
+                       else set(change) - {'reset'})
+    return reads, None
+
+
+def conflicting_shopping_calls(calls):
+    access = {call['id']: shopping_access(call) for call in calls}
+    writers = {key for key, (_, fields) in access.items() if fields is not None}
+    # Command写回整个shopping_work；同批多写者即使改不同字段也不能覆盖彼此。
+    conflicts = set(writers) if len(writers) > 1 else set()
+    for writer in writers:
+        for reader, (fields, _) in access.items():
+            if reader != writer and fields.intersection(access[writer][1]):
+                conflicts.update({writer, reader})
+    return conflicts
+
+
 def project_working_state(messages, state, mode):
     raw = state.get("shopping_work")
     if raw is None or mode is None:
@@ -77,12 +114,10 @@ class WorkingStateMiddleware(AgentMiddleware):
         messages = request.state.get("messages", [])
         last_ai = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
         calls = last_ai.tool_calls if last_ai else []
-        changes = {'set_shopping_requirements', 'select_products', 'set_research_plan', 'create_order_tool'}
-        mutations = [c for c in calls if c['name'] in changes or
-                     c['name']=='product_search_tool' and c['args'].get('conditions') is not None]
-        if len(calls) > 1 and mutations:
+        if request.tool_call['id'] in conflicting_shopping_calls(calls):
             return ToolMessage(content="本批含相互依赖的购物状态操作，请分别提交；查询条件和确认所需选项可直接随业务操作提交。",
-                               tool_call_id=request.tool_call["id"], status="error")
+                               name=request.tool_call['name'], tool_call_id=request.tool_call["id"], status="error",
+                               artifact={'executed':False,'error_code':'invalid_input'})
         context_token = None
         try:
             buyers = [m for m in messages if isinstance(m,HumanMessage) and m.name==context.buyer_id]

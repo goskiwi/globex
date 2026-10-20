@@ -121,3 +121,61 @@ async def test_incomplete_trade_delegation_keeps_actual_outcome(tmp_path,monkeyp
         assert result.status==expected
     finally:
         await c.shutdown()
+
+
+async def test_independent_order_query_runs_with_requirement_search(tmp_path,monkeypatch):
+    from tests.test_agent_handoff import ScriptedModel
+    from tests.test_langgraph_runtime import _container
+    from app.application.usecases.intents import SubmitIntentInput
+    from langchain_core.messages import AIMessage,ToolMessage
+    calls=[{'name':'product_search_tool','id':'search','args':{'product_id':'P1003',
+        'conditions':{'filters':{'price_max_major':200,'target_currency':'CNY'}}}},
+        {'name':'query_order_tool','id':'order','args':{'order_id':'synthetic-missing'}}]
+    model=ScriptedModel(responses=[AIMessage(content='',tool_calls=calls),AIMessage(content='候选已查询，订单未找到。')])
+    c=await _container(tmp_path,monkeypatch,model)
+    try:
+        await c.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY','查询200元内背包，同时核查这个订单。'))
+        state=(await c.orchestrator._sessions._agents['s'].graph.aget_state(c.orchestrator._sessions._agents['s'].config)).values
+        receipts={m.name:m for m in state['messages'] if isinstance(m,ToolMessage)}
+        assert receipts['product_search_tool'].status=='success'
+        assert receipts['query_order_tool'].status=='error'
+        assert receipts['query_order_tool'].artifact['error_code']=='business_rejected'
+        assert state['shopping_work']['filters']['price_max_major']==200
+    finally:
+        await c.shutdown()
+
+
+def test_only_actual_state_conflicts_block_and_independent_calls_remain_runnable():
+    from app.application.runtime.working_state import conflicting_shopping_calls
+    def c(name,args,identifier):return {'name':name,'args':args,'id':identifier}
+    selected=c('select_products',{'items':[]},'selection')
+    detail=c('get_product_details',{'product_id':'P1003'},'details')
+    assert not conflicting_shopping_calls([selected,detail])
+    changing=c('set_shopping_requirements',{'changes':{'filters':{'ship_to':'CN'}}},'requirements')
+    order=c('query_order_tool',{'order_id':'synthetic'},'order')
+    assert conflicting_shopping_calls([changing,detail,order])=={'requirements','details'}
+    assert conflicting_shopping_calls([changing,selected,order])=={'requirements','selection'}
+
+
+async def test_existing_delivery_and_independent_research_can_progress_in_same_batch(tmp_path,monkeypatch):
+    from tests.test_agent_handoff import ScriptedModel,call,submission
+    from tests.test_langgraph_runtime import _container
+    from app.application.usecases.intents import SubmitIntentInput
+    from langchain_core.messages import AIMessage
+    dispatch={'name':'task_dispatch','id':'research','args':{'subagent_type':'search_agent',
+        'task':{'step_id':'cup','goal':'水杯研究'}}}
+    deliver={'name':'recommend_products','id':'cards','args':{'picks':[{'product_id':'P1003',
+        'sku_id':'P1003-S1','quantity':1,'reason':'已读背包候选'}],'guidance':'先交付已读背包。'}}
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan':[{'id':'cup','goal':'水杯研究'}]}),
+        call('product_search_tool',{'product_id':'P1003'}),AIMessage(content='',tool_calls=[dispatch,deliver]),
+        call('present_research',{'reports':[{'task_id':'cup','title':'水杯研究'}]})])
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008'}),
+        submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'杯子候选'}])])
+    c=await _container(tmp_path,monkeypatch,parent)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
+    try:
+        result=await c.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY','推荐背包，同时独立研究水杯。'))
+        assert result.status=='completed' and parent.cursor==4 and child.cursor==2
+        assert [p['kind'] for p in result.presentations]==['recommendation','research']
+    finally:
+        await c.shutdown()

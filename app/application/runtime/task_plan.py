@@ -14,10 +14,6 @@ from app.application.runtime.research_plan import (
     ResearchPlan, project_plan, dependent_steps, record_research, apply_delivery,
 )
 
-from app.application.usecases.intents import DELIVERY_KINDS
-
-DELIVERIES = frozenset(DELIVERY_KINDS)
-
 
 
 
@@ -72,21 +68,25 @@ class TaskPlanMiddleware(AgentMiddleware):
         context = ShoppingContext.current()
         plan = request.state.get('task_plan', {})
         last = next((m for m in reversed(request.state['messages']) if isinstance(m, AIMessage)), None)
-        names = {c['name'] for c in last.tool_calls} if last else set()
         calls = last.tool_calls if last else []
         step_ids = [c['args']['task'].get('step_id') for c in calls
                     if c['name'] == 'task_dispatch' and isinstance(c['args'].get('task'), dict)
                     and c['args']['task'].get('step_id') is not None]
         work = ShoppingWork.model_validate(request.state['shopping_work'])
-        if any(dependent_steps(work.plan, {key}).intersection(step_ids) for key in step_ids):
+        step_id = (request.tool_call['args'].get('task') or {}).get('step_id') if request.tool_call['name']=='task_dispatch' else None
+        conflicts = set()
+        for key in step_ids:
+            downstream = dependent_steps(work.plan, {key}).intersection(step_ids)
+            if downstream:
+                conflicts.update({key, *downstream})
+        if step_id is not None and step_id in conflicts:
             return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
-                               content='存在前后依赖的研究不能同批执行；先完成前置研究，再执行后续步骤。本批均未执行。')
-        if len(step_ids) != len(set(step_ids)):
+                               content='当前研究与同批步骤存在前后依赖；这些相关调用未执行，请顺序提交。',
+                               artifact={'executed':False,'error_code':'invalid_input'})
+        if step_id is not None and step_ids.count(step_id)>1:
             return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
-                               content='同一批次不能重复执行一个计划步骤；本批均未执行。')
-        if 'task_dispatch' in names and names & DELIVERIES:
-            return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
-                               content='研究任务和最终交付必须分批执行，本批均未执行。')
+                               content='同一批次不能重复执行一个计划步骤；这些重复调用未执行。',
+                               artifact={'executed':False,'error_code':'invalid_input'})
         token = ShoppingContext.set(replace(context, task_plan=plan))
         try:
             return await handler(request)
