@@ -83,8 +83,7 @@ def test_total_budget_is_not_unit_cap_and_missing_currency_unverified():
     assert len(result['unverified_requirements'])==1
 
 
-@pytest.mark.parametrize('mode',['snapshot','delta'])
-async def test_native_update_search_followup_and_checkpoint_restore(tmp_path,mode):
+async def test_native_update_search_followup_and_checkpoint_restore(tmp_path):
     store=ContextEvidenceStore(tmp_path/'evidence.db')
     search=build_product_search_tool(CatalogSearchUseCase(InMemoryProductRepository()),TradeEventBus(),store)
     model=ScriptedModel(responses=[
@@ -95,7 +94,7 @@ async def test_native_update_search_followup_and_checkpoint_restore(tmp_path,mod
         AIMessage(content='当前不限预算')])
     saver=InMemorySaver()
     def build():return create_agent(model,tools=[*build_shopping_operations(store),as_langchain_tool(search)],
-        middleware=[WorkingStateMiddleware(mode)],checkpointer=saver)
+        middleware=[WorkingStateMiddleware()],checkpointer=saver)
     graph=build();config={'configurable':{'thread_id':'state'}}
     first=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='找背包300元')]},config)
     assert first['shopping_work']['filters']['price_max_major']==300

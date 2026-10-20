@@ -27,7 +27,7 @@ def read_output(message):
     return payload if isinstance(payload,dict) else None
 
 
-def share_identical_products(messages, *, compact_rules=False):
+def share_identical_products(messages):
     prepared=deepcopy(messages);seen={}
     for message in prepared:
         original=read_output(message)
@@ -51,10 +51,7 @@ def share_identical_products(messages, *, compact_rules=False):
                 else:seen[key]={'tool_call_id':message.tool_call_id,'position':position}
         if shared:
             payload['shared_fields_notice']='引用对象的商品业务字段就在本次输入对应工具结果中；score 不继承引用对象，本批分数、顺序、查询条件、观察时间仍以本条为准。'
-        if compact_rules:
-            payload.pop('shared_fields_notice',None)
-            if payload.get('archived'):payload.pop('notice',None)
-        if shared or projected or compact_rules:
+        if shared or projected:
             rendered=project_data(message,payload)
             message.content, message.artifact = rendered.content, rendered.artifact
     return prepared

@@ -74,7 +74,8 @@ async def execute_case(case, strategy, repetition, settings, suite, work, thrott
         row=await run_skill_replay(case,configured,throttle,work,repetition,collect,suite['runtime'])
     elif case['layer']=='cache_replay':
         from scripts.eval.harness.cache_replay import run_cache_replay
-        row=await run_cache_replay(case,configured,throttle,work,repetition,collect,suite['runtime'])
+        row=await run_cache_replay(case,configured,throttle,work,repetition,collect,suite['runtime'],
+            layout=suite['strategies'][strategy]['experiment']['prompt_layout'])
     elif case['layer']=='agent':
         row=await run_workflow(case,configured,throttle,work,repetition,collect,suite['runtime'])
     else:
@@ -132,6 +133,7 @@ async def run_profile(profile, output, *, suite_path=None, strategies=None, case
       'runtime':runtime,'execution_environment':execution_environment(settings),
       'temperature':0,'dataset_sha256':suite['_dataset_sha256'],'suite_sha256':suite['_suite_sha256'],
       'source':frozen,'source_stable':None,'policy_overrides':{n:suite['strategies'][n]['overrides'] for n in names},
+      'experiment_options':{n:suite['strategies'][n].get('experiment',{}) for n in names},
       'source_archive_sha256':digest((output/'source.tar.gz').read_bytes()),
       'gates':suite['gates'],'pricing':suite['pricing'],'limits':suite['limits'],'semantic_answer_cache':False,
       'synthetic':True,'contracts':None,'dataset_provenance':suite['dataset_provenance'],

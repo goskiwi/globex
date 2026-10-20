@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SUITE = ROOT / 'eval/harness/v1/suite.json'
 SCHEMA_VERSION = 'harness-eval-v1'
 POLICY_FIELDS = {'context_pruning_timing', 'context_product_tokens',
-                 'context_target_tokens', 'context_prompt_layout', 'context_state_mode', 'context_prune_low_ratio', 'context_compact_result_rules', 'prompt_cache_mode', 'prompt_cache_policy'}
+                 'context_target_tokens', 'prompt_cache_mode', 'prompt_cache_policy'}
 WATCHED = ('app/application/agents/', 'app/application/harness/', 'app/application/memory/',
            'app/application/runtime/', 'app/infrastructure/langchain_model.py',
            'app/infrastructure/persistence/graph_checkpointer.py',
@@ -83,6 +83,8 @@ def load_suite(path=SUITE):
     for name, strategy in suite['strategies'].items():
         if not re.fullmatch(r'[a-z0-9_]+', name) or set(strategy['overrides']) - POLICY_FIELDS:
             raise ValueError('策略仅允许 Harness 参数，不允许偷偷更换模型、目录或权限')
+        if set(strategy.get('experiment', {})) - {'prompt_layout'}:
+            raise ValueError('独立实验只接受缓存回放布局参数')
     for profile in suite['profiles'].values():
         if profile['repetitions'] < 1 or profile['repetitions'] > 10:
             raise ValueError('重复次数必须在 1..10')

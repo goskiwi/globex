@@ -30,7 +30,6 @@ class ContextState(AgentState):
     context_summary: NotRequired[dict | None]
     context_statistics: NotRequired[dict]
     context_summary_failures: NotRequired[int]
-    context_product_trigger: NotRequired[int]
 
 
 @dataclass
@@ -63,18 +62,17 @@ class RequestComposition:
     FIXED_NAMES = {"skill_reference","skill_catalog","shopping_state","shopping_state_delta",
                    "memory_hint","task_plan","loop_feedback","trade_state","candidate_state","delegated_task"}
 
-    def __init__(self, request, settings, skill_parts, working_mode):
+    def __init__(self, request, settings, skill_parts):
         self.request, self.settings = request, settings
         self.history = list(request.messages)
-        self.skill_parts, self.working_mode = skill_parts, working_mode
+        self.skill_parts = skill_parts
         self.available = settings.context_size - 8192 - max(4096,int(settings.context_size*.05))
 
     async def render(self, history):
-        messages = project_working_state(project_skill_history(history),self.request.state,self.working_mode)
+        messages = project_working_state(project_skill_history(history),self.request.state)
         messages.extend(self.skill_parts)
         request = self.request
-        messages=share_identical_products(messages,
-            compact_rules=getattr(self.settings,"context_compact_result_rules",False))
+        messages=share_identical_products(messages)
         messages=[m.model_copy(update={"artifact":None}) if isinstance(m,ToolMessage) else m for m in messages]
         system=SystemMessage(content=(request.system_message.text+"\n" if request.system_message else "")+EVIDENCE_RULES)
         counts=request_parts(system,messages,request.tools,self.available)
@@ -106,21 +104,19 @@ class RequestContextMiddleware(AgentMiddleware):
     state_schema = ContextState
 
     def __init__(self, store, model, settings, *, system_prompt, tools, skill_source=None,
-                 working_state_mode=None, summary_enabled=True):
+                 summary_enabled=True):
         self.store,self.model,self.settings=store,model,settings
         self.system_prompt,self.tools=system_prompt,list(tools)
-        self.skill_source,self.working_state_mode=skill_source,working_state_mode
+        self.skill_source=skill_source
         self.summary_enabled=summary_enabled
         if settings.context_product_tokens<=0 or settings.context_target_tokens<=0:
             raise ValueError("上下文预算必须为正数")
-        if not 0<getattr(settings,"context_prune_low_ratio",1)<=1:
-            raise ValueError("无效整理低水位")
 
     async def prepare(self, request, *, force=False):
         if request.state.get('context_summary') is not None:
             ContextSummary.model_validate(request.state['context_summary'])
         parts=await self.skill_source.request_parts(request.state) if self.skill_source else []
-        frame=RequestComposition(request,self.settings,parts,self.working_state_mode)
+        frame=RequestComposition(request,self.settings,parts)
         history,updates=await self._compact(request.state,frame,force=force)
         final=await frame.render(history)
         if final.counts["total_tokens"] > frame.available:
@@ -235,14 +231,11 @@ class RequestContextMiddleware(AgentMiddleware):
                          and isinstance(message_data(m), dict) and message_data(m).get('history_view')
                          and message_data(m).get('hits'))
         total = sum(token_estimate(payload) for _, _, payload in candidates)
-        initial_total=total
-        ratio=getattr(self.settings,'context_prune_low_ratio',1)
-        low_target=int(self.settings.context_product_tokens*ratio)
-        trigger=self.settings.context_product_tokens if before>=target*.6 else state.get('context_product_trigger',self.settings.context_product_tokens)
+        low_target=self.settings.context_product_tokens
         oversized={m.id for _,m,p in candidates if token_estimate(p)>getattr(self.settings,'tool_result_limit',20000)}
         eager=getattr(self.settings,'context_pruning_timing','pressure')=='after_use'
         current = initial
-        pressure=force or eager or total>trigger or bool(oversized) or before > target
+        pressure=force or eager or total>self.settings.context_product_tokens or bool(oversized) or before > target
         for index, message, payload in candidates:
             # 本轮研究尚由 Main 消费，不能把 candidates 当成普通长正文只留归档指针。
             # 只保护紧凑视图；总体窗口校验和旧轮次回收仍按原规则执行。
@@ -366,9 +359,5 @@ class RequestContextMiddleware(AgentMiddleware):
                       "status": "completed" if updates else "noop", 'summary_attempts':attempts,
                       "archived_result_count": archived_count,
                       "request_parts_before": initial.counts, "request_parts_after": current.counts}
-        next_trigger=self.settings.context_product_tokens
-        if ratio<1 and total>low_target and total<initial_total:
-            batch_size=max((token_estimate(p) for _,m,p in candidates if m.id in protected),default=0)
-            next_trigger=max(next_trigger,total+max(self.settings.context_product_tokens-low_target,min(self.settings.context_product_tokens,2*batch_size)))
-        return messages, {"messages": updates, "context_summary": summary,'context_product_trigger':next_trigger,
+        return messages, {"messages": updates, "context_summary": summary,
                 "context_statistics": statistics,'context_summary_failures':0 if attempts else failures}

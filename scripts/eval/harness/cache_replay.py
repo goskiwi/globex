@@ -154,7 +154,7 @@ def check_replay_answer(answer, budget):
     return {'json_object':valid_format, 'budget_and_sku':valid_facts}
 
 
-async def run_cache_replay(case, settings, throttle, folder: Path, repetition, collect, runtime):
+async def run_cache_replay(case, settings, throttle, folder: Path, repetition, collect, runtime, *, layout):
     """固定合成轨迹在原生图中执行；重建是受控实验，不计作真实摘要质量。"""
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage, RemoveMessage
     from langgraph.graph import StateGraph, MessagesState, START, END
@@ -163,7 +163,6 @@ async def run_cache_replay(case, settings, throttle, folder: Path, repetition, c
     from app.infrastructure.context_usage import evaluation_evidence_sink
     from app.infrastructure.prompt_cache import PrefixTracker
 
-    layout = settings.context_prompt_layout
     if layout not in {'legacy_system', 'stable_prefix'}:
         raise ValueError('未知上下文提示布局')
     if case['scenario'] not in {'budget', 'tools', 'rebuild'}:

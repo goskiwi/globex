@@ -75,14 +75,11 @@ def conflicting_shopping_calls(calls):
     return conflicts
 
 
-def project_working_state(messages, state, mode):
+def project_working_state(messages, state):
     raw = state.get("shopping_work")
-    if raw is None or mode is None:
+    if raw is None:
         return list(messages)
     work = ShoppingWork.model_validate(raw)
-    if mode == "delta":
-        from app.application.runtime.state_projection import project_state_messages
-        return project_state_messages(list(messages), raw)
     projected = list(messages)
     position = next((i + 1 for i,m in enumerate(projected) if m.id == work.source_message_id), 0)
     projected.insert(position, HumanMessage(name="shopping_state", content=(
@@ -93,11 +90,6 @@ def project_working_state(messages, state, mode):
 
 class WorkingStateMiddleware(AgentMiddleware):
     state_schema = WorkingState
-
-    def __init__(self, mode="snapshot"):
-        if mode not in {"snapshot", "delta"}:
-            raise ValueError("未知状态投影模式")
-        self.mode = mode
 
     async def abefore_agent(self, state, runtime):
         context = ShoppingContext.current()
@@ -113,20 +105,7 @@ class WorkingStateMiddleware(AgentMiddleware):
         message = buyers[-1]
         work.latest_request, work.source_message_id = message.text, message.id
         updates = {"shopping_work": Overwrite(work.model_dump()) if "shopping_work" in state else work.model_dump(), "shopping_work_owner": context.buyer_id}
-        if self.mode == "delta":
-            from app.application.runtime.state_projection import next_state_message
-            hint = next_state_message(state["messages"], work.model_dump())
-            if hint is not None:
-                updates["messages"] = [hint]
         return updates
-
-    async def abefore_model(self, state, runtime):
-        if self.mode == "delta":
-            from app.application.runtime.state_projection import next_state_message
-            hint = next_state_message(state["messages"], state["shopping_work"])
-            if hint is not None:
-                return {"messages": [hint]}
-        return None
 
     async def awrap_tool_call(self, request, handler):
         context = ShoppingContext.current()

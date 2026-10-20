@@ -8,7 +8,8 @@ import pytest
 from langchain_core.messages import HumanMessage,AIMessage,ToolMessage
 from app.infrastructure.context_usage import context_diagnostic_sink
 from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
-from app.application.runtime.state_projection import *
+from scripts.eval.experiments.state_projection import *
+from scripts.eval.experiments.product_projection import compact_product_messages
 from app.application.runtime.projections import share_identical_products,read_output,EVIDENCE_RULES
 from app.infrastructure.context_products import token_estimate
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
@@ -123,66 +124,22 @@ async def test_bounded_page_budget_includes_evidence_envelope(tmp_path):
         offset = page['next_offset']
     assert collected == hits
 
-def test_efficiency_suite_preserves_model_permissions_and_default_switches(tmp_path):
-    from scripts.eval.harness.contracts import load_suite, ROOT
-    from tests.test_retrieval import _settings
-    suite = load_suite(ROOT / 'eval/harness/v1/efficiency-suite.json')
-    assert suite['profiles']['efficiency']['repetitions'] == 3
-    assert len(suite['profiles']['long_efficiency']['cases']) == 2
-    settings = _settings(tmp_path)
-    assert settings.context_state_mode == 'snapshot'
-    assert settings.context_prune_low_ratio == 1.0
-    assert suite['strategies']['candidate']['overrides']['context_prune_low_ratio'] == .65
 
-async def test_delta_graph_does_not_accumulate_unchanged_state_and_restores(tmp_path):
-    from langchain.agents import create_agent
-    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-    from app.application.runtime.working_state import WorkingStateMiddleware
-    from tests.native_model_helpers import client_model,completion
-    requests=[]
-    def handler(request):
-        requests.append(json.loads(request.content));return httpx.Response(200,json=completion())
-    model=await client_model(tmp_path,handler)
-    config={'configurable':{'thread_id':'s'}}
-    try:
-        async with AsyncSqliteSaver.from_conn_string(str(tmp_path/'graph.db')) as saver:
-            graph=create_agent(model,system_prompt='固定规则',middleware=[
-                WorkingStateMiddleware('delta'),policy(tmp_path,system_prompt='固定规则',working_state_mode='delta')],checkpointer=saver)
-            for index,text in enumerate(['预算300元，选中P1003-S1，排除P1002。','还有别的款吗？','预算是多少？']):
-                await graph.ainvoke({**({'shopping_work':work_fixture(budget=300)} if index==0 else {}),'messages':[HumanMessage(name='b',content=text)]},config)
-            state=await graph.aget_state(config)
-            assert len([m for m in state.values['messages'] if m.name in STATE_NAMES])==1
-            await graph.ainvoke({'shopping_work':Overwrite(work_fixture(budget=180)),'messages':[HumanMessage(name='b',content='预算改为180元')]},config)
-        async with AsyncSqliteSaver.from_conn_string(str(tmp_path/'graph.db')) as saver:
-            graph=create_agent(model,system_prompt='固定规则',middleware=[
-                WorkingStateMiddleware('delta'),policy(tmp_path,system_prompt='固定规则',working_state_mode='delta')],checkpointer=saver)
-            state=await graph.aget_state(config)
-            assert replay_state(state.values['messages'])[0]['filters']['price_max_major']==180
-            await graph.ainvoke({'shopping_work':Overwrite(work_fixture()),'messages':[HumanMessage(name='b',content='换个需求，现在想买耳机。')]},config)
-            state=await graph.aget_state(config)
-            assert state.values['shopping_work']['filters']['price_max_major'] is None
-            assert replay_state(state.values['messages'])[0]['filters']['price_max_major'] is None
-        assert all(r['messages'][0]==requests[0]['messages'][0] for r in requests)
-    finally:await model.aclose()
 
 def test_projection_anchor_and_compact_copy_are_lossless():
     user=HumanMessage(name='b',content='新预算',id='u')
     work={'filters':{},'source_message_id':'u'}
     assert project_state_messages([user],work)[0]==user
     state=history(4);before=deepcopy(state)
-    compact=share_identical_products(state['messages'],compact_rules=True)
+    compact=compact_product_messages(state['messages'])
     assert state==before
     assert [read_output(m) for m in compact if isinstance(m,ToolMessage)]==[read_output(m) for m in state['messages'] if isinstance(m,ToolMessage)]
     assert sum(len(m.content) for m in compact if isinstance(m,ToolMessage))<=sum(len(m.content) for m in state['messages'] if isinstance(m,ToolMessage))
 
-async def test_low_watermark_and_invalid_configuration(tmp_path):
+async def test_product_budget_archiving_does_not_repeat_without_new_pressure(tmp_path):
     state=history(10)
-    middleware=policy(tmp_path,product_tokens=1400,context_prune_low_ratio=.65)
+    middleware=policy(tmp_path,product_tokens=1400)
     updates=await middleware.compact_checkpoint(state)
-    assert updates['messages'] and updates['context_product_trigger']>=1400
+    assert updates['messages'] and updates['context_statistics']['archived_result_count'] > 0
     state=apply(state,updates)
     assert not (await middleware.compact_checkpoint(state))['messages']
-    for ratio in [0,1.1]:
-        with pytest.raises(ValueError):policy(tmp_path,context_prune_low_ratio=ratio)
-    from app.application.runtime.working_state import WorkingStateMiddleware
-    with pytest.raises(ValueError):WorkingStateMiddleware('bad')

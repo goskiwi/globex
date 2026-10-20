@@ -147,8 +147,7 @@ class MainAgentFactory:
         context_policy = RequestContextMiddleware(
             self._search_factory.evidence_store,
             create_chat_model(self._settings,client=self._model_client,stream=False,throttle=self._throttle),self._settings,
-            system_prompt=system_prompt,tools=tools,skill_source=skill_source,
-            working_state_mode=self._settings.context_state_mode)
+            system_prompt=system_prompt,tools=tools,skill_source=skill_source)
         graph = create_agent(
             model=create_chat_model(self._settings,client=self._model_client, throttle=self._throttle, bus=self._bus),
             tools=tools,
@@ -166,7 +165,7 @@ class MainAgentFactory:
                 *([skill_source] if skill_source is not None else []),
                 PreferenceStateMiddleware(self._preference_store, self._preference_selector,
                                           self._settings.preference_top_k),
-                WorkingStateMiddleware(self._settings.context_state_mode),
+                WorkingStateMiddleware(),
                 TaskPlanMiddleware(),
                 final_delivery,
                 context_policy,

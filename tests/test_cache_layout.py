@@ -28,7 +28,7 @@ async def test_native_reply_preserves_static_prefix_latest_budget_and_restore(tm
     model=await client_model(tmp_path,handler);saver=InMemorySaver()
     from tests.native_context_helpers import policy
     def build():return create_agent(model,system_prompt='固定规则',middleware=[
-        WorkingStateMiddleware(),policy(tmp_path,system_prompt='固定规则',working_state_mode='snapshot')],checkpointer=saver)
+        WorkingStateMiddleware(),policy(tmp_path,system_prompt='固定规则')],checkpointer=saver)
     graph=build();config={'configurable':{'thread_id':'s'}}
     token=ShoppingContext.set(ShoppingContextSnapshot('s','b','zh-CN','CNY'))
     try:
@@ -52,7 +52,7 @@ async def test_request_projection_anchors_before_tools_without_mutating_history(
     work={**work_fixture(budget=180), 'source_message_id':user.id}
     request=ModelRequest(model=ScriptedModel(),messages=messages,tools=[],state={'shopping_work':work},runtime=None)
     from app.application.runtime.working_state import project_working_state
-    projected=project_working_state(request.messages,request.state,'snapshot')
+    projected=project_working_state(request.messages,request.state)
     assert projected[0]==user and projected[1].name=='shopping_state'
     assert projected[2]==call
     assert [m.model_dump() for m in messages]==before
@@ -92,7 +92,8 @@ def test_cache_layout_suite_only_changes_layout_and_cache():
     assert {s['overrides']['context_target_tokens'] for s in strategies.values()}=={48000}
     assert suite['gates']['objective']=='prompt_cache'
     assert suite['profiles']['cache_probe']['repetitions']==2
-    with pytest.raises(ValueError):WorkingStateMiddleware('typo')
+    assert {s['experiment']['prompt_layout'] for s in strategies.values()} == {'stable_prefix', 'legacy_system'}
+    assert all('context_prompt_layout' not in s['overrides'] for s in strategies.values())
 
 
 def test_cache_goal_requires_money_not_token_shrinkage():
@@ -125,8 +126,8 @@ async def test_fixed_trace_uses_real_sdk_and_counts_streaming_usage(tmp_path,mon
     monkeypatch.setattr(cache_replay,'create_chat_model',lambda *a,**k:model)
     from tests.test_retrieval import _settings
     case={'id':'cache-budget','scenario':scenario,'budgets':[300,180,160,140]}
-    row=await cache_replay.run_cache_replay(case,replace(_settings(tmp_path),context_prompt_layout=layout),None,tmp_path,0,None,
-        {'output_limit':128,'request_timeout_seconds':5})
+    row=await cache_replay.run_cache_replay(case,_settings(tmp_path),None,tmp_path,0,None,
+        {'output_limit':128,'request_timeout_seconds':5},layout=layout)
     assert row['passed'] and len(row['usage'])==4, json.dumps(row,ensure_ascii=False)
     assert all(u['ttft_ms'] is not None for u in row['usage'])
     assert all(request['tool_choice']=='none' for request in requests)

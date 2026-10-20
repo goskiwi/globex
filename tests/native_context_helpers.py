@@ -26,12 +26,11 @@ def summary_selection(*sources):
 
 
 def policy(tmp_path,*,product_tokens=6000,target_tokens=48000,response=None,
-           system_prompt="",tools=(),working_state_mode=None,**changes):
+           system_prompt="",tools=(),**changes):
     model=SimpleNamespace(ainvoke=AsyncMock(return_value=AIMessage(content=summary_selection() if response is None else response)))
     return RequestContextMiddleware(ContextEvidenceStore(tmp_path/'e.db'),model,
         replace(_settings(tmp_path),context_size=128000,context_product_tokens=product_tokens,
-                context_target_tokens=target_tokens,**changes),system_prompt=system_prompt,tools=tools,
-                working_state_mode=working_state_mode)
+                context_target_tokens=target_tokens,**changes),system_prompt=system_prompt,tools=tools)
 
 
 def apply(state,updates):

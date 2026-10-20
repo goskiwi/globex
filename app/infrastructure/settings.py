@@ -83,10 +83,6 @@ class Settings:
     # 换服务型数据库需自行装异步驱动（aiomysql / asyncpg）并改此 URL，本仓未验证。
     context_pruning_timing: str = "pressure"
     context_product_tokens: int = 6000
-    context_prompt_layout: str = "stable_prefix"  # 固定轨迹缓存实验的布局参数
-    context_state_mode: str = "snapshot"  # delta 只用于稳定前缀的独立实验
-    context_prune_low_ratio: float = 1.0  # 小于 1 时触发后回收到较低水位
-    context_compact_result_rules: bool = False  # 固定说明提升到规则，JSON只移除空白
     context_target_tokens: int = 48000
     database_url: str = ""
     # ---- 四期：Redis 缓存 ----
@@ -151,10 +147,6 @@ def load_settings() -> Settings:
     return Settings(
         context_pruning_timing=os.getenv("CONTEXT_PRUNING_TIMING", "pressure"),
         context_product_tokens=int(os.getenv("CONTEXT_PRODUCT_TOKENS", "6000")),
-        context_prompt_layout=os.getenv("CONTEXT_PROMPT_LAYOUT", "stable_prefix"),
-        context_state_mode=os.getenv("CONTEXT_STATE_MODE", "snapshot"),
-        context_prune_low_ratio=float(os.getenv("CONTEXT_PRUNE_LOW_RATIO", "1")),
-        context_compact_result_rules=os.getenv("CONTEXT_COMPACT_RESULT_RULES", "0") == "1",
         context_target_tokens=int(os.getenv("CONTEXT_TARGET_TOKENS", "48000")),
         llm_base_url=llm_base_url,
         llm_api_key=llm_api_key,

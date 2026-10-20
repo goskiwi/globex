@@ -159,7 +159,8 @@ def test_catalog_admin_fields_stay_in_evidence_not_model_decisions(tool,nested):
 def test_compact_projection_preserves_harness_notices():
     from app.application.runtime.results import project_data
     message=project_data(ToolMessage(tool_call_id='read',content=''),{'hits':[product()]},notices=['不得据此编造数据'])
-    projected=share_identical_products([message],compact_rules=True)[0]
+    from scripts.eval.experiments.product_projection import compact_product_messages
+    projected=compact_product_messages([message])[0]
     assert projected.artifact['notices']==['不得据此编造数据']
     assert json.loads(projected.content)['notices']==['不得据此编造数据']
 

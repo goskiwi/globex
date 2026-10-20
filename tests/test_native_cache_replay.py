@@ -19,8 +19,8 @@ async def test_replay_failure_or_cancellation_closes_model(tmp_path,monkeypatch,
     monkeypatch.setattr(cache_replay,'create_chat_model',lambda *args,**kwargs:model)
     task=asyncio.create_task(cache_replay.run_cache_replay(
         {'id':'failure','scenario':'budget','budgets':[300,180]},
-        replace(_settings(tmp_path),context_prompt_layout='stable_prefix'),None,tmp_path,0,None,
-        {'output_limit':128,'request_timeout_seconds':5}))
+        _settings(tmp_path),None,tmp_path,0,None,
+        {'output_limit':128,'request_timeout_seconds':5},layout='stable_prefix'))
     try:
         await asyncio.wait_for(entered.wait(),2)
         if cancelled:
@@ -43,4 +43,4 @@ async def test_unknown_layout_is_rejected_before_model_construction(tmp_path,mon
     monkeypatch.setattr(cache_replay,'create_chat_model',forbidden)
     with pytest.raises(ValueError,match='布局'):
         await cache_replay.run_cache_replay({'scenario':'budget'},
-            replace(_settings(tmp_path),context_prompt_layout='typo'),None,tmp_path,0,None,{})
+            _settings(tmp_path),None,tmp_path,0,None,{},layout='typo')

@@ -11,8 +11,10 @@
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
         "prompt_cache_mode": "passthrough",
-        "prompt_cache_policy": "static",
-        "context_prompt_layout": "legacy_system"
+        "prompt_cache_policy": "static"
+      },
+      "experiment": {
+        "prompt_layout": "legacy_system"
       }
     },
     "current_cp": {
@@ -22,8 +24,10 @@
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
         "prompt_cache_mode": "explicit",
-        "prompt_cache_policy": "static_history",
-        "context_prompt_layout": "legacy_system"
+        "prompt_cache_policy": "static_history"
+      },
+      "experiment": {
+        "prompt_layout": "legacy_system"
       }
     },
     "candidate": {
@@ -33,8 +37,10 @@
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
         "prompt_cache_mode": "passthrough",
-        "prompt_cache_policy": "static",
-        "context_prompt_layout": "stable_prefix"
+        "prompt_cache_policy": "static"
+      },
+      "experiment": {
+        "prompt_layout": "stable_prefix"
       }
     },
     "candidate_cp": {
@@ -44,8 +50,10 @@
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
         "prompt_cache_mode": "explicit",
-        "prompt_cache_policy": "static_history",
-        "context_prompt_layout": "stable_prefix"
+        "prompt_cache_policy": "static_history"
+      },
+      "experiment": {
+        "prompt_layout": "stable_prefix"
       }
     }
   },

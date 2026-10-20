@@ -18,7 +18,6 @@ DELIVERY_TOOLS = {'recommend_products': 'recommendation', 'recommend_bundle': 'r
                   'show_product_details': 'product_view'}
 COUNTRIES = {'CN': '中国', 'US': '美国', 'JP': '日本', 'SG': '新加坡', 'EU': '欧盟'}
 AGENTS = {'search_agent': '商品研究', 'trade_agent': '交易准备'}
-PLATFORMS = {'amazon': 'Amazon', 'ebay': 'eBay'}
 
 
 def text(value):

@@ -62,15 +62,14 @@ async def test_truncated_text_is_partial_not_completed(tmp_path,stream):
     finally:await model.aclose()
 
 
-@pytest.mark.parametrize('compact',[False,True])
-async def test_inactive_skill_stays_out_of_final_request(compact):
+async def test_inactive_skill_stays_out_of_final_request():
     data={'kind':'skill','body':'OLD_SKILL_BODY','id':'demo'}
     message=ToolMessage(name='load_agent_skill_tool',tool_call_id='old',
         content=json.dumps(data),artifact={'data':data})
     original=message.model_dump_json()
     request=ModelRequest(model=ScriptedModel(responses=[]),messages=[message],tools=[],state={})
-    settings=SimpleNamespace(context_size=128000,context_compact_result_rules=compact)
-    final=await RequestComposition(request,settings,[],None).render([message])
+    settings=SimpleNamespace(context_size=128000)
+    final=await RequestComposition(request,settings,[]).render([message])
     assert all('OLD_SKILL_BODY' not in m.text for m in final.request.messages)
     assert message.model_dump_json()==original
 
