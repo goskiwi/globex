@@ -10,6 +10,25 @@ from tests.test_langgraph_runtime import _container
 from tests.trade_test_helpers import test_address as sample_address
 
 
+async def test_read_only_scoped_search_does_not_publish_a_parent_requirement_change():
+    from dataclasses import replace
+    from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
+    from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
+    from app.application.tools.product_search_tool import build_product_search_tool
+    from app.application.usecases.catalog_search import CatalogSearchUseCase
+    from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
+    from app.infrastructure.eventbus import TradeEventBus
+    token = ShoppingContext.set(ShoppingContextSnapshot('s', 'b', 'zh-CN', 'CNY',
+        effective_search=compile_search(ShoppingWork(filters=Filters(product_type='背包')))))
+    try:
+        result = await build_product_search_tool(CatalogSearchUseCase(InMemoryProductRepository()),
+            TradeEventBus())(normalized_query='背包')
+        assert result.ok and result.event_data is None and result.state_updates is None
+        assert result.data['query_conditions']['product_type'] == '背包'
+    finally:
+        ShoppingContext.reset(token)
+
+
 async def test_search_applies_current_conditions_without_a_separate_state_round(tmp_path, monkeypatch):
     model = ScriptedModel(responses=[call('product_search_tool', {
         'product_id': 'P1003', 'conditions': {'filters': {'price_max_major': 200,

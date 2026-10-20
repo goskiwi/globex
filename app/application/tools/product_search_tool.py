@@ -130,7 +130,8 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
             result["result_ref"] = await evidence_store.save(snapshot_ctx.buyer_id, session_id, "products", result)
         view = await bounded_tool_view(result, evidence_store, snapshot_ctx, kind='products')
         return ToolResult(data=result, model_data=view, state=ToolResultState.SUCCESS,
-                          state_updates=state_updates, event_data={**result, 'filters': {k: v for k, v in policy.items() if k in {'product_type', 'price_max_major', 'target_currency', 'ship_to'}}})
+                          state_updates=state_updates, event_data={**result,
+                              'filters': state_updates['shopping_work']['filters']} if state_updates else None)
 
     product_search_tool.input_model = SearchQuery
     return product_search_tool
