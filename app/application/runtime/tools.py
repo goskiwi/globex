@@ -79,8 +79,12 @@ def _message(value, runtime, name):
         if value.event_data is not None: artifact["event_data"]=value.event_data
         if name == "task_dispatch" and isinstance(value.data, dict) and value.data.get("stop_reason"):
             artifact["stop_reason"] = value.data["stop_reason"]
-        return ToolMessage(content=value.text, tool_call_id=runtime.tool_call_id, name=name,
+        message = ToolMessage(content=value.text, tool_call_id=runtime.tool_call_id, name=name,
             status=value.state.value, artifact=artifact)
+        if value.state_updates:
+            from langgraph.types import Command
+            return Command(update={**value.state_updates, 'messages': [message]})
+        return message
     import json
     return ToolMessage(content=value if isinstance(value,str) else json.dumps(value,ensure_ascii=False),
         tool_call_id=runtime.tool_call_id, name=name, artifact={"data":value,"notices":[]})

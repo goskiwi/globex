@@ -3,7 +3,7 @@ import math
 
 TOOL_LABELS = {
     'product_search_tool': '检索商品', 'get_product_details': '读取商品资料',
-    'show_product_details': '准备商品详情', 'update_shopping_state': '更新选购条件',
+    'show_product_details': '准备商品详情', 'set_shopping_requirements': '更新选购需求', 'select_products': '保存选购项', 'set_research_plan': '保存研究计划',
     'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐', 'recommend_bundle': '准备组合推荐',
     'compare_products': '准备比较结果', 'show_shopping_form': '补充选购需求',
     'SubagentResult': '提交任务结果', 'category_insight_tool': '查询选购知识',
@@ -66,7 +66,7 @@ def step_status(name, data, success):
 
 
 def conditions(arguments):
-    update = arguments.get('update')
+    update = arguments.get('changes')
     if not isinstance(update, dict):
         return ''
     filters = update.get('filters')
@@ -96,7 +96,7 @@ def conditions(arguments):
 
 
 def request_summary(name, arguments):
-    if name == 'update_shopping_state':
+    if name == 'set_shopping_requirements':
         return conditions(arguments)
     if name == 'product_search_tool' and text(arguments.get('normalized_query')):
         return '检索词：' + arguments['normalized_query']
@@ -210,7 +210,7 @@ def result_summary(name, arguments, data, success, *, failure=None):
         return '；'.join(parts)
     if not success:
         return failure_summary(failure)
-    if name == 'update_shopping_state':
+    if name == 'set_shopping_requirements':
         return conditions(arguments) or '选购条件与选购项已更新'
     if not isinstance(data, dict):
         return '工具已返回结果'

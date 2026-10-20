@@ -69,7 +69,7 @@ async def test_main_supplies_public_title_without_copying_internal_goal(tmp_path
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),submission(candidates=[{
         'product_id':'P1003','sku_id':'P1003-S1','assessment':'根据已读目录比较收纳需求'}])])
     main=ScriptedModel(responses=[
-        call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':internal}]}}),
+        call('set_research_plan',{'plan': [{'id':'bag','goal':internal}]}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag','goal':internal}}),
         call('present_research',{'reports':[{'task_id':'bag','title':title}]})])
     c=await _container(tmp_path,monkeypatch,main)

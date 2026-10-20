@@ -114,7 +114,7 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
     from tests.test_langgraph_runtime import _container
     from app.application.usecases.intents import SubmitIntentInput
     guidance='下面是 Roamix 单侧颈枕的资料，按平台分别展示。'
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
+    model=ScriptedModel(responses=[call('set_shopping_requirements',{'changes': {'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
         call('get_product_details',{'product_id':'P3020'}),
         call('show_product_details',{'targets':[{'product_id':'P3020'},{'product_id':'P3021'}],'guidance':guidance})])
     container=await _container(tmp_path,monkeypatch,model)

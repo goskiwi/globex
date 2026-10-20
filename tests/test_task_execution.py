@@ -43,7 +43,7 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
             'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。', 'caveats': ['是否有电脑仓？']}],unmet_requirements=['必须核验明确附加要求'] if partial and product == 'P1008' else [])]) for product in ('P1003', 'P1008')])
     steps = [{'id':key,'goal':goal,'requirements':['必须核验明确附加要求'] if partial and key=='cup' else []} for key,goal in [('bag', '背包研究'), ('cup', '水杯研究')]]
     model = ScriptedModel(responses=[
-        call('update_shopping_state', {'update': {'plan': steps}}),
+        call('set_research_plan', {'plan': steps}),
         AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'args': {
             'subagent_type': 'search_agent', 'task': {'goal': step['goal'], 'step_id': step['id']}},
             'id': step['id']} for step in steps]),
@@ -117,8 +117,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
                                   submission(candidates=[candidate]),submission(candidates=[candidate]),submission(candidates=[candidate])])
     steps=[{'id':'bag','goal':'选择背包','filters':{'price_max_major':budget}}]
     if extra_goal:steps.append({'id':'cup','goal':'选择水杯','depends_on':['bag']})
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
-        'filters':{'price_max_major':300,'target_currency':'CNY'},'plan':steps}}),
+    model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': steps})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','step_id':'bag'}}),
         recommend(),AIMessage(content='有条件尚未满足')])
     c=await _container(tmp_path,monkeypatch,model)
@@ -153,9 +152,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
 async def test_scoped_bundle_budget_uses_combined_quote(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),submission(candidates=[
         {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'} for sku in ['P1003-S1','P1003-S2']])])
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
-        'filters':{'landed_budget_major':500,'ship_to':'CN','target_currency':'CNY'},
-        'plan':[{'id':'bag','goal':'组合背包','filters':{'landed_budget_major':200}}]}}),
+    model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'landed_budget_major':500,'ship_to':'CN','target_currency':'CNY'}}}), call('set_research_plan', {'plan': [{'id':'bag','goal':'组合背包','filters':{'landed_budget_major':200}}]})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包组合','step_id':'bag'}}),
         recommend([pick(),pick('P1003-S2')],bundle=True),AIMessage(content='组合超过分项预算')])
     c=await _container(tmp_path,monkeypatch,model)
@@ -170,8 +167,8 @@ async def test_scoped_bundle_budget_uses_combined_quote(tmp_path,monkeypatch):
 
 async def test_plan_dependency_blocks_early_dispatch(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[])
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':[
-        {'id':'first','goal':'先研究背包'},{'id':'second','goal':'根据背包研究配件','depends_on':['first']}]}}),
+    model=ScriptedModel(responses=[call('set_research_plan',{'plan': [
+        {'id':'first','goal':'先研究背包'},{'id':'second','goal':'根据背包研究配件','depends_on':['first']}]}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究配件','step_id':'second'}}),
         AIMessage(content='需要先完成前置研究')])
     c=await _container(tmp_path,monkeypatch,model)
@@ -243,12 +240,10 @@ async def test_complete_business_changes_not_hidden_by_bounded_view(tmp_path):
 async def test_changed_plan_invalidates_old_qualification(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
         submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])])
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
-        'filters':{'price_max_major':300,'target_currency':'CNY'},
-        'plan':[{'id':'bag','goal':'选背包','filters':{'price_max_major':150}}]}}),
+    model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': [{'id':'bag','goal':'选背包','filters':{'price_max_major':150}}]})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'选背包','step_id':'bag'}}),
         AIMessage(content='已核验候选'),
-        call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':'选背包','filters':{'price_max_major':100}}]}}),
+        call('set_research_plan',{'plan': [{'id':'bag','goal':'选背包','filters':{'price_max_major':100}}]}),
         recommend(),AIMessage(content='需要按新预算重新核验')])
     c=await _container(tmp_path,monkeypatch,model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
@@ -265,7 +260,7 @@ async def test_changed_plan_invalidates_old_qualification(tmp_path,monkeypatch):
 async def test_implicit_task_conditions_cannot_be_omitted_at_delivery(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
         submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])])
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'filters':{'price_max_major':300,'target_currency':'CNY'}}}),
+    model=ScriptedModel(responses=[call('set_shopping_requirements',{'changes': {'filters':{'price_max_major':300,'target_currency':'CNY'}}}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','filters':{'price_max_major':150}}}),
         recommend([pick(task_id=None)]),AIMessage(content='需要带上研究来源')])
     c=await _container(tmp_path,monkeypatch,model)
@@ -283,9 +278,7 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
         submission(candidates=[
             {'product_id':'P1003','sku_id':sku,'assessment':'适合优先考虑便携性的需求，实际适配仍需核验。'}
             for sku in ['P1003-S1','P1003-S2']],caveats=['研究尚未完成'])])
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
-        'filters':{'price_max_major':300,'target_currency':'CNY'},
-        'plan':[{'id':'bag','goal':'100元内的背包','filters':{'price_max_major':150 if within_budget else 100}}]}}),
+    model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': [{'id':'bag','goal':'100元内的背包','filters':{'price_max_major':150 if within_budget else 100}}]})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','step_id':'bag'}}),
         call('compare_products',{'entries':[pick(),pick('P1003-S2')],'preferred_sku_id':None,
                                  'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}),AIMessage(content='研究仍有缺口')])
@@ -308,7 +301,7 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
 async def test_duplicate_plan_step_in_parallel_batch_does_not_execute(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[])
     dispatch=call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究','step_id':'bag'}}).tool_calls[0]
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':'研究背包'}]}}),
+    model=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'研究背包'}]}),
         AIMessage(content='',tool_calls=[{**dispatch,'id':'a'},{**dispatch,'id':'b'}]),AIMessage(content='需要调整派发')])
     c=await _container(tmp_path,monkeypatch,model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
@@ -336,7 +329,7 @@ def research_responses(count):
 async def test_reset_clears_research_but_preserves_historical_evidence(tmp_path, monkeypatch):
     child = ScriptedModel(responses=research_responses(1))
     model = ScriptedModel(responses=[research(), AIMessage(content='已研究'),
-        call('update_shopping_state', {'update': {'reset': True, 'goal': '新的选购任务'}}),
+        call('set_shopping_requirements', {'changes': {'reset': True, 'goal': '新的选购任务'}}),
         call('product_search_tool', {'product_id': 'P1003'}),
         recommend([pick(task_id=None)]), AIMessage(content='推荐未完成')])
     c = await _container(tmp_path, monkeypatch, model)
@@ -366,8 +359,8 @@ async def test_dependency_invalidation_survives_turns_and_requires_fresh_researc
     changed = deepcopy(steps)
     changed[0]['goal'] = '重新研究不同用途的背包'
     child = ScriptedModel(responses=research_responses(7))
-    update = call('update_shopping_state', {'update': {'plan': changed}}) if change_definition else research('a')
-    model = ScriptedModel(responses=[call('update_shopping_state', {'update': {'plan': steps}}),
+    update = call('set_research_plan', {'plan': changed}) if change_definition else research('a')
+    model = ScriptedModel(responses=[call('set_research_plan', {'plan': steps}),
         research('a'), research('b'), research('c'), research('d'), AIMessage(content='研究完成'),
         update, recommend([pick(task_id='c')]), AIMessage(content='需要重做后续研究'),
         *([research('a')] if change_definition else []), AIMessage(content='前置研究已完成'),
@@ -394,8 +387,8 @@ async def test_dependency_invalidation_survives_turns_and_requires_fresh_researc
 async def test_dependent_research_cannot_rerun_in_same_batch(tmp_path, monkeypatch):
     first, second = research('a'), research('b')
     child = ScriptedModel(responses=research_responses(2))
-    model = ScriptedModel(responses=[call('update_shopping_state', {'update': {'plan': [
-        {'id': 'a', 'goal': '前置研究'}, {'id': 'b', 'goal': '后续研究', 'depends_on': ['a']}]}}),
+    model = ScriptedModel(responses=[call('set_research_plan', {'plan': [
+        {'id': 'a', 'goal': '前置研究'}, {'id': 'b', 'goal': '后续研究', 'depends_on': ['a']}]}),
         first, second, AIMessage(content='已研究'),
         AIMessage(content='', tool_calls=[{**first.tool_calls[0], 'id': 'retry-a'},
                                          {**second.tool_calls[0], 'id': 'retry-b'}]),

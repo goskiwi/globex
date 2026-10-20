@@ -145,7 +145,7 @@ class AGUIRunAdapter:
                 role="tool",
             ))
             arguments = self._tool_arguments.pop(event.tool_call_id,{})
-            if success and name=='update_shopping_state' and isinstance(event.data,dict) and isinstance(event.data.get('filters'),dict):
+            if success and name in {'set_shopping_requirements', 'product_search_tool'} and isinstance(event.data,dict) and isinstance(event.data.get('filters'),dict):
                 self.state['shoppingFilters']=copy.deepcopy(event.data['filters'])
             accepted=next((p for p in self.state['presentations'] if p['id']==event.tool_call_id),None)
             status=step_status(name,event.data,success)

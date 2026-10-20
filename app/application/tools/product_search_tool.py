@@ -8,6 +8,7 @@ MainAgent 单干与 SearchAgent 派发两条路径共用同一工具实例。
 函数签名直接用于 LangChain 工具 schema。
 """
 import json
+from langchain.tools import ToolRuntime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.domain.catalog.taxonomy import Category
 
@@ -19,6 +20,7 @@ from app.domain.catalog.exchange_rate import ExchangeRateTable
 from app.domain.shipping.tariff_schedule import TariffSchedule
 from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
+from app.application.tools.shopping_operations import RequirementChange, search_requirements
 
 
 class SearchQuery(BaseModel):
@@ -30,6 +32,7 @@ class SearchQuery(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50, strict=True, description="候选数量，1 到 50")
     product_id: str | None = Field(default=None, pattern=r"^P\d{4,}$", description="精确商品 ID")
     sku_id: str | None = Field(default=None, pattern=r"^P\d{4,}-S\d+$", description="精确 SKU；与商品 ID 同传时须属于同一商品")
+    conditions: RequirementChange | None = Field(default=None, description='本轮买家明确的需求变化；省略继承。字段省略保留，null清除。子任务省略此项')
 
     @model_validator(mode="after")
     def query_or_identity(self):
@@ -48,11 +51,14 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         top_k: int = 5,
         product_id: str | None = None,
         sku_id: str | None = None,
+        conditions: RequirementChange | None = None,
+        runtime: ToolRuntime = None,
     ) -> ToolResult:
         """按当前已生效条件筛选推荐候选，不是查看商品详情的入口。
         检索命中已含完整目录业务字段与匹配SKU，不需要再做详情查询；精确ID查询仍筛选条件。
         只填写检索词、目录分类、返回数量或精确 ID；normalized_query/product_id/sku_id 至少提供一个。
-        商品类型、预算、币种、目的地和材质限制由当前购物状态或委派条件自动提供，不接受重复输入。
+        conditions只提交本轮需求变化，后端合并先前需求和长期偏好后直接检索并保存有效条件。
+        省略conditions沿用当前条件；子代理使用已绑定的委派条件，不修改主代理需求。
         被筛掉的商品不代表不存在；只读查看由主Agent处理，不得为查看修改预算。
         缺少/错误的条件交回 Main 更新状态；搜索不能偷偷放宽。存在目的地时每个SKU附单件到手报价，
         多件组合报价由Main处理。到手总预算在最终推荐阶段校验，不等同于商品单价上限。
@@ -73,11 +79,15 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         商品和 SKU 同时填写时必须属于同一商品；精确查询未命中不能用相似商品代替。
         """
         query = SearchQuery(normalized_query=normalized_query, category=category, top_k=top_k,
-                            product_id=product_id, sku_id=sku_id)
+                            product_id=product_id, sku_id=sku_id, conditions=conditions)
+        conditions = query.conditions
         normalized_query, category, top_k = query.normalized_query, query.category, query.top_k
         product_id, sku_id = query.product_id, query.sku_id
         snapshot_ctx = ShoppingContext.current()
-        effective = snapshot_ctx.effective_search if snapshot_ctx else None
+        try:
+            effective, state_updates = search_requirements(runtime, snapshot_ctx, conditions)
+        except ValueError as err:
+            return ToolResult(str(err), state=ToolResultState.ERROR, error_code='business_rejected')
         if effective is None:
             return ToolResult("缺少当前有效购物条件，请先由主 Agent 建立购物状态或派发任务。", state=ToolResultState.ERROR,
                               error_code="invalid_input", error_reason="缺少当前有效购物条件")
@@ -104,7 +114,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         if ship_to and ship_to not in TariffSchedule(ExchangeRateTable()).supported_destinations():
             error = f"暂不支持的目的国：{ship_to}"
             return ToolResult(data=f"[error] {error}", state=ToolResultState.ERROR,
-                              error_code="business_rejected", error_reason=error)
+                              error_code="business_rejected", error_reason=error, state_updates=state_updates)
         try:
             spec = ProductSearchSpec(
                 normalized_query=normalized_query,
@@ -124,7 +134,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
             )
         except ValueError as err:
             return ToolResult(data=f"[error] {err}", state=ToolResultState.ERROR,
-                              error_code="invalid_input", error_reason=str(err))
+                              error_code="invalid_input", error_reason=str(err), state_updates=state_updates)
         result = await usecase.execute(spec)
         result["query_conditions"] = args
         if effective is not None:
@@ -135,7 +145,8 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         if evidence_store is not None and snapshot_ctx is not None:
             result["result_ref"] = await evidence_store.save(snapshot_ctx.buyer_id, session_id, "products", result)
         view = await bounded_tool_view(result, evidence_store, snapshot_ctx, kind='products')
-        return ToolResult(data=result, model_data=view, state=ToolResultState.SUCCESS)
+        return ToolResult(data=result, model_data=view, state=ToolResultState.SUCCESS,
+                          state_updates=state_updates, event_data={**result, 'filters': {k: v for k, v in policy.items() if k in {'product_type', 'price_max_major', 'target_currency', 'ship_to'}}})
 
     product_search_tool.input_model = SearchQuery
     return product_search_tool

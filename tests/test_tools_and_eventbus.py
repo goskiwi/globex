@@ -218,7 +218,7 @@ class TestToolsDirectInvoke:
             # 成功路径也必须经过当前买家、当前会话的真实商品检索取证。
             await run_search(search, product_id="P1001", sku_id="P1001-S1")
             ok = await run_search(tool, 
-                sku_ids=["P1001-S1"],
+                items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1001-S1"]],
                 shipping_address=ADDRESS,
             )
             result = json.loads(ok.text)
@@ -229,7 +229,7 @@ class TestToolsDirectInvoke:
             assert (await env.store.get_inventory(["P1001-S1"]))["P1001-S1"] == 50
 
             bad = await run_search(tool, 
-                sku_ids=["X"],
+                items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["X"]],
                 shipping_address=ADDRESS,
             )
             assert bad.text.startswith("[error]")

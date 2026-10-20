@@ -107,7 +107,7 @@ async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_p
     candidate = {"product_id": "P1001", "sku_id": "P1001-S1", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
     search, child, dispatch, bus = factories(tmp_path, monkeypatch, [call("read_candidates", {}),
         submission(candidates=[candidate])])
-    parent = ScriptedModel(responses=[call("update_shopping_state", {"update":{
+    parent = ScriptedModel(responses=[call('set_shopping_requirements', {'changes': {
         "filters":{"price_max_major":300,"target_currency":"CNY"}}}),call("task_dispatch", {
         "subagent_type": "search_agent", "task": task()}, "dispatch-1"), AIMessage(content="主 Agent 汇总完成")])
     monkeypatch.setattr("app.application.agents.main_agent.create_chat_model", lambda *a, **kw: parent)
@@ -289,7 +289,7 @@ async def test_real_trade_tools_prepare_without_order_or_inventory_write(confirm
         "skus": [{"sku_id": sku.sku_id}]}]})
     result_messages = [submission(status="completed")] if valid_submission else [submission(status="partial") for _ in range(3)]
     model = ScriptedModel(responses=[call("create_order_tool", {
-        "sku_ids": [sku.sku_id], "shipping_address": asdict(sample_address())}),
+        'items': [{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 2} for sku in [sku.sku_id]], "shipping_address": asdict(sample_address())}),
         *result_messages])
     monkeypatch.setattr("app.application.agents.trade_agent.create_chat_model", lambda *a, **kw: model)
     factory = TradeAgentFactory(replace(_settings(tmp_path), harness_enabled=harness_enabled),

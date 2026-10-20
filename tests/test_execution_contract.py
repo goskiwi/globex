@@ -121,16 +121,16 @@ def test_invalid_call_and_receipt_cannot_be_split_by_summary():
 
 
 def test_shopping_schema_rejects_model_supplied_source_quote():
-    from app.application.tools.shopping_state_tool import build_shopping_state_tool
+    from app.application.tools.shopping_operations import build_shopping_operations
     from pydantic import ValidationError
-    tool=build_shopping_state_tool(None)
+    tool=build_shopping_operations(None)[0]
     exposed=tool.tool_call_schema.model_json_schema()
-    assert exposed['required']==['update']
+    assert exposed['required']==['changes']
     schema=tool.get_input_schema()
     with pytest.raises(ValidationError) as caught:
-        schema.model_validate({'quote':'预算300','update':{'quote':'预算300','goal':'买背包'}})
+        schema.model_validate({'quote':'预算300','changes':{'quote':'预算300','goal':'买背包'}})
     locations={tuple(error['loc']) for error in caught.value.errors()}
-    assert ('quote',) in locations and ('update','quote') in locations
+    assert ('quote',) in locations and ('changes','quote') in locations
 
 
 async def test_timeout_retains_collected_diagnostic_events():

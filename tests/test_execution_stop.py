@@ -166,7 +166,7 @@ async def test_confirmed_preparation_survives_stop_without_replaying(confirmatio
         {'product_id':'P1001','sku_id':'P1001-S1','quantity':2},)))
     await env.evidence.save('buyer','handoff','products',{'hits':[{'product_id':'P1001','skus':[{'sku_id':'P1001-S1'}]}]})
     fn=build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence)
-    model=StopModel(responses=[call('create_order_tool',{'sku_ids':['P1001-S1'],'shipping_address':asdict(address())})])
+    model=StopModel(responses=[call('create_order_tool',{'items':[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ['P1001-S1']],'shipping_address':asdict(address())})])
     graph=create_agent(model,tools=[as_langchain_tool(fn)],middleware=[BusinessToolMiddleware(None,env.bus)],checkpointer=InMemorySaver())
     runner,session=root(graph,env.bus)
     before=await env.store.get_inventory()

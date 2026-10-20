@@ -222,7 +222,7 @@ class SearchEvaluator:
         from app.application.runtime.tools import as_langchain_tool
         from app.application.runtime.working_state import WorkingStateMiddleware
         from app.application.runtime.execution import ExecutionMiddleware, graph_step_limit
-        from app.application.tools.shopping_state_tool import build_shopping_state_tool
+        from app.application.tools.shopping_operations import build_shopping_operations
         from app.application.tools.product_search_tool import build_product_search_tool
         from app.application.usecases.catalog_search import CatalogSearchUseCase
         from app.infrastructure.persistence.in_memory_repositories import (
@@ -261,7 +261,7 @@ class SearchEvaluator:
                 name="offline_search",
                 system_prompt=system,
                 model=self.model,
-                tools=[as_langchain_tool(tool), build_shopping_state_tool(None)],
+                tools=[as_langchain_tool(tool), *build_shopping_operations(None)],
                 middleware=[WorkingStateMiddleware(), ExecutionMiddleware(8, main=True)],
             )
             with observe_run_events(events.append):

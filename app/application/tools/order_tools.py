@@ -6,6 +6,9 @@ MainAgent 单干与 TradeAgent 派发两条路径共用。写工具只准备确�
 函数签名直接用于 LangChain 工具 schema。
 """
 import json
+from langchain.tools import ToolRuntime
+from app.application.agents.shopping_state import Choice
+from app.application.tools.shopping_operations import selected_work
 
 from app.application.runtime.results import ToolResult, ToolResultState
 
@@ -47,19 +50,21 @@ async def _verified_order_items(evidence_store, buyer_id: str, session_id: str, 
 
 def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evidence_store=None):
     async def create_order_tool(
-        sku_ids: list[str],
+        items: list[Choice],
         shipping_address: ShippingAddressInput,
+        runtime: ToolRuntime = None,
     ) -> ToolResult:
         """准备下单意向的权威确认卡，返回 confirmation_required，不创建订单或扣库存。
 
         即使买家在对话中说“同意”，也必须等待其点击页面确认卡；模型不能代为确认。
         金额包含商品、运费和税费，不代表付款。买家身份由系统会话上下文注入。
         商品与规格必须来自当前买家、当前会话的检索结果；否则先精确检索。
-        只接受当前已选 SKU；商品和数量由服务端读取选购记录，不接受模型重填。
+        直接提交本次明确选择的订单行；后端校验来源、保存选项并准备确认，无需先调详情、报价或选购工具。
+        当前价库存、配送与完整到手报价由确认服务重新核验，不能以模型文字代替。
 
         Args:
-            sku_ids (`list[str]`):
-                本次准备确认的已选 SKU ID，必须先由主代理 update_shopping_state 保存选购项。
+            items (`list[Choice]`):
+                每项包含product_id、sku_id、quantity，必须来自当前买家会话证据。
             shipping_address (`dict`):
                 收货地址，形如 {"recipient_name": "...", "country": "CN", "state": "...",
                 "city": "...", "address_line": "...", "postal_code": "...", "phone": "..."}。
@@ -68,16 +73,19 @@ def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evid
             buyer_id, session_id = _identity()
         except ValueError as err:
             return _fail(str(err))
-        bus.publish(session_id, "tool.invoke", {"tool": "create_order_tool", "args": {"buyer_id": buyer_id, "sku_ids": sku_ids}})
         try:
-            request = CreateOrderInput(sku_ids=sku_ids, shipping_address=shipping_address)
-            sku_ids = request.sku_ids
+            request = CreateOrderInput(items=items, shipping_address=shipping_address)
+            items = request.items
+            bus.publish(session_id, "tool.invoke", {"tool": "create_order_tool", "args": {"buyer_id": buyer_id, "items": [x.model_dump() for x in items]}})
+            if runtime is not None:
+                from app.application.runtime.handoff import HandoffContext
+                if isinstance(runtime.context, HandoffContext):
+                    scoped = {line['sku_id']: line for line in ShoppingContext.current().selected_lines}
+                    if any(scoped.get(item.sku_id) != item.model_dump() for item in items):
+                        raise ValueError('交易子任务不能更换父任务绑定的SKU或数量')
             shipping_address = request.shipping_address.model_dump()
-            selected = {line["sku_id"]: line for line in ShoppingContext.current().selected_lines}
-            if any(sku not in selected for sku in sku_ids):
-                raise ValueError("SKU 尚未选购，请主代理先用 update_shopping_state 明确规格与数量")
-            items = [selected[sku] for sku in sku_ids]
-            order_items = await _verified_order_items(evidence_store, buyer_id, session_id, items)
+            work = await selected_work(runtime, items, [], evidence_store) if runtime is not None and 'shopping_work' in runtime.state else None
+            order_items = await _verified_order_items(evidence_store, buyer_id, session_id, [x.model_dump() for x in items])
             address = Address(
                 recipient_name=shipping_address.get("recipient_name", ""),
                 country=shipping_address.get("country", ""),
@@ -92,7 +100,7 @@ def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evid
             )
         except (ValueError, KeyError, TypeError) as err:
             return _fail(str(err))
-        return _ok(result)
+        return ToolResult(result, state_updates={'shopping_work': work.model_dump()} if work is not None else None)
 
     create_order_tool.input_model = CreateOrderInput
     return create_order_tool

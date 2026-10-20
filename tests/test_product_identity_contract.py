@@ -72,7 +72,7 @@ async def test_order_rejects_unsearched_product_and_does_not_create_confirmation
     env = tools_env
     await run_search(env.search, product_id="P1001")
     before = await env.store.get_inventory()
-    failed = await env.create(sku_ids=["P1002-S1"], shipping_address=asdict(address()))
+    failed = await env.create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1002-S1"]], shipping_address=asdict(address()))
     assert not failed.ok and failed.error_code == "business_rejected"
     assert not await env.store.list_confirmations(buyer_id="identity-buyer", session_id="identity-session")
     assert await env.store.get_inventory() == before
@@ -83,7 +83,7 @@ async def test_saved_sku_quantity_then_waits_for_buyer(tools_env):
     hit = payload(await run_search(env.search, product_id="P1001"))["hits"][0]
     before = await env.store.get_inventory()
     ShoppingContext.set(replace(ShoppingContext.current(), selected_lines=selected_lines('P1001-S1',quantity=2)))
-    result = payload(await env.create(sku_ids=["P1001-S1"], shipping_address=asdict(address())))
+    result = payload(await env.create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 2} for sku in ["P1001-S1"]], shipping_address=asdict(address())))
     assert result["confirmation_required"]
     c = result["confirmation"]
     assert c["payload"]["items"][0]["sku_id"] == hit["default_sku_id"]
@@ -97,10 +97,10 @@ async def test_saved_sku_quantity_then_waits_for_buyer(tools_env):
 async def test_specification_must_have_been_returned(tools_env):
     env = tools_env
     await run_search(env.search, sku_id="P1003-S1")
-    result = await env.create(sku_ids=["P1003-S2"], shipping_address=asdict(address()))
+    result = await env.create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1003-S2"]], shipping_address=asdict(address()))
     assert not result.ok and result.error_code == "business_rejected"
     ShoppingContext.set(replace(ShoppingContext.current(), selected_lines=({'product_id':'P1001','sku_id':'P1003-S1','quantity':1},)))
-    wrong_owner = await env.create(sku_ids=["P1003-S1"], shipping_address=asdict(address()))
+    wrong_owner = await env.create(items=[{'product_id': 'P1001', 'sku_id': 'P1003-S1', 'quantity': 1}], shipping_address=asdict(address()))
     assert not wrong_owner.ok and wrong_owner.error_code == "business_rejected"
 
 
@@ -110,7 +110,7 @@ async def test_order_evidence_is_scoped_to_buyer_and_session(tools_env, buyer, s
     await run_search(env.search, product_id="P1001")
     token = ShoppingContext.set(ShoppingContextSnapshot(session, buyer, "zh-CN", "CNY", selected_lines=selected_lines('P1001-S1')))
     try:
-        assert not (await env.create(sku_ids=["P1001-S1"], shipping_address=asdict(address()))).ok
+        assert not (await env.create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1001-S1"]], shipping_address=asdict(address()))).ok
     finally:
         ShoppingContext.reset(token)
 
@@ -119,10 +119,10 @@ async def test_restarted_or_delegated_tool_uses_persistent_evidence_and_current_
     env = tools_env
     await run_search(env.search, product_id="P1001")
     restored = build_create_order_tool(PlaceOrderUseCase(env.service), env.bus, ContextEvidenceStore(env.evidence.path))
-    result = payload(await restored(sku_ids=["P1001-S1"], shipping_address=asdict(address())))
+    result = payload(await restored(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1001-S1"]], shipping_address=asdict(address())))
     assert result["confirmation_required"]
     ShoppingContext.set(replace(ShoppingContext.current(), selected_lines=selected_lines('P1001-S1',quantity=999999)))
-    failed = await restored(sku_ids=["P1001-S1"], shipping_address=asdict(address()))
+    failed = await restored(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 999999} for sku in ["P1001-S1"]], shipping_address=asdict(address()))
     assert "库存不足" in failed.text
 
 
@@ -130,7 +130,7 @@ async def test_restarted_or_delegated_tool_uses_persistent_evidence_and_current_
 async def test_single_product_quantity_is_not_silently_coerced(tools_env, quantity):
     await run_search(tools_env.search, product_id="P1001")
     ShoppingContext.set(replace(ShoppingContext.current(), selected_lines=selected_lines('P1001-S1',quantity=quantity)))
-    result = await tools_env.create(sku_ids=["P1001-S1"], shipping_address=asdict(address()))
+    result = await tools_env.create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': quantity} for sku in ["P1001-S1"]], shipping_address=asdict(address()))
     assert result.text.startswith("[error]")
 
 
@@ -140,7 +140,7 @@ async def test_batch_cannot_mix_single_fields_or_partially_prepare(tools_env):
     items = [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 1}]
     with pytest.raises(TypeError):
         await env.create(items=items, product_id="P1001", shipping_address=asdict(address()))
-    invalid_batch = await env.create(sku_ids=["P1001-S1","P1002-S1"], shipping_address=asdict(address()))
+    invalid_batch = await env.create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1001-S1","P1002-S1"]], shipping_address=asdict(address()))
     assert invalid_batch.text.startswith("[error]")
     assert not await env.store.list_confirmations(buyer_id="identity-buyer", session_id="identity-session")
 
@@ -148,10 +148,10 @@ async def test_batch_cannot_mix_single_fields_or_partially_prepare(tools_env):
 async def test_missing_store_fails_closed_and_function_schemas_accept_id_entry(tools_env):
     env = tools_env
     unavailable = build_create_order_tool(PlaceOrderUseCase(env.service), env.bus)
-    assert "证据未接入" in (await unavailable(sku_ids=["P1001-S1"], shipping_address=asdict(address()))).text
+    assert "证据未接入" in (await unavailable(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ["P1001-S1"]], shipping_address=asdict(address()))).text
     search_schema = as_langchain_tool(env.search).tool_call_schema.model_json_schema()
     order_schema = as_langchain_tool(env.create).tool_call_schema.model_json_schema()
     assert {"product_id", "sku_id"} <= set(search_schema["properties"])
     assert "normalized_query" not in search_schema.get("required", [])
-    assert set(order_schema["properties"]) == {"sku_ids", "shipping_address"}
-    assert "sku_ids" in order_schema["required"]
+    assert set(order_schema["properties"]) == {"items", "shipping_address"}
+    assert "items" in order_schema["required"]

@@ -28,6 +28,7 @@ class ToolResult:
     model_data: Any = None
     event_data: Any = None
     error_reason: str | None = None
+    state_updates: dict | None = None
 
     def __post_init__(self):
         if (self.state == ToolResultState.ERROR) != (self.error_code is not None):

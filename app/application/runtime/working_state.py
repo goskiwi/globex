@@ -77,8 +77,11 @@ class WorkingStateMiddleware(AgentMiddleware):
         messages = request.state.get("messages", [])
         last_ai = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
         calls = last_ai.tool_calls if last_ai else []
-        if len(calls) > 1 and any(c["name"] == "update_shopping_state" for c in calls):
-            return ToolMessage(content="update_shopping_state 必须单独调用；本批工具均未执行。更新成功后再调用业务工具。",
+        changes = {'set_shopping_requirements', 'select_products', 'set_research_plan', 'create_order_tool'}
+        mutations = [c for c in calls if c['name'] in changes or
+                     c['name']=='product_search_tool' and c['args'].get('conditions') is not None]
+        if len(calls) > 1 and mutations:
+            return ToolMessage(content="本批含相互依赖的购物状态操作，请分别提交；查询条件和确认所需选项可直接随业务操作提交。",
                                tool_call_id=request.tool_call["id"], status="error")
         context_token = None
         try:

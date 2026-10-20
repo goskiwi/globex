@@ -65,7 +65,7 @@ async def test_native_main_reads_both_platform_records_without_budget_change(tmp
     from langchain_core.messages import AIMessage,ToolMessage
     reads=AIMessage(content='',tool_calls=[{'id':pid,'name':'get_product_details','args':{'product_id':pid}}
         for pid in ('P3020','P3021')])
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{
+    model=ScriptedModel(responses=[call('set_shopping_requirements',{'changes': {
         'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
         reads,AIMessage(content='这款仍能查看；两个平台记录分别缺货或超预算，预算保持不变。')])
     container=await _container(tmp_path,monkeypatch,model)

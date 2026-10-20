@@ -41,8 +41,8 @@ def test_parameters_ready_are_not_success_and_same_names_update_by_call_identity
 
 
 def test_condition_summary_uses_successful_structured_arguments_not_buyer_quote():
-    args={'update':{'quote':'private buyer text','filters':{'landed_budget_major':300,'target_currency':'CNY','ship_to':'CN'}}}
-    value=result_summary('update_shopping_state',args,'更新成功',True)
+    args={'changes':{'quote':'private buyer text','filters':{'landed_budget_major':300,'target_currency':'CNY','ship_to':'CN'}}}
+    value=result_summary('set_shopping_requirements',args,'更新成功',True)
     assert '300 CNY' in value and '中国' in value and 'private buyer text' not in value
     assert '已满足' not in value
 
@@ -94,8 +94,8 @@ async def test_research_delivery_status_and_summary_survive_history_restore(tmp_
 
 
 def test_type_change_summary_and_clear_are_explicit():
-    assert result_summary('update_shopping_state',{'update':{'filters':{'product_type':'耳机'}}},{},True)=='商品类型：耳机'
-    assert result_summary('update_shopping_state',{'update':{'filters':{'product_type':None}}},{},True)=='清除商品类型限制'
+    assert result_summary('set_shopping_requirements',{'changes': {'filters':{'product_type':'耳机'}}},{},True)=='商品类型：耳机'
+    assert result_summary('set_shopping_requirements',{'changes': {'filters':{'product_type':None}}},{},True)=='清除商品类型限制'
 
 
 def test_pending_delivery_does_not_claim_published_before_commit():

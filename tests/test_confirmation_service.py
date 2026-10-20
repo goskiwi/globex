@@ -204,24 +204,24 @@ async def test_model_write_tools_prepare_only_and_cannot_choose_identity_approva
     search = build_product_search_tool(CatalogSearchUseCase(env.products), env.bus, env.evidence)
     cancel = build_cancel_order_tool(CancelOrderUseCase(env.service), env.bus)
     query = build_query_order_tool(QueryOrderUseCase(env.store), env.bus)
-    assert set(inspect.signature(create).parameters) == {"sku_ids", "shipping_address"}
+    assert set(inspect.signature(create).parameters) == {"items", "shipping_address", "runtime"}
     assert set(inspect.signature(cancel).parameters) == {"order_id", "reason"}
-    without_context = await create(sku_ids=[], shipping_address={})
+    without_context = await create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in []], shipping_address={})
     assert without_context.text.startswith("[error]")
     from tests.shopping_state_helpers import selected_lines
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY", selected_lines=selected_lines('P1001-S1')))
     try:
         from dataclasses import asdict
         item = {"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 1}
-        unverified = await create(sku_ids=['P1001-S1'], shipping_address=asdict(address()))
+        unverified = await create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ['P1001-S1']], shipping_address=asdict(address()))
         assert not unverified.ok and unverified.error_code == "business_rejected"
         assert not await env.store.list_confirmations(buyer_id="buyer-1", session_id="session-1")
         await run_search(search, product_id="P1001", sku_id="P1001-S1")
-        prepared = json.loads((await create(sku_ids=['P1001-S1'], shipping_address=asdict(address()))).text)
+        prepared = json.loads((await create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ['P1001-S1']], shipping_address=asdict(address()))).text)
         assert prepared["confirmation_required"] is True
         assert "order" not in prepared
         assert (await env.store.get_inventory(["P1001-S1"]))["P1001-S1"] == 50
-        bad = await create(sku_ids=['P1001-S1','P1001-S1'], shipping_address=asdict(address()))
+        bad = await create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ['P1001-S1','P1001-S1']], shipping_address=asdict(address()))
         assert bad.text.startswith("[error]")
         committed = await approve(env, prepared)
         order_id = committed["order"]["order_id"]

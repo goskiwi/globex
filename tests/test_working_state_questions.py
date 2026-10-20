@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.application.agents.shopping_state import ShoppingWork, Filters, ShoppingUpdate, apply_update, compile_search
 from app.application.runtime.working_state import WorkingStateMiddleware
 from app.application.runtime.tools import as_langchain_tool
-from app.application.tools.shopping_state_tool import build_shopping_state_tool
+from app.application.tools.shopping_operations import build_shopping_operations
 from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
@@ -88,13 +88,13 @@ async def test_native_update_search_followup_and_checkpoint_restore(tmp_path,mod
     store=ContextEvidenceStore(tmp_path/'evidence.db')
     search=build_product_search_tool(CatalogSearchUseCase(InMemoryProductRepository()),TradeEventBus(),store)
     model=ScriptedModel(responses=[
-        call('update_shopping_state',{'update':{'filters':{'price_max_major':300,'target_currency':'CNY'}}},'u1'),
+        call('set_shopping_requirements',{'changes': {'filters':{'price_max_major':300,'target_currency':'CNY'}}},'u1'),
         call('product_search_tool',{'normalized_query':'背包'},'s1'),AIMessage(content='完成'),
-        call('update_shopping_state',{'update':{'filters':{'price_max_major':None}}},'u2'),
+        call('set_shopping_requirements',{'changes': {'filters':{'price_max_major':None}}},'u2'),
         call('product_search_tool',{'normalized_query':'背包'},'s2'),AIMessage(content='完成'),
         AIMessage(content='当前不限预算')])
     saver=InMemorySaver()
-    def build():return create_agent(model,tools=[build_shopping_state_tool(store),as_langchain_tool(search)],
+    def build():return create_agent(model,tools=[*build_shopping_operations(store),as_langchain_tool(search)],
         middleware=[WorkingStateMiddleware(mode)],checkpointer=saver)
     graph=build();config={'configurable':{'thread_id':'state'}}
     first=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='找背包300元')]},config)
@@ -112,9 +112,9 @@ async def test_update_cannot_race_search_and_old_state_rejected():
         """测试只读。"""
         called.append(1);return 'ok'
     model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[
-        {'id':'u','name':'update_shopping_state','args':{'update':{'filters':{'price_max_major':300}}}},
+        {'id':'u','name':'set_shopping_requirements','args':{'changes': {'filters':{'price_max_major':300}}}},
         {'id':'s','name':'probe','args':{}}]),AIMessage(content='重试')])
-    graph=create_agent(model,tools=[build_shopping_state_tool(None),as_langchain_tool(probe)],middleware=[WorkingStateMiddleware()])
+    graph=create_agent(model,tools=[*build_shopping_operations(None),as_langchain_tool(probe)],middleware=[WorkingStateMiddleware()])
     state=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='300')]})
     assert not called and state['shopping_work']['filters']['price_max_major'] is None
     assert len([m for m in state['messages'] if isinstance(m,ToolMessage) and m.status=='error'])==2
@@ -126,12 +126,12 @@ async def test_selection_requires_current_session_evidence_and_quantity(tmp_path
     store=ContextEvidenceStore(tmp_path/'evidence.db')
     await store.save('buyer','state','products',{'hits':[{'product_id':'P1001','skus':[{'sku_id':'P1001-S1'},{'sku_id':'P1001-S2'}]}]})
     choices=[{'product_id':'P1001','sku_id':s,'quantity':q} for s,q in [('P1001-S1',2),('P1001-S2',3)]]
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'selections':choices}}),AIMessage(content='已选')])
-    graph=create_agent(model,tools=[build_shopping_state_tool(store)],middleware=[WorkingStateMiddleware()])
+    model=ScriptedModel(responses=[call('select_products',{'items': choices}),AIMessage(content='已选')])
+    graph=create_agent(model,tools=[*build_shopping_operations(store)],middleware=[WorkingStateMiddleware()])
     result=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='两种都要，各2和3件')]})
     assert result['shopping_work']['selections']['P1001-S1']['quantity']==2
     assert result['shopping_work']['selections']['P1001-S2']['quantity']==3
-    model.responses=[call('update_shopping_state',{'update':{'selections':[{'product_id':'P1002','sku_id':'P1002-S1','quantity':1}]}}),AIMessage(content='失败')]
+    model.responses=[call('select_products',{'items': [{'product_id':'P1002','sku_id':'P1002-S1','quantity':1}]}),AIMessage(content='失败')]
     model.cursor=0
     result=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='要这个')]})
     assert not result['shopping_work']['selections']
@@ -144,12 +144,12 @@ async def test_order_graph_reads_saved_quantity_after_checkpoint_restore(confirm
     env=confirmation_env
     await env.evidence.save('buyer','state','products',{'hits':[{'product_id':'P1001','skus':[{'sku_id':'P1001-S1'}]}]})
     model=ScriptedModel(responses=[
-        call('update_shopping_state',{'update':{'selections':[{'product_id':'P1001','sku_id':'P1001-S1','quantity':2}]}}),
+        call('select_products',{'items': [{'product_id':'P1001','sku_id':'P1001-S1','quantity':2}]}),
         AIMessage(content='已选两件'),
-        call('create_order_tool',{'sku_ids':['P1001-S1'],'shipping_address':asdict(sample_address())},'order'),
+        call('create_order_tool',{'items':[{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'quantity': 2}],'shipping_address':asdict(sample_address())},'order'),
         AIMessage(content='等待确认')])
     saver=InMemorySaver();config={'configurable':{'thread_id':'state'}}
-    def build():return create_agent(model,tools=[build_shopping_state_tool(env.evidence),
+    def build():return create_agent(model,tools=[*build_shopping_operations(env.evidence),
         as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence))],
         middleware=[WorkingStateMiddleware()],checkpointer=saver)
     await build().ainvoke({'messages':[HumanMessage(name='buyer',content='买两件')]},config)

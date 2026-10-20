@@ -9,7 +9,7 @@ from app.application.runtime.tools import as_langchain_tool
 from app.application.tools.recommendation_tools import build_quote_tool, QuoteInput
 from app.application.tools.order_tools import build_create_order_tool
 from app.application.tools.order_inputs import CreateOrderInput, ShippingAddressInput
-from app.application.tools.shopping_state_tool import build_shopping_state_tool
+from app.application.tools.shopping_operations import build_shopping_operations
 from app.application.agents.shopping_state import ShoppingWork, Filters, ShoppingUpdate, apply_update, compile_search
 from app.infrastructure.eventbus import TradeEventBus
 
@@ -99,13 +99,13 @@ def test_quote_and_address_schemas_are_nested_and_enforced():
     address=order['properties']['shipping_address']
     assert set(address['required'])=={'recipient_name','country','city','address_line'}
     assert address['additionalProperties'] is False
-    with pytest.raises(ValidationError): CreateOrderInput(sku_ids=['P1003-S1'],shipping_address={})
+    with pytest.raises(ValidationError): CreateOrderInput(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in ['P1003-S1']],shipping_address={})
 
 
 def test_shopping_tool_example_actually_enforces_budget():
-    description=build_shopping_state_tool(None).description
-    payload=json.loads(next(line.strip().removesuffix('。') for line in description.splitlines() if line.strip().startswith('{"update"')))
-    update=ShoppingUpdate.model_validate(payload['update'])
+    description=build_shopping_operations(None)[0].description
+    payload=json.loads(next(line.strip().removesuffix('。') for line in description.splitlines() if line.strip().startswith('{"changes"')))
+    update=ShoppingUpdate.model_validate(payload['changes'])
     state=apply_update(ShoppingWork(filters=Filters(),source_message_id='buyer-example'),update,'buyer-example')
     compiled=compile_search(state)
     assert compiled['parameters']['price_max_major']==300 and compiled['parameters']['landed_budget_major'] is None

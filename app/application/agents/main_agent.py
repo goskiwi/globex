@@ -23,7 +23,7 @@ from app.application.runtime.working_state import WorkingStateMiddleware
 from app.application.runtime.preferences import PreferenceStateMiddleware
 from app.application.runtime.task_plan import TaskPlanMiddleware
 from app.application.runtime.delivery import FinalDeliveryMiddleware
-from app.application.tools.shopping_state_tool import build_shopping_state_tool
+from app.application.tools.shopping_operations import build_shopping_operations
 from app.application.tools.capability_tools import (
     CAPABILITY_POLICY,
     build_capability_tools,
@@ -111,7 +111,7 @@ class MainAgentFactory:
             self._search_factory.evidence_store, self._bus), args_schema=ComparisonInput))
         from app.application.tools.research_delivery_tool import build_research_delivery_tool
         tools.append(as_langchain_tool(build_research_delivery_tool(self._search_factory.catalog_search.pricing.tariff.rates)))
-        tools.append(build_shopping_state_tool(self._search_factory.evidence_store))
+        tools.extend(build_shopping_operations(self._search_factory.evidence_store))
         functions = [
             build_task_dispatch_tool(
                 self._search_factory,

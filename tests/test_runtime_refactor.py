@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from app.application.runtime.execution import ExecutionMiddleware
 from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.working_state import WorkingStateMiddleware
-from app.application.tools.shopping_state_tool import build_shopping_state_tool
+from app.application.tools.shopping_operations import build_shopping_operations
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from tests.native_context_helpers import policy
@@ -26,9 +26,8 @@ from tests.test_agent_handoff import ScriptedModel, call
 async def test_command_updates_state_and_emits_one_complete_receipt():
     bus=TradeEventBus();events=[]
     token=ShoppingContext.set(ShoppingContextSnapshot('state','buyer','zh-CN','CNY'))
-    model=ScriptedModel(responses=[call('update_shopping_state',{
-        'update':{'filters':{'price_max_major':300,'target_currency':'CNY'}}}),AIMessage(content='已记录')])
-    graph=create_agent(model,tools=[build_shopping_state_tool(None)],middleware=[
+    model=ScriptedModel(responses=[call('set_shopping_requirements',{'changes': {'filters':{'price_max_major':300,'target_currency':'CNY'}}}),AIMessage(content='已记录')])
+    graph=create_agent(model,tools=[*build_shopping_operations(None)],middleware=[
         BusinessToolMiddleware(None,bus),WorkingStateMiddleware()])
     try:
         with observe_run_events(events.append):

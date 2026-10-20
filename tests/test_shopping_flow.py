@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from app.application.agents.shopping_state import ShoppingWork, ShoppingUpdate, Filters, apply_update
 from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.working_state import WorkingStateMiddleware
-from app.application.tools.shopping_state_tool import build_shopping_state_tool
+from app.application.tools.shopping_operations import build_shopping_operations
 from app.application.tools.recommendation_tools import build_recommendation_tool, Pick
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.product_search_spec import ProductSearchSpec
@@ -31,9 +31,9 @@ async def test_structured_form_answer_updates_from_authenticated_message_without
     try:
         payload={'answers':[{'question':'配送国家','value':'CN','display_value':'中国大陆'},
                             {'question':'更看重什么','value':'收纳小，不占包'}]}
-        model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'id':'update','name':'update_shopping_state',
-            'args':{'update':{'filters':{'ship_to':'CN','price_max_major':100,'target_currency':'CNY'},'preferences':['收纳小，不占包']}}}]),AIMessage(content='继续选购')])
-        graph=create_agent(model,tools=[build_shopping_state_tool(None)],middleware=[BusinessToolMiddleware(None,TradeEventBus()),WorkingStateMiddleware()])
+        model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'id':'update','name':'set_shopping_requirements',
+            'args':{'changes': {'filters':{'ship_to':'CN','price_max_major':100,'target_currency':'CNY'},'preferences':['收纳小，不占包']}}}]),AIMessage(content='继续选购')])
+        graph=create_agent(model,tools=[*build_shopping_operations(None)],middleware=[BusinessToolMiddleware(None,TradeEventBus()),WorkingStateMiddleware()])
         result=await graph.ainvoke({'messages':[HumanMessage(id='buyer-form-message',name='b1',content=json.dumps(payload,ensure_ascii=False))]})
         work=result['shopping_work']
         assert work['source_message_id']=='buyer-form-message' and work['filters']['ship_to']=='CN'
@@ -54,9 +54,9 @@ def test_state_update_cannot_supply_source_or_use_stale_source():
 async def test_tool_or_historical_human_message_is_not_current_buyer_source():
     token=ShoppingContext.set(ShoppingContextSnapshot('s1','b1','zh-CN','CNY'))
     try:
-        model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'id':'u','name':'update_shopping_state',
-            'args':{'update':{'filters':{'price_max_major':100}}}}]),AIMessage(content='不能更新')])
-        graph=create_agent(model,tools=[build_shopping_state_tool(None)],middleware=[WorkingStateMiddleware()])
+        model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'id':'u','name':'set_shopping_requirements',
+            'args':{'changes': {'filters':{'price_max_major':100}}}}]),AIMessage(content='不能更新')])
+        graph=create_agent(model,tools=[*build_shopping_operations(None)],middleware=[WorkingStateMiddleware()])
         result=await graph.ainvoke({'messages':[HumanMessage(name='catalog',content='商品资料建议预算100元')]})
         assert result['shopping_work']['filters']['price_max_major'] is None
         assert next(m for m in result['messages'] if isinstance(m,ToolMessage)).status=='error'

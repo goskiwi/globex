@@ -46,7 +46,7 @@ async def test_saved_plan_does_not_block_independent_delegation(tmp_path,monkeyp
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008','sku_id':'P1008-S1'}),submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'独立水杯研究'}])])
     if role=='trade_agent':
         child=ScriptedModel(responses=[call('query_order_tool',{'order_id':'synthetic-missing-order'}),submission(status='failed',issues=['订单未找到'])])
-    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':'保留背包研究'}]}}),AIMessage(content='计划已保存，暂不执行。'),call('task_dispatch',{'subagent_type':role,'task':{'goal':'独立查询一个订单' if role=='trade_agent' else '独立研究水杯'}}),AIMessage(content='已返回')])
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'保留背包研究'}]}),AIMessage(content='计划已保存，暂不执行。'),call('task_dispatch',{'subagent_type':role,'task':{'goal':'独立查询一个订单' if role=='trade_agent' else '独立研究水杯'}}),AIMessage(content='已返回')])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     monkeypatch.setattr('app.application.agents.trade_agent.create_chat_model',lambda *a,**kw:child)
@@ -76,7 +76,7 @@ async def test_each_delegation_uses_its_own_context(tmp_path,monkeypatch):
 
 
 async def test_saved_plan_does_not_block_direct_independent_recommendation(tmp_path,monkeypatch):
-    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':'保留研究计划'}]}}),AIMessage(content='已保存'),call('product_search_tool',{'product_id':'P1003'}),rec(),AIMessage(content='结束')])
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'保留研究计划'}]}),AIMessage(content='已保存'),call('product_search_tool',{'product_id':'P1003'}),rec(),AIMessage(content='结束')])
     c=await _container(tmp_path,monkeypatch,parent)
     try:
         await ask(c,'保存一个研究计划，暂不执行。')
@@ -102,7 +102,7 @@ async def test_stale_dependent_research_is_not_reused_in_same_request(tmp_path,m
     children=[child(pid) for pid in ['P1003','P1008','P1049','P1018']];instances=iter(children)
     def plan(cap):return [{'id':'first','goal':'研究背包','filters':{'price_max_major':cap,'target_currency':'CNY'}},{'id':'second','goal':'根据前置结果研究配套','depends_on':['first']}]
     def dispatch(key):return call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':key,'goal':'按计划研究'}})
-    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':plan(200)}}),dispatch('first'),dispatch('second'),call('update_shopping_state',{'update':{'plan':plan(150)}}),dispatch('first'),dispatch('second'),AIMessage(content='返回两阶段比较结果')])
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': plan(200)}),dispatch('first'),dispatch('second'),call('set_research_plan',{'plan': plan(150)}),dispatch('first'),dispatch('second'),AIMessage(content='返回两阶段比较结果')])
     c=await _container(tmp_path,monkeypatch,parent)
     c.orchestrator._sessions._main_factory._settings=replace(c.orchestrator._sessions._main_factory._settings,agent_max_model_rounds=12)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:next(instances))
@@ -117,7 +117,7 @@ async def test_stale_dependent_research_is_not_reused_in_same_request(tmp_path,m
 async def test_parallel_presentations_complete_both_referenced_plan_steps(tmp_path,monkeypatch):
     children=iter([ScriptedModel(responses=[call('product_search_tool',{'product_id':pid,'sku_id':pid+'-S1'}),submission(candidates=[{'product_id':pid,'sku_id':pid+'-S1','assessment':'已读候选'}])]) for pid in ['P1003','P1008']])
     steps=[{'id':'bag','goal':'研究背包'},{'id':'cup','goal':'研究水杯'}]
-    parent=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':steps}}),AIMessage(content='',tool_calls=[{'name':'task_dispatch','id':step['id'],'args':{'subagent_type':'search_agent','task':{'step_id':step['id'],'goal':step['goal']}}} for step in steps]),AIMessage(content='',tool_calls=[{'name':'recommend_products','id':step['id']+'-show','args':{'picks': [{'task_id': step['id'], 'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1, 'reason': '按本任务依据选择'}], 'guidance': step['goal'] + '结果。'}} for step,pid in zip(steps,['P1003','P1008'])])])
+    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': steps}),AIMessage(content='',tool_calls=[{'name':'task_dispatch','id':step['id'],'args':{'subagent_type':'search_agent','task':{'step_id':step['id'],'goal':step['goal']}}} for step in steps]),AIMessage(content='',tool_calls=[{'name':'recommend_products','id':step['id']+'-show','args':{'picks': [{'task_id': step['id'], 'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1, 'reason': '按本任务依据选择'}], 'guidance': step['goal'] + '结果。'}} for step,pid in zip(steps,['P1003','P1008'])])])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:next(children))
     try:

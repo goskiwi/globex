@@ -10,7 +10,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.application.tools.shopping_state_tool import build_shopping_state_tool
+from app.application.tools.shopping_operations import build_shopping_operations
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from app.application.agents.shopping_state import ShoppingWork, compile_search
 from app.application.runtime.working_state import WorkingStateMiddleware
@@ -36,7 +36,7 @@ async def main():
         store = ContextEvidenceStore(Path(folder)/'evidence.db')
         fn = build_product_search_tool(CatalogSearchUseCase(InMemoryProductRepository()), bus, store)
         from app.application.prompts.loader import load_prompts
-        graph = create_agent(model, tools=[as_langchain_tool(fn),build_shopping_state_tool(store)],
+        graph = create_agent(model, tools=[as_langchain_tool(fn),*build_shopping_operations(store)],
             system_prompt=load_prompts()['main_agent']['system_prompt'],
             middleware=[WorkingStateMiddleware()], checkpointer=InMemorySaver())
         config = {"configurable": {"thread_id": "state-live"}, "recursion_limit": 16}

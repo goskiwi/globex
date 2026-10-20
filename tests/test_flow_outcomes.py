@@ -80,7 +80,7 @@ async def test_pending_memory_does_not_discard_new_readonly_question(tmp_path,mo
 
 
 async def test_saved_unfinished_plan_does_not_mark_independent_lookup_partial(tmp_path,monkeypatch):
-    model=ScriptedModel(responses=[call('update_shopping_state',{'update':{'plan':[{'id':'bag','goal':'研究背包'},{'id':'earphone','goal':'研究耳机'}]}}),
+    model=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'研究背包'},{'id':'earphone','goal':'研究耳机'}]}),
         AIMessage(content='计划已保存，暂不执行。'),call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),AIMessage(content='已经核对这款背包当前库存。')])
     c=await _container(tmp_path,monkeypatch,model)
     try:

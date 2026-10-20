@@ -1,5 +1,6 @@
 """下单工具与确认接口共用地址输入；不承载交易授权。"""
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.application.agents.shopping_state import Choice
 
 
 class ShippingAddressInput(BaseModel):
@@ -16,11 +17,11 @@ class ShippingAddressInput(BaseModel):
 
 class CreateOrderInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    sku_ids: list[str] = Field(min_length=1, description="已选 SKU，数量从服务端选购状态读取")
+    items: list[Choice] = Field(min_length=1, description="本次明确选择的商品、SKU和正整数数量")
     shipping_address: ShippingAddressInput
 
     @model_validator(mode="after")
     def unique_skus(self):
-        if any(not sku.strip() for sku in self.sku_ids) or len(set(self.sku_ids)) != len(self.sku_ids):
-            raise ValueError("sku_ids 必须非空且不重复")
+        if len({item.sku_id for item in self.items}) != len(self.items):
+            raise ValueError("items中的SKU不得重复")
         return self
