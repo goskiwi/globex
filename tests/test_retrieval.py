@@ -333,5 +333,5 @@ async def test_semantic_results_count_models_instead_of_platform_copies(copies):
     partial = await catalog.execute(ProductSearchSpec(normalized_query='通勤背包', top_k=1))
     assert partial['catalogue_coverage']['unseen_model_count'] == 1
     # 买家指定跨平台对象时仍逐项返回，不能用语义召回去重吞掉明确身份。
-    exact = await catalog.execute(ProductSearchSpec(normalized_query='P9000 P9001', top_k=2))
-    assert [h['product_id'] for h in exact['hits']] == ['P9000', 'P9001']
+    exact = [await catalog.execute(ProductSearchSpec(product_id=pid)) for pid in ('P9000', 'P9001')]
+    assert [r['hits'][0]['product_id'] for r in exact] == ['P9000', 'P9001']

@@ -104,9 +104,9 @@ class CatalogSearchUseCase:
 
     async def execute(self, spec: ProductSearchSpec) -> dict:
         # 稳定实体 ID 直接核对权威目录，不能用向量 top-N 判断商品是否存在。
-        # 结构化标识优先；旧查询文字中的 ID 仍兼容，显式 ID 未命中不能退回模糊检索。
+        # 精确模式只由结构化标识触发；自然语言中的参照或否定编号仍属于检索词。
         exact_id = spec.sku_id or spec.product_id
-        identifiers = [exact_id] if exact_id else list(dict.fromkeys(re.findall(r"(?<![A-Za-z0-9])P\d{4,}(?:-S\d+)?(?![A-Za-z0-9-])", spec.normalized_query.upper())))
+        identifiers = [exact_id] if exact_id else []
         if identifiers:
             return await self._execute_exact_ids(spec, identifiers)
         if self._hybrid_enabled:

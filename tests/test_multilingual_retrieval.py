@@ -90,7 +90,7 @@ async def test_multilingual_card_and_authoritative_constraints():
             assert hit['source_locale'] == product.source_locale
             assert hit['data_provenance'] == 'synthetic'
     # 精确引用仍以旧 SKU 权威字段为准，不受扩容或语种影响。
-    exact = await usecase.execute(ProductSearchSpec(normalized_query='P1003-S1'))
+    exact = await usecase.execute(ProductSearchSpec(sku_id='P1003-S1'))
     assert exact['hits'][0]['skus'][0]['sku_id'] == 'P1003-S1'
 
 

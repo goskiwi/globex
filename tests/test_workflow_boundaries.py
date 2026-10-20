@@ -21,7 +21,7 @@ async def ask(c,text):
 async def test_parallel_presentations_through_full_production_factory(tmp_path,monkeypatch):
     recommend=rec().tool_calls[0]
     compare={'name':'compare_products','id':'compare','args':{'entries':[{'product_id':pid,'sku_id':pid+'-S1','quantity':1,'reason':'已读候选'} for pid in ['P1003','P1049']], 'preferred_sku_id':None,'dimensions':[],'guidance':'两款按已读资料比较'}}
-    model=ScriptedModel(responses=[call('product_search_tool',{'normalized_query':'P1003 P1049'}),AIMessage(content='',tool_calls=[recommend,compare]),AIMessage(content='结束')])
+    model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'name':'product_search_tool','id':pid,'args':{'product_id':pid}} for pid in ['P1003','P1049']]),AIMessage(content='',tool_calls=[recommend,compare]),AIMessage(content='结束')])
     c=await _container(tmp_path,monkeypatch,model)
     try:
         result,state=await ask(c,'推荐一款背包，并同时给出两款的比较。')

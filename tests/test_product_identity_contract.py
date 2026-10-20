@@ -64,8 +64,6 @@ async def test_invalid_or_conflicting_search_ids_fail(tools_env, params):
 async def test_exact_identity_and_query_both_use_authoritative_filters(tools_env):
     blocked = payload(await run_search(tools_env.search, product_id="P1001", filters=Filters(price_max_major=0.01, target_currency="CNY")))
     assert not blocked["hits"] and blocked["filtered_out"]
-    old = payload(await run_search(tools_env.search, normalized_query="核对 P1003-S1 库存"))
-    assert old["hits"][0]["default_sku_id"] == "P1003-S1"
 
 
 async def test_order_rejects_unsearched_product_and_does_not_create_confirmation(tools_env):
