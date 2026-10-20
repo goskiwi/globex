@@ -11,7 +11,7 @@ from tests.trade_test_helpers import test_address as sample_address
 
 
 async def test_delivery_with_unresolved_notice_does_not_stop_the_model():
-    messages = [call('cancel_order_tool', {'order_id': 'known', 'reason': 'test'}),
+    messages = [call('cancel_order_tool', {'order_id': 'known', 'reason': 'test'}, finish=True),
         ToolMessage(content='待核查', tool_call_id='call-1', name='cancel_order_tool',
                     artifact={'execution_id': 'accepted', 'notices': ['执行结果需要说明']})]
     assert await FinalDeliveryMiddleware().abefore_model({'messages': messages,
@@ -21,9 +21,9 @@ async def test_delivery_with_unresolved_notice_does_not_stop_the_model():
 async def test_three_turns_need_no_model_after_authoritative_confirmation(tmp_path, monkeypatch):
     model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}),
         call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1',
-            'quantity': 1, 'reason': '轻便', 'tradeoffs': []}], 'guidance': '这款适合随身携带。'}),
+            'quantity': 1, 'reason': '轻便', 'tradeoffs': []}], 'guidance': '这款适合随身携带。'}, finish=True),
         call('create_order_tool', {'items': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}],
-            'shipping_address': asdict(sample_address())})])
+            'shipping_address': asdict(sample_address())}, finish=True)])
     c = await _container(tmp_path, monkeypatch, model)
     try:
         before = await c.trade_store.get_inventory()
@@ -38,7 +38,7 @@ async def test_three_turns_need_no_model_after_authoritative_confirmation(tmp_pa
         resolved = await asyncio.gather(*(c.confirmations.resolve(card['confirmation_id'], 'b', 's', card['snapshot_hash'], True) for _ in range(3)))
         assert all(x == resolved[0] for x in resolved)
         assert (await c.trade_store.list_orders(buyer_id='b'))['total'] == 1
-        model.responses.append(call('cancel_order_tool', {'order_id': resolved[0]['order']['order_id'], 'reason': '重复选购'}))
+        model.responses.append(call('cancel_order_tool', {'order_id': resolved[0]['order']['order_id'], 'reason': '重复选购'}, finish=True))
         cancelled = await c.orchestrator.handle_intent(SubmitIntentInput('s', 'b', 'zh-CN', 'CNY', '准备取消刚才订单'))
         assert cancelled.error is None and '取消确认卡' in cancelled.final_text and model.cursor == 4
         assert (await c.trade_store.get_inventory())['P1003-S1'] == before['P1003-S1'] - 1

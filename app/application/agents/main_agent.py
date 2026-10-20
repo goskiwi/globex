@@ -93,6 +93,7 @@ class MainAgentFactory:
 
     def build(self) -> GraphSession:
         prompts = load_prompts()["main_agent"]
+        final_delivery = FinalDeliveryMiddleware()
         tools = [*self._search_factory.build_tools(), *self._trade_factory.build_tools()]
         from app.application.tools.product_details_tool import build_product_details_tool
         tools.append(as_langchain_tool(build_product_details_tool(self._search_factory.catalog_search,
@@ -132,7 +133,7 @@ class MainAgentFactory:
 
         system_prompt = prompts["system_prompt"]
         if self._capability_registry is not None:
-            names = {tool.name for tool in tools}
+            names = {tool.name for tool in [*tools, *final_delivery.tools]}
             system_prompt += "\n\n" + CAPABILITY_POLICY
             tools.extend(
                 as_langchain_tool(function)
@@ -150,7 +151,7 @@ class MainAgentFactory:
         context_policy = RequestContextMiddleware(
             self._search_factory.evidence_store,
             create_chat_model(self._settings,client=self._model_client,stream=False,throttle=self._throttle),self._settings,
-            system_prompt=system_prompt,tools=tools,skill_source=skill_source,
+            system_prompt=system_prompt,tools=[*tools,*final_delivery.tools],skill_source=skill_source,
             working_state_mode=self._settings.context_state_mode)
         graph = create_agent(
             model=create_chat_model(self._settings,client=self._model_client, throttle=self._throttle, bus=self._bus),
@@ -165,19 +166,19 @@ class MainAgentFactory:
                 GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, main=True,
                                     budget_lite_model=self._settings.llm_fallback_model,
-                                    delivery_tools=tuple(DELIVERY_KINDS)),
+                                    delivery_tools=(*DELIVERY_KINDS,'finish_turn')),
                 *([skill_source] if skill_source is not None else []),
                 PreferenceStateMiddleware(self._preference_store, self._preference_selector,
                                           self._settings.preference_top_k),
                 WorkingStateMiddleware(self._settings.context_state_mode),
                 TaskPlanMiddleware(),
-                FinalDeliveryMiddleware(),
+                final_delivery,
                 context_policy,
             ],
             checkpointer=self._checkpointer,
             name=prompts["name"],
         )
-        return GraphSession(graph=graph, config={"recursion_limit": graph_step_limit(graph, self._settings.agent_max_model_rounds)}, tool_names=frozenset(tool.name for tool in tools),
+        return GraphSession(graph=graph, config={"recursion_limit": graph_step_limit(graph, self._settings.agent_max_model_rounds)}, tool_names=frozenset(tool.name for tool in [*tools,*final_delivery.tools]),
                             context_policy=context_policy)
 
 

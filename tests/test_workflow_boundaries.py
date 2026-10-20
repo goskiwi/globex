@@ -9,7 +9,7 @@ from app.application.usecases.intents import SubmitIntentInput
 def rec(guidance='依据已读资料选择',task_id=None):
     pick={'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'依据目录候选'}
     if task_id:pick['task_id']=task_id
-    return call('recommend_products', {'picks': [pick], 'guidance': guidance})
+    return call('recommend_products', {'picks': [pick], 'guidance': guidance}, finish=True)
 
 
 async def ask(c,text):

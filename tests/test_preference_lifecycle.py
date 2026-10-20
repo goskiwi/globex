@@ -158,7 +158,7 @@ async def test_resumed_preferences_reach_child_search_and_final_recommendation(t
         call('product_search_tool', {'product_id': 'P1001'}),
         call('remember_preference_tool', {'kind': 'dislike', 'statement': '不要合成聚合物'}),
         call('task_dispatch', {'subagent_type': 'search_agent', 'task': {'goal': '核验P1001'}}),
-        call('recommend_products', {'picks': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'quantity': 1, 'reason': '旅行收纳'}], 'guidance': '旅行收纳选择'}),
+        call('recommend_products', {'picks': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'quantity': 1, 'reason': '旅行收纳'}], 'guidance': '旅行收纳选择'}, finish=True),
         AIMessage(content='该商品不符合材质要求')])
     container = await _container(tmp_path, monkeypatch, model)
     bind(container, store)

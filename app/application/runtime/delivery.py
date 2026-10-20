@@ -52,8 +52,23 @@ def presentation(name,payload,identifier):
     return {'id':identifier,'runId':context.source_run_id if context else '', 'kind':kind,'status':status,'payload':payload}
 
 
+async def finish_turn():
+    """声明本轮已完成，与最后的展示或确认工具同轮提交，不必等待其回执。
+
+    这里只声明结束意图；实际业务结果有错误、通知或未完成任务时不会提前结束。
+    中间展示详情后还要推荐时不要调用。不代替买家审批，不创建订单或修改库存。
+    普通无组件对话直接自然回复，无需调用本工具。
+    """
+    from app.application.runtime.results import ToolResult
+    return ToolResult({'finish_requested': True})
+
+
 class FinalDeliveryMiddleware(AgentMiddleware):
     state_schema=DeliveryState
+
+    def __init__(self):
+        from app.application.runtime.tools import as_langchain_tool
+        self.tools = [as_langchain_tool(finish_turn)]
 
     async def abefore_agent(self,state,runtime):
         from app.application.runtime.request_scope import ShoppingContext
@@ -71,10 +86,18 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         index=len(state['messages'])-len(receipts)-1
         call=state['messages'][index] if index>=0 else None
         if not isinstance(call,AIMessage) or {c['id'] for c in call.tool_calls}!={r.tool_call_id for r in receipts}:return None
+        if not any(r.name == 'finish_turn' for r in receipts):return None
         accepted={p['id']:p for p in state.get('presentations',[])}
         operations={p['id']:p for p in state.get('operation_receipts',[])}
         accepted.update(operations)
-        values=[accepted.get((r.artifact or {}).get('execution_id')) for r in reversed(receipts)]
+        business = [r for r in reversed(receipts) if r.name != 'finish_turn']
+        if not business:
+            # 单独补交声明只能接续最近一批干净的已交付回执，不能盖过失败或普通查询。
+            for message in reversed(state['messages'][:index]):
+                if not isinstance(message,ToolMessage):break
+                business.insert(0,message)
+        if not business or any(r.status!='success' or (r.artifact or {}).get('notices') for r in business):return None
+        values=[accepted.get((r.artifact or {}).get('execution_id')) for r in business]
         if not all(values):return None
         lines=[(p['guidance'] if p['id'] in operations else
                 '请填写下方的问题，提交后我会继续选购。' if p['kind']=='clarification' else p['payload']['guidance']) for p in values]
@@ -83,8 +106,6 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         context=ShoppingContext.current()
         request_id=(context.source_run_id or context.source_message_id) if context else ''
         remaining=pending_plan_goals(state.get('task_plan',{}),request_id)
-        if remaining and any(p['id'] in operations for p in values):
-            return None
-        if remaining:
-            lines.append(f'还有{len(remaining)}项计划任务尚未完成。')
+        if remaining and not any(p['id'] not in operations and p['status'] in {'partial','needs_input'} for p in values):return None
+        if remaining:lines.append(f'还有{len(remaining)}项计划任务尚未完成。')
         return {'messages':[AIMessage(content='\n\n'.join(lines))],'jump_to':'end'}

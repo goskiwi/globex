@@ -16,7 +16,7 @@ class Model(FakeMessagesListChatModel):
 
 
 def call(identifier):
-    return AIMessage(content="", tool_calls=[{"id": identifier, "name": "recommend_products", "args": {}}])
+    return AIMessage(content="", tool_calls=[{"id": identifier, "name": "recommend_products", "args": {}}, {"id":identifier+"-finish","name":"finish_turn","args":{}}])
 
 
 @pytest.mark.asyncio

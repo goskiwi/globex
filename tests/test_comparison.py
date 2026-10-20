@@ -34,7 +34,7 @@ async def test_compare_sibling_skus_quotes_and_terminal_delivery(comparison_env)
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs): return self
     model = Model(responses=[AIMessage(content="", tool_calls=[{"id":"comparison", "name":"compare_products", "args":{
-        "entries":[p.model_dump() for p in env.entries], "guidance":env.guidance, "preferred_sku_id":"P1001-S1", "dimensions":["颜色偏好"]}}]), AIMessage(content="不该执行")])
+        "entries":[p.model_dump() for p in env.entries], "guidance":env.guidance, "preferred_sku_id":"P1001-S1", "dimensions":["颜色偏好"]}},{"id":"finish","name":"finish_turn","args":{}}]), AIMessage(content="不该执行")])
     graph = create_agent(model, tools=[as_langchain_tool(env.tool, args_schema=ComparisonInput)], middleware=delivery_middlewares())
     try:
         output = await graph.ainvoke({"messages":[HumanMessage(content="比较两种规格")]})

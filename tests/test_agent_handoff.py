@@ -54,8 +54,11 @@ class ScriptedModel(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=response)])
 
 
-def call(name, args, identifier="call-1"):
-    return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": identifier}])
+def call(name, args, identifier="call-1", *, finish=False):
+    calls = [{"name": name, "args": args, "id": identifier}]
+    if finish:
+        calls.append({"name": "finish_turn", "args": {}, "id": identifier+"-finish"})
+    return AIMessage(content="", tool_calls=calls)
 
 
 def submission(**updates):

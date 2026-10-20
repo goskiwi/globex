@@ -120,7 +120,7 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs):
             return self
-    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_bundle", "args": { "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
+    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_bundle", "args": { "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}},{"id":"finish","name":"finish_turn","args":{}}]),
         AIMessage(content="两件合计418元")])
     tool = as_langchain_tool(build_bundle_tool(catalog, env.evidence, env.bus), args_schema=RecommendationInput)
     graph = create_agent(model, tools=[tool], middleware=delivery_middlewares())
@@ -128,7 +128,7 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
         effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY"}}))
     try:
         result = await graph.ainvoke({"messages": [HumanMessage(content="推荐两件") ]})
-        outputs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+        outputs = [m for m in result["messages"] if isinstance(m, ToolMessage) and m.name != "finish_turn"]
         assert len(outputs) == 1 and outputs[0].status == "success"
         assert outputs[0].artifact['data']['quote']['total_amount_minor'] == 41800
         assert json.loads(outputs[0].content)['displayed']

@@ -47,7 +47,7 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'args': {
             'subagent_type': 'search_agent', 'task': {'goal': step['goal'], 'step_id': step['id']}},
             'id': step['id']} for step in steps]),
-        call('present_research', {'reports': [{'task_id': task_id, 'title': {'bag':'背包研究','cup':'水杯研究'}[task_id]} for task_id in ['bag', 'cup']]}),
+        call('present_research', {'reports': [{'task_id': task_id, 'title': {'bag':'背包研究','cup':'水杯研究'}[task_id]} for task_id in ['bag', 'cup']]}, finish=True),
         AIMessage(content='下一轮无需重新交付研究。')])
     c = await _container(tmp_path, monkeypatch, model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: next(child_models))
@@ -119,7 +119,7 @@ async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,m
     if extra_goal:steps.append({'id':'cup','goal':'选择水杯','depends_on':['bag']})
     model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': steps})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','step_id':'bag'}}),
-        recommend(),AIMessage(content='有条件尚未满足')])
+        recommend(),AIMessage(content='还有1项计划任务尚未完成' if extra_goal else '有条件尚未满足')])
     c=await _container(tmp_path,monkeypatch,model)
     expose_unfiltered_research_source(c, monkeypatch)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
@@ -281,7 +281,7 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
     model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': [{'id':'bag','goal':'100元内的背包','filters':{'price_max_major':150 if within_budget else 100}}]})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','step_id':'bag'}}),
         call('compare_products',{'entries':[pick(),pick('P1003-S2')],'preferred_sku_id':None,
-                                 'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}),AIMessage(content='研究仍有缺口')])
+                                 'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}, finish=True),AIMessage(content='研究仍有缺口')])
     c=await _container(tmp_path,monkeypatch,model)
     expose_unfiltered_research_source(c, monkeypatch)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
