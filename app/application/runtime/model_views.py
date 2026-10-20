@@ -1,7 +1,7 @@
 """模型读资料与前端组件分离；完整记录仍由证据库和交付事件持有。"""
 from copy import deepcopy
 
-from app.infrastructure.context_products import business_view
+from app.infrastructure.context_products import business_view, result_identity
 
 
 def product_result_view(data):
@@ -59,3 +59,25 @@ def historical_products(data, selected):
     return {**{key: source[key] for key in ('result_ref', 'query_conditions', 'observed_at') if key in source},
             'historical': True, 'history_view': True, 'archived': not retained,
             'candidate_index': index, 'hits': retained}
+
+
+def historical_product_views(records, selected):
+    """每个SKU/报价条件只展开最近观察；旧观察仍能按各自引用恢复。"""
+    seen, views = set(), {}
+    for identifier, data in reversed(records):
+        preview = historical_products(data, selected)
+        owned = set()
+        conditions = data.get('query_conditions', {})
+        conditions = {**conditions, 'currency': conditions.get('target_currency') or conditions.get('currency')}
+        for hit in preview['hits']:
+            skus = hit.get('skus', [])
+            observations = [({**hit, 'skus': [sku],
+                'landed_price': sku.get('landed_price') or hit.get('landed_price', {})}, sku['sku_id'])
+                for sku in skus] or [(hit, hit['product_id'])]
+            for observation, target in observations:
+                key = result_identity(observation, conditions)
+                if key not in seen:
+                    owned.add(target)
+                    seen.add(key)
+        views[identifier] = historical_products(data, owned)
+    return views

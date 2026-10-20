@@ -194,17 +194,27 @@ class RequestContextMiddleware(AgentMiddleware):
         selected.update(protected_products(state.get('shopping_work')))
         updates = []
         archived_count = 0
-        from app.application.runtime.model_views import historical_products
+        from app.application.runtime.model_views import historical_product_views
+        historical = []
         for index, message in enumerate(messages[:latest_turn]):
             if not isinstance(message, ToolMessage) or message.id not in read or message.status != 'success':
                 continue
-            payload = message_data(message)
-            if not isinstance(payload, dict) or not payload.get('hits') or payload.get('history_view') or payload.get('archived'):
+            current_view = message_data(message)
+            if isinstance(current_view, dict) and current_view.get('displayed'):
                 continue
-            reference = payload.get('result_ref') or await self.store.save(
+            payload = (message.artifact or {}).get('data', current_view)
+            if isinstance(payload, dict) and payload.get('hits'):
+                historical.append((index, message, payload))
+        views = historical_product_views([(message.id, payload) for _, message, payload in historical], selected)
+        for index, message, payload in historical:
+            current_view = message_data(message)
+            current_reference = current_view.get('result_ref') if isinstance(current_view, dict) else None
+            reference = payload.get('result_ref') or current_reference or await self.store.save(
                 context.buyer_id, context.shopping_session_id, 'products', payload)
-            replacement = historical_products(payload, selected)
+            replacement = views[message.id]
             replacement['result_ref'] = reference
+            if replacement == current_view:
+                continue
             changed = project_data(message, replacement)
             updates.append(changed)
             messages[index] = changed

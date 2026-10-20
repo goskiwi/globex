@@ -4,7 +4,7 @@ import json
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from app.application.runtime.model_views import product_result_view, historical_products
+from app.application.runtime.model_views import product_result_view, historical_products, historical_product_views
 from app.application.usecases.intents import SubmitIntentInput
 from tests.test_agent_handoff import ScriptedModel, call
 from tests.test_langgraph_runtime import _container
@@ -38,6 +38,29 @@ def test_history_retains_only_selected_sku_facts_and_keeps_recoverable_candidate
     assert [x['product_id'] for x in view['candidate_index']] == ['P1003', 'P1049']
     assert view['result_ref'] == 'saved' and view['historical']
     assert len(raw['hits']) == 2 and len(raw['hits'][0]['skus']) == 2
+
+
+def test_repeated_selected_sku_keeps_latest_observation_without_pinning_old_history():
+    old = {'result_ref': 'old', 'hits': [{'product_id': 'P1003', 'title': '背包',
+        'default_sku_id': 'P1003-S1', 'skus': [{'sku_id': 'P1003-S1', 'stock': 5}]}]}
+    new = deepcopy(old)
+    new['result_ref'] = 'new'
+    new['hits'][0]['skus'][0]['stock'] = 3
+    views = historical_product_views([('old-call', old), ('new-call', new)], {'P1003-S1'})
+    assert views['old-call']['archived'] and not views['old-call']['hits']
+    assert views['old-call']['result_ref'] == 'old'
+    assert views['new-call']['hits'][0]['skus'][0]['stock'] == 3
+    assert old['hits'][0]['skus'][0]['stock'] == 5
+
+
+def test_historical_query_currencies_remain_separate_when_no_landed_quote_exists():
+    first = {'result_ref': 'cny', 'query_conditions': {'target_currency': 'CNY'}, 'hits': [
+        {'product_id': 'P1003', 'title': '背包', 'skus': [{'sku_id': 'P1003-S1'}]}]}
+    second = deepcopy(first)
+    second['result_ref'] = 'usd'
+    second['query_conditions']['target_currency'] = 'USD'
+    views = historical_product_views([('a', first), ('b', second)], {'P1003-S1'})
+    assert views['a']['hits'] and views['b']['hits']
 
 
 async def test_delivered_card_stays_complete_while_next_model_receives_only_receipt(tmp_path, monkeypatch):
