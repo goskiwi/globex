@@ -109,3 +109,31 @@ async def test_rerank_failure_keeps_filtered_coarse_pool_and_reports_no_success(
 def test_invalid_capacity_is_rejected_not_silently_clamped(value):
     with pytest.raises(ValueError, match='128'):
         CatalogSearchUseCase(InMemoryProductRepository([]), recall_candidates=value)
+
+
+@pytest.mark.parametrize('mode', ['keyword', 'vector', 'hybrid', 'hybrid_vector_fallback'])
+async def test_one_inventory_snapshot_per_search_is_shared_with_coverage_and_not_cached(mode):
+    item = product(0)
+    repo = InMemoryProductRepository([item])
+    inventory_reads = []
+    async def inventory(ids):
+        inventory_reads.append(list(ids))
+        return {sku: 5 if len(inventory_reads) == 1 else 0 for sku in ids}
+    repo.bind_inventory(inventory)
+    repo.find_by_ids = AsyncMock(side_effect=AssertionError('检索不得再次刷新相同目录的库存'))
+    index = SimpleNamespace(search=AsyncMock(return_value=[VectorHit(item.product_id, 1.0)]))
+    if mode == 'hybrid':
+        index.search_filtered = AsyncMock(return_value=[VectorHit(item.product_id, 1.0)])
+    usecase = CatalogSearchUseCase(repo,
+        embedder=SimpleNamespace(embed=AsyncMock(return_value=[1.0])) if mode != 'keyword' else None,
+        vector_index=index if mode != 'keyword' else None,
+        hybrid_enabled=mode.startswith('hybrid'))
+    spec = ProductSearchSpec(normalized_query='背包', top_k=5)
+    first = await usecase.execute(spec)
+    assert inventory_reads == [['P8000-S1']]
+    assert first['hits'][0]['skus'][0]['stock'] == 5
+    assert first['catalogue_coverage']['eligible_model_count'] == 1
+    second = await usecase.execute(spec)
+    assert len(inventory_reads) == 2
+    assert second['hits'] == [] and second['catalogue_coverage']['eligible_model_count'] == 0
+    assert first['hits'][0]['skus'][0]['stock'] == 5

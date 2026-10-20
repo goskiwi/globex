@@ -109,22 +109,24 @@ class CatalogSearchUseCase:
         identifiers = [exact_id] if exact_id else []
         if identifiers:
             return await self._execute_exact_ids(spec, identifiers)
+        products = await self._product_repo.list_all()
+        eligible = [product for product in products if self.eligible_skus(product, spec)]
         if self._hybrid_enabled:
-            return await self._with_catalogue_coverage(spec, await self._execute_hybrid(spec))
+            return self._with_catalogue_coverage(eligible, await self._execute_hybrid(spec, products, eligible))
         scored: list[tuple[float, Product]] = []
         recall_strategy = "keyword_2gram"
         rerank_applied = False
 
         if self._embedder is not None and self._vector_index is not None:
             try:
-                scored = await self._vector_recall(spec)
+                scored = await self._vector_recall(spec, products)
                 recall_strategy = "embedding_only"
             except Exception as err:  # noqa: BLE001 —— 召回基建异常必须降级而非失败
                 logger.warning("向量召回不可用，降级关键词召回：%s", err)
                 scored = []
 
         if not scored:
-            scored = await self._keyword_recall(spec)
+            scored = await self._keyword_recall(spec, products)
             recall_strategy = "keyword_2gram"
 
         candidates, filtered_out, diagnostics = self._prepare_candidates(spec, scored)
@@ -149,11 +151,10 @@ class CatalogSearchUseCase:
             # 如实告知"召回到了但被硬约束挡掉"，否则模型分不清"库里没有"与"被过滤"，
             # 会把超预算商品答成"没有这个商品"
             result["filtered_out"] = filtered_out
-        return await self._with_catalogue_coverage(spec, result)
+        return self._with_catalogue_coverage(eligible, result)
 
-    async def _with_catalogue_coverage(self, spec, result):
-        """从当前目录计数，区分尚未找到的型号与同款平台条目。"""
-        eligible = [p for p in await self._product_repo.list_all() if self.eligible_skus(p, spec)]
+    def _with_catalogue_coverage(self, eligible, result):
+        """复用本次检索的合格目录快照，不为统计重新读取库存。"""
         models = {p.canonical_product_id or p.product_id for p in eligible}
         returned = {h.get('canonical_product_id') or h['product_id'] for h in result['hits']}
         result['catalogue_coverage'] = {
@@ -220,10 +221,9 @@ class CatalogSearchUseCase:
                 "requested_identifiers": identifiers, "missing_identifiers": missing,
                 "filtered_out": rejected[:_FILTERED_OUT_LIMIT], "existence_checked": True}
 
-    async def _execute_hybrid(self, spec: ProductSearchSpec) -> dict:
+    async def _execute_hybrid(self, spec: ProductSearchSpec, products: list[Product], eligible: list[Product]) -> dict:
         # 两路共享同一份权威目录快照；过滤资格不依赖向量库的陈旧价格或库存。
-        products = await self._product_repo.list_all()
-        permitted = [p.product_id for p in products if self.eligible_skus(p, spec)]
+        permitted = [p.product_id for p in eligible]
         diagnostics = {"filter_mode": "adaptive_post_filter", "eligible_products": len(permitted),
                        "lexical_weight": self._fusion_weights[0], "vector_weight": self._fusion_weights[1],
                        "candidate_limit": self._candidate_limit(spec)}
@@ -241,7 +241,7 @@ class CatalogSearchUseCase:
                         diagnostics["filter_mode"] = "authoritative_ids"
                         by_id = {p.product_id: p for p in products}
                         return [(h.score, by_id[h.product_id]) for h in hits if h.product_id in by_id]
-                return await self._vector_recall(spec, embedding=embedding)
+                return await self._vector_recall(spec, products, embedding=embedding)
             except Exception as err:
                 logger.warning("Hybrid 向量侧不可用：%s", type(err).__name__)
                 return None
@@ -347,15 +347,14 @@ class CatalogSearchUseCase:
 
     # ---- 一阶段：向量召回 ----
 
-    async def _vector_recall(self, spec: ProductSearchSpec, embedding=None) -> list[tuple[float, Product]]:
+    async def _vector_recall(self, spec: ProductSearchSpec, products: list[Product], embedding=None) -> list[tuple[float, Product]]:
         if embedding is None:
             embedding = await self._embedder.embed(spec.normalized_query)
         limit = self._candidate_limit(spec)
         top_n = limit
+        by_id = {product.product_id: product for product in products}
         while True:
             vector_hits = await self._vector_index.search(embedding, top_n=top_n)
-            products = await self._product_repo.find_by_ids([hit.product_id for hit in vector_hits])
-            by_id = {product.product_id: product for product in products}
             scored = [(hit.score, by_id[hit.product_id]) for hit in vector_hits if hit.product_id in by_id]
             eligible = [(score, product) for score, product in scored if self.eligible_skus(product, spec)]
             if len(vector_hits) < top_n or top_n >= _MAX_VECTOR_RECALL or len(_distinct_products(eligible)) >= limit:
@@ -385,10 +384,10 @@ class CatalogSearchUseCase:
 
     # ---- 兜底：关键词召回 ----
 
-    async def _keyword_recall(self, spec: ProductSearchSpec) -> list[tuple[float, Product]]:
+    async def _keyword_recall(self, spec: ProductSearchSpec, products: list[Product]) -> list[tuple[float, Product]]:
         query_terms = tokenize(spec.normalized_query)
         candidates: list[tuple[float, Product]] = []
-        for product in await self._product_repo.list_all():
+        for product in products:
             score = self._keyword_score(query_terms, product, spec)
             if score > 0:
                 candidates.append((score, product))
