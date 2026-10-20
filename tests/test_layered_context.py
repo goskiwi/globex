@@ -75,15 +75,16 @@ async def test_unread_recent_turns_selection_and_no_pressure(tmp_path):
     state=history();mw=policy(tmp_path,product_tokens=1)
     assert not (await mw.compact_checkpoint({**state,'read_tool_messages':[]}))['messages']
     updates=await mw.compact_checkpoint(state)
-    assert len(updates['messages'])==6
-    assert not (await policy(tmp_path,product_tokens=999999).compact_checkpoint(state))['messages']
+    assert len(updates['messages'])==7
+    assert len((await policy(tmp_path,product_tokens=999999).compact_checkpoint(state))['messages'])==7
     for message in state['messages']:
         if isinstance(message,ToolMessage):
             message.content=message.content.replace('P0','P1000')
             message.artifact={'data':json.loads(message.content)}
     selected=await mw.compact_checkpoint({**state,'shopping_work':work_fixture(selected=['P1000-S1'])})
-    assert 't0' not in [m.id for m in selected['messages']]
-    assert all(m.id not in ['t6','t7'] for m in updates['messages'])
+    kept = next(m for m in selected['messages'] if m.id=='t0')
+    assert json.loads(kept.content)['hits'][0]['skus'][0]['sku_id']=='P1000-S1'
+    assert all(m.id != 't7' for m in updates['messages'])
 
 async def test_evidence_failure_does_not_mutate_messages(tmp_path):
     state=history();before=[m.model_dump() for m in state['messages']]
@@ -119,7 +120,7 @@ async def test_multiple_searches_in_recent_turns_and_selected_duplicates(tmp_pat
             m.artifact={'data':json.loads(m.content)}
     state['shopping_work']=work_fixture(selected=['P1001-S1'])
     updates=await policy(tmp_path,product_tokens=1).compact_checkpoint(state)
-    assert len(updates['messages'])==6 and 't7' not in [m.id for m in updates['messages']]
+    assert len(updates['messages'])==7 and 't7' not in [m.id for m in updates['messages']]
 
 @pytest.mark.parametrize('window',[128000,4096,64000])
 async def test_manual_api_operation_and_owner_are_persistent(tmp_path,monkeypatch,window):
@@ -194,12 +195,12 @@ async def test_read_markers_only_follow_successful_native_model_call(tmp_path):
     finally:await model.aclose()
 
 
-async def test_after_use_and_pressure_are_distinct_but_both_protect_unread(tmp_path):
+async def test_history_projection_is_independent_of_capacity_and_preserves_unread(tmp_path):
     state=history()
     pressure=policy(tmp_path,product_tokens=999999)
     eager=policy(tmp_path,product_tokens=999999,context_pruning_timing='after_use')
-    assert not (await pressure.compact_checkpoint(state))['messages']
-    assert len((await eager.compact_checkpoint(state))['messages'])==6
+    assert len((await pressure.compact_checkpoint(state))['messages'])==7
+    assert len((await eager.compact_checkpoint(state))['messages'])==7
     assert not (await eager.compact_checkpoint({**state,'read_tool_messages':[]}))['messages']
 
 

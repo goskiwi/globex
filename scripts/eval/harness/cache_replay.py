@@ -63,7 +63,8 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
         skills=SkillReferenceMiddleware(registry,personal,set())
         from app.application.runtime.preferences import PreferenceStateMiddleware
         from app.application.memory.preference_selector import PreferenceSelector
-        middlewares = [skills,PreferenceStateMiddleware(EmptyPreferences(), PreferenceSelector(), 5),RequestContextMiddleware(None,None,settings,
+        from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
+        middlewares = [skills,PreferenceStateMiddleware(EmptyPreferences(), PreferenceSelector(), 5),RequestContextMiddleware(ContextEvidenceStore(folder/'evidence.db'),None,settings,
             system_prompt=prompt+rules,tools=[],skill_source=skills,summary_enabled=False)]
         return GraphSession(create_agent(model, system_prompt=prompt + rules,
             middleware=middlewares, checkpointer=saver), {}, frozenset())

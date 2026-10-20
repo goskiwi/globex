@@ -14,6 +14,33 @@ from app.application.runtime.errors import ExecutionStopped
 from app.infrastructure.operational_metrics import begin_request, finish_request
 
 
+async def test_streamed_tool_call_has_first_output_time_and_reported_reasoning_usage():
+    from app.infrastructure.context_usage import context_usage_sink
+    chunks = [
+        {'choices': [{'index': 0, 'delta': {'tool_calls': [{'index': 0, 'id': 'call-probe',
+            'type': 'function', 'function': {'name': 'probe', 'arguments': '{}'}}]}, 'finish_reason': None}]},
+        {'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'tool_calls'}],
+         'usage': {'prompt_tokens': 12, 'completion_tokens': 10, 'total_tokens': 22,
+                   'completion_tokens_details': {'reasoning_tokens': 7}}}]
+    wire = ''.join('data: '+json.dumps({'id': 'stream-test', 'object': 'chat.completion.chunk',
+        'created': 1, 'model': 'test', **chunk})+'\n\n' for chunk in chunks)+'data: [DONE]\n\n'
+    samples = []
+    token = context_usage_sink.set(samples.append)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(
+            200, text=wire, headers={'content-type': 'text/event-stream'}))) as client:
+        model = ChatModelAdapter(model_name='test', client=AsyncOpenAI(api_key='test',
+            base_url='https://model.test/v1', http_client=client, max_retries=0))
+        try:
+            reply = await model.bind_tools([{'type':'function','function':{'name':'probe',
+                'parameters':{'type':'object','properties':{}}}}]).ainvoke([HumanMessage(content='调用probe')])
+            assert reply.tool_calls[0]['name']=='probe'
+            sample = samples[0]
+            assert 0 <= sample['prompt_cache']['first_chunk_ms'] <= sample['ttft_ms'] <= sample['elapsed_ms']
+            assert sample['prompt_cache']['reasoning_tokens']==7
+        finally:
+            context_usage_sink.reset(token)
+
+
 def completion(usage=True):
     result = {"id": "chat-test", "object": "chat.completion", "created": 1, "model": "test",
               "choices": [{"index": 0, "message": {"role": "assistant", "content": "完成"},

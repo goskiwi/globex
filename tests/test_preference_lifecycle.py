@@ -91,7 +91,7 @@ async def test_memory_decision_refreshes_search_and_hint(tmp_path, monkeypatch, 
         assert ('不要合成聚合物' in hint[0].text) == forbidden
         await ask(container, '再次核验商品')
         messages = (await state(container)).values['messages']
-        searches = [json.loads(m.content) for m in messages
+        searches = [m.artifact['data'] for m in messages
                     if isinstance(m, ToolMessage) and m.name == 'product_search_tool']
         assert all('hits' in m for m in searches), searches
         assert [len(m['hits']) for m in searches] == [1 if operation == 'remember' else 0,

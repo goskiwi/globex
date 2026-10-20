@@ -136,8 +136,11 @@ class ChatModelAdapter(BaseChatModel):
                     try:
                         response=await self.client.chat.completions.create(**payload)
                         if payload['stream']:
+                            protocol['stream_open_ms']=(time.monotonic()-started)*1000
                             async with response:
                                 async for chunk in response:
+                                    if 'first_chunk_ms' not in protocol:
+                                        protocol['first_chunk_ms']=(time.monotonic()-started)*1000
                                     body=chunk.model_dump()
                                     usage=body.get('usage') or usage
                                     protocol['response_model']=body.get('model') or protocol['response_model']
@@ -152,6 +155,9 @@ class ChatModelAdapter(BaseChatModel):
                                             content.append(delta['content']);first=first or time.monotonic()
                                             if run_manager: await run_manager.on_llm_new_token(delta['content'])
                                         for raw in delta.get('tool_calls') or []:
+                                            function=raw.get('function') or {}
+                                            if function.get('name') or function.get('arguments'):
+                                                first=first or time.monotonic()
                                             call=calls.setdefault(raw['index'],{'id':'','name':'','args':''})
                                             call['id']+=raw.get('id') or ''
                                             call['name']+=(raw.get('function') or {}).get('name') or ''
@@ -208,6 +214,9 @@ class ChatModelAdapter(BaseChatModel):
                         if reservation:reservation.settle(incoming+outgoing if known else None)
                         elapsed=(time.monotonic()-started)*1000
                         ttft=(first-started)*1000 if first is not None else None
+                        reasoning_tokens=((usage or {}).get('completion_tokens_details') or {}).get('reasoning_tokens')
+                        protocol['reasoning_tokens']=reasoning_tokens if type(reasoning_tokens) is int and reasoning_tokens>=0 else None
+                        protocol['first_content_or_tool_delta_ms']=ttft
                         protocol.update(read_cache_usage(usage or {}))
                         protocol['response_model_matches']=(protocol['response_model']==payload['model']) if protocol['response_model'] else None
                         if known:

@@ -44,6 +44,6 @@ async def test_sibling_comparison_then_prepare_second_sku_without_searching_agai
         assert data['confirmation_required'] and data['confirmation']['status']=='pending'
         line=data['confirmation']['payload']['items'][0]
         assert line['product_id']=='P1001' and line['sku_id']=='P1001-S2' and line['quantity']==2
-        assert parent.cursor==5 and await c.trade_store.get_inventory(['P1001-S2'])==inventory
+        assert parent.cursor==4 and await c.trade_store.get_inventory(['P1001-S2'])==inventory
         assert (await c.trade_store.list_orders(buyer_id='buyer'))['total']==0
     finally:await c.shutdown()

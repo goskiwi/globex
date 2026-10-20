@@ -55,8 +55,8 @@ async def test_current_results_archive_only_under_actual_request_pressure(tmp_pa
     middleware = policy(tmp_path, product_tokens=1, target_tokens=1)
     middleware.model = None
     update = await middleware.compact_checkpoint(state)
-    assert {m.id for m in update['messages']} == {f't{i}' for i in range(6)}
-    assert update['context_statistics']['archived_result_count'] == 6
+    assert {m.id for m in update['messages']} == {f't{i}' for i in range(8)}
+    assert update['context_statistics']['archived_result_count'] == 8
     for message in update['messages']:
         payload = json.loads(message.content)
         assert payload['archived'] and not payload['historical']
@@ -268,7 +268,7 @@ async def test_current_details_use_request_capacity_instead_of_candidate_count(t
         assert json.loads(message.content)['archived']
     state['messages'].append(HumanMessage(id='next', name='buyer', content='新的查询'))
     old = await middleware.compact_checkpoint(state)
-    assert len(old['messages']) == count - 2, '旧轮次恢复原有回收规则，不永久保护详情'
+    assert len(old['messages']) == count, '旧轮次全部转为可恢复引用，不保留整批详情'
 
 
 @pytest.mark.parametrize('completed',[False,True])

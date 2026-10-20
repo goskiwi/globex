@@ -62,12 +62,6 @@ def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evid
         直接提交本次明确选择的订单行；后端校验来源、保存选项并准备确认，无需先调详情、报价或选购工具。
         当前价库存、配送与完整到手报价由确认服务重新核验，不能以模型文字代替。
 
-        Args:
-            items (`list[Choice]`):
-                每项包含product_id、sku_id、quantity，必须来自当前买家会话证据。
-            shipping_address (`dict`):
-                收货地址，形如 {"recipient_name": "...", "country": "CN", "state": "...",
-                "city": "...", "address_line": "...", "postal_code": "...", "phone": "..."}。
         """
         try:
             buyer_id, session_id = _identity()
@@ -132,6 +126,7 @@ def build_cancel_order_tool(usecase: CancelOrderUseCase, bus: TradeEventBus):
     async def cancel_order_tool(order_id: str, reason: str) -> ToolResult:
         """准备当前买家的订单取消确认卡，不立即取消或回补库存。
 
+        本操作内部读取并校验当前订单，确认卡含原订单明细、金额与取消原因；无需先调查询工具。
         用户必须点击页面确认卡才能执行。自然语言同意不能代替该用户动作。
 
         Args:

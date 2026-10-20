@@ -81,7 +81,7 @@ async def test_history_word_does_not_disable_pressure_pruning(tmp_path):
         updates=await policy(tmp_path,product_tokens=1).compact_checkpoint(state)
         outcomes.append([m.id for m in updates["messages"]])
         assert state["messages"] == original
-    assert len(outcomes[0]) == 6 and outcomes[0] == outcomes[1] == outcomes[2]
+    assert len(outcomes[0]) == 7 and outcomes[0] == outcomes[1] == outcomes[2]
 
 
 async def test_latest_display_does_not_fall_back_to_unshown_search(tmp_path):

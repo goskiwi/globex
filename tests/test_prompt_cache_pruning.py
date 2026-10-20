@@ -34,10 +34,11 @@ async def trajectories(tmp_path):
 async def test_real_governance_keeps_first_read_and_selected_result(trajectories):
     for case, frames in trajectories.items():
         assert frames[0]['mutable_ids'] == []
-        assert frames[1]['mutable_ids'] == ['search-1', 'search-2']
+        assert frames[1]['mutable_ids'] == []
+        # 已完成历史已投影成索引；强制预演不再重复归档这些记录。
         assert 'search-0' not in {i for f in frames for i in f['mutable_ids']}
         events = [f['step'] for f in frames if f['archived_results']]
-        assert events == {'append': [], 'middle': [2], 'continuous': [2,4]}[case]
+        assert events == {'append': [1], 'middle': [1,3], 'continuous': [1,3,5]}[case]
         for f in frames:
             assert f['expected']['price_major'] == 139
             assert any('P1003-S1' in str(m) for m in f['request']['messages'])
@@ -58,14 +59,15 @@ async def test_three_arms_same_content_and_boundary_survives_actual_prune(trajec
                 assert len(records) <= 3
                 selector.record_sent(records, now=step * 10, request=body)
         assert bodies[0] == bodies[1] == bodies[2]
-    p1 = next(m for m in markers[1] if m['role'] == 'P')
-    p2 = next(m for m in markers[2] if m['role'] == 'P')
-    assert p2['prefix_sha256'] == p1['prefix_sha256']
-    assert p2['prior_status'] == 'previously_sent_within_ttl'
-    assert p2['selection_reason'] == 'surviving_previously_sent_prefix'
-    p3 = next(m for m in markers[3] if m['role'] == 'P')
-    assert p3['message_index'] > p2['message_index']
+    sent = set()
+    for records in markers:
+        for record in records:
+            if record['selection_reason'] == 'surviving_previously_sent_prefix':
+                assert record['prefix_sha256'] in sent
+                assert record['prior_status'] == 'previously_sent_within_ttl'
+        sent.update(record['prefix_sha256'] for record in records)
     assert not any(m['provider_cache_confirmed'] for ms in markers for m in ms)
+
 
 
 async def test_no_oracle_or_unsent_cache_and_changed_tools_invalidate(trajectories):

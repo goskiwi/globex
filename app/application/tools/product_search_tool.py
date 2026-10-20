@@ -54,29 +54,13 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         conditions: RequirementChange | None = None,
         runtime: ToolRuntime = None,
     ) -> ToolResult:
-        """按当前已生效条件筛选推荐候选，不是查看商品详情的入口。
-        检索命中已含完整目录业务字段与匹配SKU，不需要再做详情查询；精确ID查询仍筛选条件。
-        只填写检索词、目录分类、返回数量或精确 ID；normalized_query/product_id/sku_id 至少提供一个。
-        conditions只提交本轮需求变化，后端合并先前需求和长期偏好后直接检索并保存有效条件。
-        省略conditions沿用当前条件；子代理使用已绑定的委派条件，不修改主代理需求。
-        被筛掉的商品不代表不存在；只读查看由主Agent处理，不得为查看修改预算。
-        缺少/错误的条件交回 Main 更新状态；搜索不能偷偷放宽。存在目的地时每个SKU附单件到手报价，
-        多件组合报价由Main处理。到手总预算在最终推荐阶段校验，不等同于商品单价上限。
-        分类必须使用 schema 枚举，不填则不作分类硬过滤。
-        catalogue_coverage按全目录的当前硬条件统计型号和平台条目；unseen_model_count为尚未返回的型号数。
-        型号覆盖完整不代表所有平台已比较，也不代表未标属性已核实；分页时该统计属于完整结果。
-        返回skus只包含本次符合硬条件且有库存的规格；默认规格是其中目标币种价格最低者，
-        仅用于候选展示，不代表买家已经选择；其他规格不属于本次匹配结果。
-        规格原文参与召回，但相关性不证明颜色/尺寸等要求已满足；逐条核对真实SKU，不能组合不同规格的选项。
-        filtered_out按商品提供skus中的具体规格价格和reasons，不把一条规格的价格当整件商品价格。
-        候选资料含 description（用途与功能原文）、highlights（亮点）、skus（具体规格及价库存）、
-        material_tags（目录材质标签）、weight_kg（每个销售单位净重，千克，未知时不返回）、
-        dimensions_cm（商品尺寸，厘米）及 package_dimensions_cm（包装尺寸，不能当商品展开尺寸）。
-        price_major/currency 是展示币种的商品价；source_price_major/source_currency 和 skus 中的价格保留目录原币种。
-        原币种与展示币种可以不同，这本身不是数据冲突；相对价格判断使用相同币种的完整报价。
-        根据返回的字段名、值和描述阅读商品，不假设存在未返回的处理器、内存或功能字段。
-        候选是检索匹配，不保证适合用户；缺资料不等于没有功能，冲突字段不能用于证明优势。
-        商品和 SKU 同时填写时必须属于同一商品；精确查询未命中不能用相似商品代替。
+        """检索符合本次需求的候选，返回SKU、规格、功能原文、价库存、限制和证据引用。
+        conditions提交当前买家明确的需求变化，后端合并先前条件与长期偏好；省略则继承。
+        子任务不提交conditions，使用绑定的局部条件。精确ID也受这些条件筛选；只查看资料用get_product_details。
+        未命中不代表不存在；不猜分类、不放宽条件。候选匹配不等于符合全部用途，未知属性保持未知。
+        SKU不能跨规格组合。price_major/currency为展示币种价，source_*及SKU原价为目录原币种；比较使用同币种。
+        有目的地时附每SKU单件到手报价；多件报价及确认由对应业务操作计算。
+        catalogue_coverage统计硬条件下的目录型号/平台覆盖，不代表未标属性已核实。
         """
         query = SearchQuery(normalized_query=normalized_query, category=category, top_k=top_k,
                             product_id=product_id, sku_id=sku_id, conditions=conditions)

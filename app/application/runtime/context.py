@@ -221,6 +221,9 @@ class RequestContextMiddleware(AgentMiddleware):
             if isinstance(payload, dict) and not payload.get('archived') and not payload.get('history_view') and ('hits' in payload or len(message.content)>1000):
                 candidates.append((index, message, payload))
         protected = {m.id for m in messages if isinstance(m, ToolMessage) and m.id not in read}
+        protected.update(m.id for m in messages if isinstance(m, ToolMessage)
+                         and isinstance(message_data(m), dict) and message_data(m).get('history_view')
+                         and message_data(m).get('hits'))
         total = sum(token_estimate(payload) for _, _, payload in candidates)
         initial_total=total
         ratio=getattr(self.settings,'context_prune_low_ratio',1)

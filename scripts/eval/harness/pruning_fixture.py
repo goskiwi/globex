@@ -137,7 +137,7 @@ async def capture(case, folder, model, invoke, model_name):
                 content=json.dumps(expected, ensure_ascii=False, separators=(',', ':'))))
             write_json(folder / 'trajectory.json', {'case': case, 'initial_product_tokens': initial_tokens,
                        'frames': frames, 'state': [m.model_dump(mode="json") for m in agent.state["messages"]]})
-        expected_events = {'append': [], 'middle': [2], 'continuous': [2, 4]}[case]
+        expected_events = {'append': [1], 'middle': [1, 3], 'continuous': [1, 3, 5]}[case]
         actual_events = [f['step'] for f in frames if f['archived_results']]
         if actual_events != expected_events:
             raise ValueError(f'真实裁剪事件不符：{actual_events}，预期{expected_events}')
