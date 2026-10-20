@@ -125,11 +125,15 @@ def project_delivery_outcome(coverage):
 
 
 def pending_plan_goals(plan: ResearchPlan, request_id: str) -> list[str]:
-    """仅本次实际参与计划时报告未完成目标，独立操作不接管旧计划。"""
-    participates = any(task['scope']['request_id'] == request_id and task['scope']['step_id'] is not None
-                       for task in plan.get('tasks', {}).values())
-    return [step['goal'] for step in plan.get('steps', [])
-            if step['status'] not in {'reported', 'delivered'}] if request_id and participates else []
+    """本轮研究与显式计划共用未完成目标；独立操作不接管往轮任务。"""
+    if not request_id:
+        return []
+    current = [task for task in plan.get('tasks', {}).values() if task['scope']['request_id'] == request_id]
+    goals = [task['scope']['goal'] for task in current if task['scope']['step_id'] is None
+             and (task['status'] != 'completed' or not task.get('delivery') or task.get('stale'))]
+    if any(task['scope']['step_id'] is not None for task in current):
+        goals.extend(step['goal'] for step in plan.get('steps', []) if step['status'] not in {'reported','delivered'})
+    return goals
 
 
 def record_research(plan: ResearchPlan, work: ShoppingWork, data: dict) -> None:

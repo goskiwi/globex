@@ -179,3 +179,29 @@ async def test_existing_delivery_and_independent_research_can_progress_in_same_b
         assert [p['kind'] for p in result.presentations]==['recommendation','research']
     finally:
         await c.shutdown()
+
+
+async def test_confirmation_does_not_end_undelivered_implicit_research(tmp_path,monkeypatch):
+    from dataclasses import asdict
+    from tests.test_agent_handoff import ScriptedModel,call,submission
+    from tests.test_langgraph_runtime import _container
+    from app.application.usecases.intents import SubmitIntentInput
+    from app.domain.order.address import Address
+    parent=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
+        call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'独立研究水杯'}},identifier='cup-study'),
+        call('create_order_tool',{'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],
+            'shipping_address':asdict(Address('合成买家','CN','浙江','杭州','合成路1号','310000','13800000000'))}),
+        call('present_research',{'reports':[{'task_id':'cup-study-round-2','title':'水杯研究'}]})])
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008'}),
+        submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'已核验水杯候选'}])])
+    c=await _container(tmp_path,monkeypatch,parent)
+    monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
+    try:
+        before=await c.trade_store.get_inventory()
+        result=await c.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY','研究水杯并准备背包确认，先不确认。'))
+        assert result.status=='completed' and parent.cursor==4
+        assert [p['kind'] for p in result.presentations]==['research']
+        assert (await c.trade_store.list_confirmations(buyer_id='buyer',session_id='s'))[0]['status']=='pending'
+        assert await c.trade_store.get_inventory()==before
+    finally:
+        await c.shutdown()
