@@ -24,15 +24,15 @@ def scripted_response(request):
     tool=None;args={}
     if '拒绝' in query:pass
     elif '表单' in query and not results:
-        tool='show_shopping_form';args={'title':'耳机用途','questions':[{'id':'use','type':'text','label':'主要用途？'}]}
+        tool='show_shopping_form';args={'title':'耳机用途','questions':[{'id':'use','type':'text','label':'主要用途？'}],'turn_action':'finish'}
     elif '确认卡' in query and '取消' not in query and 'create_order_tool' not in calls:
-        tool='create_order_tool';args={'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],
+        tool='create_order_tool';args={'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],'turn_action':'finish',
             'shipping_address':{'recipient_name':'评测买家','country':'CN','state':'上海','city':'上海','address_line':'评测街1号','postal_code':'200000','phone':'00000000000'}}
     elif '订单 ' in query:
         order=re.search(r'订单\s+(\S+)',query).group(1)
         if not results:tool='query_order_tool';args={'order_id':order}
         elif '申请取消' in query and 'cancel_order_tool' not in calls:
-            tool='cancel_order_tool';args={'order_id':order,'reason':'买家不再需要'}
+            tool='cancel_order_tool';args={'order_id':order,'reason':'买家不再需要','turn_action':'finish'}
     elif not results:tool='product_search_tool';args={'product_id':'P1003','sku_id':'P1003-S1'}
     if tool:
         raw['choices'][0]['finish_reason']='tool_calls'

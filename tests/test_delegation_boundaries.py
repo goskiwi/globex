@@ -34,8 +34,9 @@ async def test_native_input_rejection_happens_before_child_execution():
     assert not seen and next(m for m in state['messages'] if isinstance(m,ToolMessage)).status=='error'
 
 
-async def test_plan_scope_comes_from_saved_definition_and_keeps_parent_state():
-    work=ShoppingWork(filters=Filters(target_currency='CNY'),preferences=['轻便优先'],plan=[PlanStep(id='bag',goal='已保存目标',requirements=['已保存要求'])])
+@pytest.mark.parametrize('preferences',[None,[],['款式优先']])
+async def test_plan_scope_comes_from_saved_definition_and_keeps_parent_state(preferences):
+    work=ShoppingWork(filters=Filters(target_currency='CNY'),preferences=['轻便优先'],plan=[PlanStep(id='bag',goal='已保存目标',requirements=['已保存要求'],preferences=preferences)])
     snapshot=ShoppingContextSnapshot('s','b','zh-CN','CNY',effective_search=compile_search(work),source_run_id='r',task_plan={'steps':[{'id':'bag','status':'pending'}],'tasks':{}})
     token=ShoppingContext.set(snapshot);seen=[]
     class Factory:
@@ -48,7 +49,7 @@ async def test_plan_scope_comes_from_saved_definition_and_keeps_parent_state():
         factory=Factory();result=await build_task_dispatch_tool(factory,factory,TradeEventBus())('search_agent',{'step_id':'bag'},runtime=SimpleNamespace(state={'shopping_work':work.model_dump()},tool_call_id='task'))
         assert seen[0]['delegated_task']['goal']=='已保存目标'
         effective=seen[0]['parent_context']['effective_search']
-        assert effective['requirements']==['已保存要求'] and effective['preferences']==['轻便优先']
+        assert effective['requirements']==['已保存要求'] and effective['preferences']==(['轻便优先'] if preferences is None else preferences)
         assert work.requirements==[] and work.preferences==['轻便优先']
         assert result.data['scope']['definition']['requirements']==['已保存要求']
     finally:ShoppingContext.reset(token)
@@ -69,3 +70,29 @@ async def test_dependencies_share_parent_model_projection_and_combined_budget():
     assert parent['candidates'][0]['facts']['result_ref']=='source-ref'
     assert token_estimate(dependencies)<12000 and token_estimate(parent)<token_estimate(raw)
     assert json.dumps(raw,ensure_ascii=False)==before
+
+
+async def test_small_dependency_view_keeps_readable_full_evidence(tmp_path):
+    from copy import deepcopy
+    from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
+    from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
+    raw=research();store=ContextEvidenceStore(tmp_path/'evidence.db')
+    candidate=raw['candidates'][0]
+    raw['candidates']=[]
+    for i in range(1000,1008):
+        item=deepcopy(candidate);item.update(product_id=f'P{i}',sku_id=f'P{i}-S1')
+        item['facts']['sku']['sku_id']=item['sku_id'];raw['candidates'].append(item)
+    context=ShoppingContextSnapshot('s','b','zh-CN','CNY');token=ShoppingContext.set(context)
+    try:
+        view=(await dependency_research_view({'bag':raw},store,context,token_limit=500))['bag']
+        assert view['offloaded'] and view['status']=='completed'
+        lookup=build_conversation_fact_lookup(store);offset=0;parts=[]
+        while True:
+            result=await lookup(result_ref=view['result_ref'],field_offset=offset)
+            assert result.ok
+            fragment=result.data['records'][0]['data'];parts.append(fragment['excerpt'])
+            if fragment['next_field_offset'] is None:break
+            offset=fragment['next_field_offset']
+        assert json.loads(''.join(parts))==raw
+        assert 'result_ref' not in raw
+    finally:ShoppingContext.reset(token)

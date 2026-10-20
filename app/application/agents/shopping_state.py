@@ -24,6 +24,8 @@ class PlanStep(StrictModel):
     goal: str = Field(min_length=1, max_length=240)
     filters: Filters = Field(default_factory=Filters)
     requirements: list[str] = Field(default_factory=list)
+    preferences: list[str] | None = Field(default=None,
+        description="本步骤的明确软偏好；省略继承当前偏好，[]清空局部偏好，不写长期记忆")
     depends_on: list[str] = Field(default_factory=list)
 
     @model_serializer(mode='wrap')

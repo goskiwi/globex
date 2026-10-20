@@ -108,6 +108,8 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                     goal = step.goal
                     filters = step.filters
                     scoped.requirements = list(dict.fromkeys([*scoped.requirements, *step.requirements]))
+                    if step.preferences is not None:
+                        scoped.preferences = list(step.preferences)
                 else:
                     goal, filters = task.goal, task.filters
                     if subagent_type == "trade_agent" and filters is not None:
