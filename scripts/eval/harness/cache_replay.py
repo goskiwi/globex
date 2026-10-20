@@ -52,7 +52,6 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
     model.temperature = 0
     model.max_tokens = runtime["output_limit"]
     model.client.timeout = runtime["request_timeout_seconds"]
-    mode = settings.skill_catalog_mode
     prompt = ("实验隔离键 " + uuid.uuid4().hex + "\n本实验只核对当前 Skill 目录，不执行选购。"
               "只输出 JSON 对象，available 是布尔值，version 是当前版本字符串；不存在时为 null。"
               "根据最新目录回答，历史商品资料不改变目录版本。")
@@ -70,8 +69,7 @@ async def run_skill_replay(case, settings, throttle, folder, repetition, collect
             middleware=middlewares, checkpointer=saver), {}, frozenset())
     class EmptyPreferences:
         async def list_by_buyer(self, *args): return []
-    factory = SimpleNamespace(capability_registry=registry, buyer_skill_store=personal,
-                              skill_catalog_mode=mode, build=build)
+    factory = SimpleNamespace(capability_registry=registry, buyer_skill_store=personal, build=build)
     engine=create_engine("sqlite+aiosqlite:///"+str(folder/"sessions.db"))
     await bootstrap_schema(engine)
     stores = [SqlSessionStore(engine)]

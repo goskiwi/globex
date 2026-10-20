@@ -11,7 +11,7 @@ from importlib.metadata import version
 ROOT = Path(__file__).resolve().parents[3]
 SUITE = ROOT / 'eval/harness/v1/suite.json'
 SCHEMA_VERSION = 'harness-eval-v1'
-POLICY_FIELDS = {'skill_catalog_mode', 'context_pruning_timing', 'context_product_tokens',
+POLICY_FIELDS = {'context_pruning_timing', 'context_product_tokens',
                  'context_target_tokens', 'context_prompt_layout', 'context_state_mode', 'context_prune_low_ratio', 'context_compact_result_rules', 'prompt_cache_mode', 'prompt_cache_policy'}
 WATCHED = ('app/application/agents/', 'app/application/harness/', 'app/application/memory/',
            'app/application/runtime/', 'app/infrastructure/langchain_model.py',

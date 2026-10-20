@@ -82,7 +82,6 @@ class MainAgentFactory:
         self.capability_registry = capability_registry
         self.buyer_skill_store = buyer_skill_store
         self.shopping_form_store = shopping_form_store
-        self.skill_catalog_mode = settings.skill_catalog_mode
         self._preference_selector = preference_selector or PreferenceSelector()
         self._loop_detector = loop_detector
         self._search_factory.bind_harness(loop_detector)
@@ -242,7 +241,6 @@ class SessionRegistry:
                 self._agents.pop(shopping_session_id, None)
                 raise PromptContractChanged("旧运行时快照保留只读，请在新会话继续")
         ShoppingContext.set_session_fence(claim.fence)
-        ShoppingContext.set_skill_catalog_mode(self._main_factory.skill_catalog_mode)
         capabilities = self._main_factory.capability_registry
         if capabilities is not None:
             import asyncio
@@ -250,7 +248,6 @@ class SessionRegistry:
                 capabilities.bind_session,
                 shopping_session_id,
                 context.buyer_id,
-                **({"allow_skill_updates": True} if self._main_factory.skill_catalog_mode == "append_only" else {}),
             )
             ShoppingContext.set_capability_digest(digest)
             record_prompt_assignment()

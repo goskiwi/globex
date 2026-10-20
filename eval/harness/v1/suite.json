@@ -47,18 +47,6 @@
         "prompt_cache_policy": "static_history",
         "context_prompt_layout": "stable_prefix"
       }
-    },
-    "skill_append": {
-      "label": "Skill 变化追加 / passthrough",
-      "overrides": {
-        "context_pruning_timing": "pressure",
-        "context_product_tokens": 6000,
-        "context_target_tokens": 48000,
-        "prompt_cache_mode": "passthrough",
-        "prompt_cache_policy": "static",
-        "context_prompt_layout": "legacy_system",
-        "skill_catalog_mode": "append_only"
-      }
     }
   },
   "profiles": {

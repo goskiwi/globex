@@ -29,7 +29,6 @@ class ShoppingContextSnapshot:
     prompt_variant: str = ""
     prompt_deployment_id: str = ""
     capability_digest: str = ""
-    skill_catalog_mode: str = "legacy"
     prompt_document_json: str = field(default="", repr=False)
     source_message_id: str = ""
     source_run_id: str = ""
@@ -42,13 +41,6 @@ _current_snapshot: ContextVar[Optional[ShoppingContextSnapshot]] = ContextVar(
 
 
 class ShoppingContext:
-    @staticmethod
-    def set_skill_catalog_mode(mode: str) -> None:
-        snapshot = _current_snapshot.get()
-        if snapshot is None or mode not in {"legacy", "append_only"}:
-            raise ValueError("Skill 注入模式或买家上下文无效")
-        _current_snapshot.set(replace(snapshot, skill_catalog_mode=mode))
-
     @staticmethod
     def set(snapshot: ShoppingContextSnapshot):
         return _current_snapshot.set(snapshot)

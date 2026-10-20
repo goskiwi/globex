@@ -148,7 +148,6 @@ async def test_unowned_legacy_snapshot_requires_explicit_migration(stores):
 
 class LocalFactory:
     capability_registry = None
-    skill_catalog_mode = "append_only"
 
     def __init__(self, saver=None):
         self.saver = saver or InMemorySaver()

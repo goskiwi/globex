@@ -5,7 +5,7 @@
   "dataset_provenance": "40 个既有上下文模板的新参数集 + 8 个生产工厂工作流；参数留出，不宣称全新任务分布。 v1.1 从目录推导全部黑色 SKU，补齐曜石黑及价格币种归属断言；原 v1 冒烟结果不覆盖。 新增3个开发集固定请求轨迹；它们的合成摘要没有模型调用，不与生产流程混算收益。 Skill 专项使用生产编排器、原生 Agent 和隔离 SQLite，冻结回答轨迹，仅评估目录注入，不代表完整选购收益。",
   "strategies": {
     "current": {
-      "label": "legacy_system / passthrough",
+      "label": "当前统一Skill资料策略",
       "overrides": {
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
@@ -13,18 +13,6 @@
         "prompt_cache_mode": "passthrough",
         "prompt_cache_policy": "static_history",
         "context_prompt_layout": "legacy_system"
-      }
-    },
-    "candidate": {
-      "label": "Skill 变化追加 / passthrough",
-      "overrides": {
-        "context_pruning_timing": "pressure",
-        "context_product_tokens": 6000,
-        "context_target_tokens": 48000,
-        "prompt_cache_mode": "passthrough",
-        "prompt_cache_policy": "static_history",
-        "context_prompt_layout": "legacy_system",
-        "skill_catalog_mode": "append_only"
       }
     }
   },

@@ -32,7 +32,6 @@ async def case(tmp_path, monkeypatch):
     model = await client_model(tmp_path, handler)
     container = await _container(tmp_path / "runtime", monkeypatch, model)
     factory = container.orchestrator._sessions._main_factory
-    factory.skill_catalog_mode = "append_only"
     async def ask(text, buyer="buyer"):
         return await container.orchestrator.handle_intent(
             SubmitIntentInput("session", buyer, "zh-CN", "CNY", text),
@@ -213,21 +212,32 @@ async def test_buyer_isolation_and_watermark_owner_fail_closed(case):
 def test_public_publish_is_hot_but_revoke_and_strategy_change_remain_blocked(tmp_path):
     registry = CapabilityRegistry(tmp_path / "capabilities.db")
     publish(registry, document())
-    first = registry.bind_session("s","b",allow_skill_updates=True)
+    first = registry.bind_session("s","b")
     publish(registry, document(version="2"))
-    with pytest.raises(CapabilityVersionChanged):
-        registry.bind_session("s","b")
-    assert registry.bind_session("s","b",allow_skill_updates=True) != first
+    assert registry.bind_session("s","b") != first
     with pytest.raises(CapabilityVersionChanged):
         registry.load_skill("backpack","1",available_tools={"product_search_tool"},require_current=True)
     assert registry.load_skill("backpack","2",available_tools={"product_search_tool"},require_current=True)
     registry.revoke("skill","backpack","1",actor="fixture",reason="硬撤销")
     with pytest.raises(CapabilityVersionChanged):
-        registry.bind_session("s","b",allow_skill_updates=True)
-    registry.bind_session("s-new","b",allow_skill_updates=True)
+        registry.bind_session("s","b")
+    registry.bind_session("s-new","b")
     publish(registry, document("strategy"))
     with pytest.raises(CapabilityVersionChanged):
-        registry.bind_session("s-new","b",allow_skill_updates=True)
+        registry.bind_session("s-new","b")
+
+
+async def test_normal_public_skill_add_and_update_do_not_require_a_new_conversation(case):
+    assert not (await case.ask('开始选购')).error
+    assert catalogue(case) == []
+    publish(case.registry, document())
+    assert not (await case.ask('继续选购')).error
+    assert catalogue(case)[0]['id'] == 'backpack' and catalogue(case)[0]['version'] == '1'
+    publish(case.registry, document(version='2'))
+    assert not (await case.ask('继续比较')).error
+    assert catalogue(case)[0]['version'] == '2'
+    assert len(case.requests) == 3
+    assert all(document()['body'] not in json.dumps(request, ensure_ascii=False) for request in case.requests)
 
 
 async def test_catalogue_does_not_preload_body_and_deletion_remains_authoritative(case):
@@ -254,9 +264,8 @@ async def test_deleted_active_skill_is_rejected_before_model(case):
     finally:ShoppingContext.reset(token)
 
 
-@pytest.mark.parametrize("mode", ["legacy", "append_only"])
 @pytest.mark.parametrize("scenario", ["unchanged", "edit", "delete"])
-async def test_existing_harness_skill_replay_uses_native_orchestrator_and_sqlite(tmp_path, monkeypatch, mode, scenario):
+async def test_existing_harness_skill_replay_uses_native_orchestrator_and_sqlite(tmp_path, monkeypatch, scenario):
     from scripts.eval.harness.cache_replay import run_skill_replay
     from app.infrastructure.throttle import GatewayThrottle
     from tests.test_retrieval import _settings
@@ -271,7 +280,7 @@ async def test_existing_harness_skill_replay_uses_native_orchestrator_and_sqlite
     model = await client_model(tmp_path,handler)
     monkeypatch.setattr("scripts.eval.harness.cache_replay.create_chat_model",lambda *a,**k:model)
     row = await run_skill_replay({"id":"skill-"+scenario,"scenario":scenario},
-        replace(_settings(tmp_path),skill_catalog_mode=mode),GatewayThrottle(1,0),
+        _settings(tmp_path),GatewayThrottle(1,0),
         tmp_path/"replay",0,None,{"output_limit":128,"request_timeout_seconds":10})
     assert row["passed"] and len(row["usage"]) == 4 and len(row["transcript"]) == 4
 

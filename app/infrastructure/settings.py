@@ -78,7 +78,6 @@ class Settings:
     llm_max_retries: int = 2  # 瞬时故障重试次数（指数退避）
     prompt_cache_mode: str = "passthrough"  # 不主动标记；不等于关闭供应商隐式缓存
     prompt_cache_policy: str = "static"
-    skill_catalog_mode: str = "legacy"  # 保留资料版本绑定策略；两种模式共用同一渐进加载链
     # ---- 四期：存储 ----
     # 默认 SQLite（零外部依赖，落在 DATA_DIR/globex.db）。
     # 换服务型数据库需自行装异步驱动（aiomysql / asyncpg）并改此 URL，本仓未验证。
@@ -150,7 +149,6 @@ def load_settings() -> Settings:
     data_dir = Path(os.getenv("DATA_DIR", str(PROJECT_ROOT / "data")))
     data_dir.mkdir(parents=True, exist_ok=True)  # SQLite 默认落在此目录，建库前必须存在
     return Settings(
-        skill_catalog_mode=os.getenv("SKILL_CATALOG_MODE", "legacy"),
         context_pruning_timing=os.getenv("CONTEXT_PRUNING_TIMING", "pressure"),
         context_product_tokens=int(os.getenv("CONTEXT_PRODUCT_TOKENS", "6000")),
         context_prompt_layout=os.getenv("CONTEXT_PROMPT_LAYOUT", "stable_prefix"),

@@ -307,7 +307,7 @@ class CapabilityRegistry:
                 items.append((row["kind"], row["id"], row["version"], row["state"], row["content_hash"]))
         return hashlib.sha256(canonical(items).encode()).hexdigest()
 
-    def bind_session(self, session_id, buyer_id, *, allow_skill_updates=False):
+    def bind_session(self, session_id, buyer_id):
         """普通轮次可刷新资料；工具读取仍固定本轮 digest，强撤销与策略变更不放行。"""
         if not session_id or not buyer_id:
             raise CapabilityError("能力版本绑定需要可信会话和买家")
@@ -319,16 +319,15 @@ class CapabilityRegistry:
             if previous is not None and previous["digest"] != digest:
                 policy = db.execute("SELECT policy_digest FROM capability_session_policies WHERE session_id=?",
                                     (session_id,)).fetchone()
-                if not allow_skill_updates or policy is None or policy["policy_digest"] != self._policy_fingerprint(db):
+                if policy is None or policy["policy_digest"] != self._policy_fingerprint(db):
                     raise CapabilityVersionChanged("本会话参考的 Skill 或审核策略已发布新版本、过期或撤销；为避免沿用历史正文，请新建选购会话")
                 db.execute("UPDATE capability_sessions SET digest=? WHERE session_id=?", (digest, session_id))
             db.execute("INSERT OR IGNORE INTO capability_sessions VALUES(?,?,?,?)", (session_id, buyer_id, digest, now().isoformat()))
-            if allow_skill_updates:
-                policy_digest = self._policy_fingerprint(db)
-                old = db.execute("SELECT policy_digest FROM capability_session_policies WHERE session_id=?", (session_id,)).fetchone()
-                if old is not None and old["policy_digest"] != policy_digest:
-                    raise CapabilityVersionChanged("审核策略或公共撤销记录已变化，请新建选购会话")
-                db.execute("INSERT OR IGNORE INTO capability_session_policies VALUES(?,?)", (session_id, policy_digest))
+            policy_digest = self._policy_fingerprint(db)
+            old = db.execute("SELECT policy_digest FROM capability_session_policies WHERE session_id=?", (session_id,)).fetchone()
+            if old is not None and old["policy_digest"] != policy_digest:
+                raise CapabilityVersionChanged("审核策略或公共撤销记录已变化，请新建选购会话")
+            db.execute("INSERT OR IGNORE INTO capability_session_policies VALUES(?,?)", (session_id, policy_digest))
             return digest
 
     def audit(self):

@@ -126,7 +126,6 @@ async def test_session_restore_is_blocked_before_agent_build_after_revoke(tmp_pa
     calls = []
     from tests.test_session_fencing import LocalFactory
     factory = SimpleNamespace(capability_registry=capabilities,
-        skill_catalog_mode="legacy",
         build=lambda: calls.append("build") or LocalFactory().build())
     registry = SessionRegistry(factory, await session_store(tmp_path / "sessions"))
     token = ShoppingContext.set(ShoppingContextSnapshot("session", "buyer", "zh-CN", "CNY"))

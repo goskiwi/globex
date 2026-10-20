@@ -63,7 +63,7 @@ class SkillReferenceMiddleware(AgentMiddleware):
         if context is None:
             raise ValueError("Skill 读取缺少可信买家上下文")
         digest = await asyncio.to_thread(self.registry.bind_session, context.shopping_session_id,
-            context.buyer_id, allow_skill_updates=context.skill_catalog_mode == "append_only")
+            context.buyer_id)
         if context.capability_digest and digest != context.capability_digest:
             raise ValueError("本轮 Skill 资料版本变化，请重试")
         return digest

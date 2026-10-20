@@ -8,8 +8,7 @@ def read_skill(registry, personal_store, available_tools, skill_id, version, *, 
     if context is None or registry is None:
         raise ValueError("Skill 读取缺少可信会话")
     digest = expected_digest if expected_digest is not None else registry.bind_session(
-        context.shopping_session_id, context.buyer_id,
-        allow_skill_updates=context.skill_catalog_mode == "append_only")
+        context.shopping_session_id, context.buyer_id)
     if context.capability_digest and digest != context.capability_digest:
         raise ValueError("本轮 Skill 资料版本变化，请重试")
     tools = frozenset(available_tools) & SKILL_TOOL_ALLOWLIST
