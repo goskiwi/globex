@@ -1,3 +1,4 @@
+from langgraph.types import Overwrite
 """布局在原生 SDK、审批恢复与最终请求边界验证，不请求外部模型。"""
 from copy import deepcopy
 from dataclasses import replace
@@ -32,13 +33,13 @@ async def test_native_reply_preserves_static_prefix_latest_budget_and_restore(tm
     token=ShoppingContext.set(ShoppingContextSnapshot('s','b','zh-CN','CNY'))
     try:
         for budget,text in [(300,'本次预算300元，寄到中国。'),(180,'预算改为180元。')]:
-            await graph.ainvoke({'shopping_work':work_fixture(budget=budget),'messages':[HumanMessage(name='b',content=text)]},config)
+            await graph.ainvoke({'shopping_work':work_fixture(budget=budget) if budget==300 else Overwrite(work_fixture(budget=budget)),'messages':[HumanMessage(name='b',content=text)]},config)
         assert requests[0]['messages'][0]==requests[1]['messages'][0]
         restored=build()
         state=await restored.aget_state(config)
         assert state.values['shopping_work']['filters']['price_max_major']==180
         assert not any(m.name=='shopping_state' for m in state.values['messages'])
-        await restored.ainvoke({'shopping_work':work_fixture(),'messages':[HumanMessage(name='b',content='换个需求，现在想买耳机。')]},config)
+        await restored.ainvoke({'shopping_work':Overwrite(work_fixture()),'messages':[HumanMessage(name='b',content='换个需求，现在想买耳机。')]},config)
         assert (await restored.aget_state(config)).values['shopping_work']['filters']['price_max_major'] is None
     finally:
         ShoppingContext.reset(token);await model.aclose()

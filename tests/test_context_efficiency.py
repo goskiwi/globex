@@ -1,3 +1,4 @@
+from langgraph.types import Overwrite
 """原生状态增量、请求投影与分页证据，不维护旧 Agent 执行器。"""
 from copy import deepcopy
 from dataclasses import replace
@@ -147,17 +148,17 @@ async def test_delta_graph_does_not_accumulate_unchanged_state_and_restores(tmp_
         async with AsyncSqliteSaver.from_conn_string(str(tmp_path/'graph.db')) as saver:
             graph=create_agent(model,system_prompt='固定规则',middleware=[
                 WorkingStateMiddleware('delta'),policy(tmp_path,system_prompt='固定规则',working_state_mode='delta')],checkpointer=saver)
-            for text in ['预算300元，选中P1003-S1，排除P1002。','还有别的款吗？','预算是多少？']:
-                await graph.ainvoke({'shopping_work':work_fixture(budget=300),'messages':[HumanMessage(name='b',content=text)]},config)
+            for index,text in enumerate(['预算300元，选中P1003-S1，排除P1002。','还有别的款吗？','预算是多少？']):
+                await graph.ainvoke({**({'shopping_work':work_fixture(budget=300)} if index==0 else {}),'messages':[HumanMessage(name='b',content=text)]},config)
             state=await graph.aget_state(config)
             assert len([m for m in state.values['messages'] if m.name in STATE_NAMES])==1
-            await graph.ainvoke({'shopping_work':work_fixture(budget=180),'messages':[HumanMessage(name='b',content='预算改为180元')]},config)
+            await graph.ainvoke({'shopping_work':Overwrite(work_fixture(budget=180)),'messages':[HumanMessage(name='b',content='预算改为180元')]},config)
         async with AsyncSqliteSaver.from_conn_string(str(tmp_path/'graph.db')) as saver:
             graph=create_agent(model,system_prompt='固定规则',middleware=[
                 WorkingStateMiddleware('delta'),policy(tmp_path,system_prompt='固定规则',working_state_mode='delta')],checkpointer=saver)
             state=await graph.aget_state(config)
             assert replay_state(state.values['messages'])[0]['filters']['price_max_major']==180
-            await graph.ainvoke({'shopping_work':work_fixture(),'messages':[HumanMessage(name='b',content='换个需求，现在想买耳机。')]},config)
+            await graph.ainvoke({'shopping_work':Overwrite(work_fixture()),'messages':[HumanMessage(name='b',content='换个需求，现在想买耳机。')]},config)
             state=await graph.aget_state(config)
             assert state.values['shopping_work']['filters']['price_max_major'] is None
             assert replay_state(state.values['messages'])[0]['filters']['price_max_major'] is None
