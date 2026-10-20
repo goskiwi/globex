@@ -2,7 +2,7 @@
 import math
 
 TOOL_LABELS = {
-    'product_search_tool': '检索商品', 'get_product_details': '读取商品资料',
+    'product_search_tool': '检索商品',
     'show_product_details': '准备商品详情', 'set_shopping_requirements': '更新选购需求', 'select_products': '保存选购项', 'set_research_plan': '保存研究计划',
     'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐', 'recommend_bundle': '准备组合推荐',
     'compare_products': '准备比较结果', 'show_shopping_form': '补充选购需求',
@@ -47,11 +47,6 @@ def label(name, arguments, data=None):
     if name == 'task_dispatch':
         agent = (data or {}).get('agent') if isinstance(data, dict) else None
         return AGENTS.get(text(agent) or text(arguments.get('subagent_type')), '委派专家任务')
-    if name == 'get_product_details' and isinstance(data, dict):
-        found = cards(data)
-        title = text(found[0].get('title')) if len(found) == 1 else ''
-        if title:
-            return f'读取 {title} 的资料'
     return TOOL_LABELS.get(name, '执行工具')
 
 
@@ -220,21 +215,6 @@ def result_summary(name, arguments, data, success, *, failure=None):
         if isinstance(data.get('hits'), list):
             query=request_summary(name,arguments)
             return (query+'；' if query else '')+f'本次返回{len(data["hits"])}个候选，供进一步核对与比较'
-    if name == 'get_product_details':
-        items = cards(data)
-        if not items:
-            return '未读取到指定商品资料'
-        item = items[0]
-        parts = []
-        if text(item.get('source_platform')):
-            parts.append('平台：' + PLATFORMS.get(item['source_platform'],item['source_platform']))
-        values = item.get('highlights')
-        if isinstance(values, list):
-            parts.extend(text(value) for value in values[:2] if text(value))
-        skus = item.get('skus')
-        if isinstance(skus, list):
-            parts.append(f'{len(skus)}个规格，含价格与库存')
-        return '；'.join(parts) or '已读取商品资料'
     if name == 'quote_products':
         return quote_summary(data.get('quote')) or '已取得报价结果'
     if name == 'load_agent_skill_tool':

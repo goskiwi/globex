@@ -10,7 +10,6 @@ from typing import Any, Optional
 #   category_insight 回 insights，订单三工具回 Order.snapshot()）
 TOOL_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "product_search_tool": ("hits", "recall_strategy"),
-    "get_product_details": ("hits", "existence_checked", "missing_identifiers"),
     "category_insight_tool": ("insights",),
     "create_order_tool": ("confirmation_required", "confirmation"),
     "query_order_tool": ("order_id", "status"),
@@ -54,6 +53,6 @@ def check_schema(tool_name: str, tool_result: Any) -> AssertionOutcome:
                 "reason": f"缺少必需字段：{', '.join(missing)}",
             },
         )
-    if tool_name in {'product_search_tool','get_product_details'} and 'hits' in data and not isinstance(data['hits'],list):
+    if tool_name == 'product_search_tool' and 'hits' in data and not isinstance(data['hits'],list):
         outcome.failures.append({'type':'schema','tool':tool_name,'reason':'hits 必须是列表'})
     return outcome

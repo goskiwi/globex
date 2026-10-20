@@ -1,129 +1,128 @@
-"""详情读取与候选筛选分离；使用原目录、证据库和库存，不改购物条件。"""
-import json
+"""完整目录读取属于详情卡内部；推荐资料只来自检索，展示不授予交易资格。"""
 from copy import deepcopy
 
 import pytest
 from pydantic import ValidationError
 
-from app.application.agents.shopping_state import ShoppingWork,Filters,compile_search
-from app.application.tools.product_details_tool import ProductDetailsInput,build_product_details_tool
+from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
+from app.application.tools.product_view_tool import ProductTarget, build_product_view_tool
 from app.application.tools.product_search_tool import build_product_search_tool
-from app.application.tools.recommendation_tools import build_recommendation_tool,Pick
+from app.application.tools.recommendation_tools import build_recommendation_tool, Pick
 from app.application.tools.order_tools import _verified_order_items
 from app.application.usecases.catalog_search import CatalogSearchUseCase
-from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
+from app.domain.catalog.product_search_spec import ProductSearchSpec
+from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env
 
 
-def test_detail_contract_has_no_budget_override_and_rejects_mismatched_sku():
-    assert ProductDetailsInput(product_id='P3020').sku_id is None
-    with pytest.raises(ValidationError):ProductDetailsInput(product_id='P3020',price_max_major=None)
-    with pytest.raises(ValidationError):ProductDetailsInput(product_id='P3020',sku_id='P3021-S1')
+def test_view_target_has_no_budget_override_and_rejects_mismatched_sku():
+    assert ProductTarget(product_id='P3020').sku_id is None
+    with pytest.raises(ValidationError):
+        ProductTarget(product_id='P3020', price_max_major=None)
+    with pytest.raises(ValidationError):
+        ProductTarget(product_id='P3020', sku_id='P3021-S1')
 
 
-async def test_complete_out_of_budget_and_out_of_stock_details_do_not_change_filters(confirmation_env):
-    e=confirmation_env
-    catalog=CatalogSearchUseCase(e.products,pricing=e.service._pricing)
-    work=ShoppingWork(filters=Filters(price_max_major=100,target_currency='CNY'),
-                      excluded_skus=['P3021-S1'])
-    effective=compile_search(work);before=deepcopy(effective)
-    token=ShoppingContext.set(ShoppingContextSnapshot('detail-test','buyer','zh-CN','CNY',effective_search=effective))
+async def test_complete_blocked_details_are_displayed_without_changing_filters(confirmation_env):
+    e = confirmation_env
+    catalog = CatalogSearchUseCase(e.products, pricing=e.service._pricing)
+    work = ShoppingWork(filters=Filters(price_max_major=100, target_currency='CNY'), excluded_skus=['P3021-S1'])
+    effective = compile_search(work)
+    before = deepcopy(effective)
+    token = ShoppingContext.set(ShoppingContextSnapshot('detail-test', 'buyer', 'zh-CN', 'CNY', effective_search=effective))
     try:
-        details=build_product_details_tool(catalog,e.bus,e.evidence)
-        search=build_product_search_tool(catalog,e.bus,e.evidence)
-        for product_id,platform in [('P3020','amazon'),('P3021','ebay')]:
-            returned=await details(product_id)
+        show = build_product_view_tool(catalog, e.evidence, e.bus)
+        search = build_product_search_tool(catalog, e.bus, e.evidence)
+        for product_id, platform in [('P3020', 'amazon'), ('P3021', 'ebay')]:
+            returned = await show([{'product_id': product_id}], '查看颈枕的完整资料。')
             assert returned.ok
-            data=json.loads(returned.text);p=data['hits'][0]
-            assert data['existence_checked'] and not data['missing_identifiers']
-            assert p['source_platform']==platform and len(p['skus'])==2
-            assert p['description'] and p['dimensions_cm'] and p['weight_kg']==0.15
+            p = returned.data['hits'][0]
+            assert p['source_platform'] == platform and len(p['skus']) == 2
+            assert p['description'] and p['dimensions_cm'] and p['weight_kg'] == .15
             assert all('over_price_cap' in s['constraint_issues'] for s in p['skus'])
-            if product_id=='P3020':
-                assert all(s['stock']==0 and 'out_of_stock' in s['constraint_issues'] for s in p['skus'])
+            if product_id == 'P3020':
+                assert all(s['stock'] == 0 and 'out_of_stock' in s['constraint_issues'] for s in p['skus'])
             else:
-                assert p['skus'][1]['display_price_major']==213.99
-                assert p['skus'][1]['currency']=='USD' and p['skus'][1]['stock']>0
-                assert p['skus'][0]['sku_id']=='P3021-S1' # 被排除规格仍可查看。
-            blocked=json.loads((await search(product_id=product_id)).text)
-            assert blocked['hits']==[] and blocked['filtered_out']
-        assert effective==before and work.filters.price_max_major==100
-        assert await e.evidence.find_product('buyer','detail-test',product_id='P3021',sku_id='P3021-S2') is None
+                assert p['skus'][1]['display_price_major'] == 213.99
+                assert p['skus'][1]['currency'] == 'USD' and p['skus'][1]['stock'] > 0
+                assert p['skus'][0]['sku_id'] == 'P3021-S1'
+            blocked = (await search(product_id=product_id)).data
+            assert blocked['hits'] == [] and blocked['filtered_out']
+        assert effective == before and work.filters.price_max_major == 100
+        assert await e.evidence.find_product('buyer', 'detail-test', product_id='P3021', sku_id='P3021-S2') is None
         with pytest.raises(ValueError):
-            await _verified_order_items(e.evidence,'buyer','detail-test',
-                [{'product_id':'P3021','sku_id':'P3021-S2','quantity':1}])
-        refused=await build_recommendation_tool(catalog, e.evidence, e.bus)([Pick(product_id='P3021', sku_id='P3021-S2', quantity=1, reason='想查看这款')], '这款只供查看。')
+            await _verified_order_items(e.evidence, 'buyer', 'detail-test', [{'product_id': 'P3021', 'sku_id': 'P3021-S2', 'quantity': 1}])
+        refused = await build_recommendation_tool(catalog, e.evidence, e.bus)(
+            [Pick(product_id='P3021', sku_id='P3021-S2', quantity=1, reason='想查看这款')], '这款只供查看。')
         assert not refused.ok
-        assert len(await e.evidence.search('buyer','detail-test',kind='product_details'))==2
-    finally:ShoppingContext.reset(token)
+        assert len(await e.evidence.search('buyer', 'detail-test', kind='product_view')) == 2
+    finally:
+        ShoppingContext.reset(token)
 
 
-async def test_native_main_reads_both_platform_records_without_budget_change(tmp_path,monkeypatch):
-    from tests.test_agent_handoff import ScriptedModel,call
+async def test_catalog_exact_missing_ids_and_all_skus_even_when_specific_sku_requested(confirmation_env):
+    catalog = CatalogSearchUseCase(confirmation_env.products)
+    spec = ProductSearchSpec(normalized_query='颈枕', target_currency='CNY')
+    for product_id, sku_id, missing in [('P99999', None, 'P99999'), ('P3020', 'P3020-S99', 'P3020-S99')]:
+        data = await catalog.product_details(product_id, spec, sku_id=sku_id)
+        assert data['hits'] == [] and data['existence_checked'] and data['missing_identifiers'] == [missing]
+    p = (await catalog.product_details('P3020', spec, sku_id='P3020-S2'))['hits'][0]
+    assert p['default_sku_id'] == 'P3020-S2' and len(p['skus']) == 2
+
+
+async def test_readonly_quote_uses_display_without_granting_candidate_permission(confirmation_env):
+    from app.application.tools.recommendation_tools import build_quote_tool, Choice
+    e = confirmation_env
+    session = 'detail-quote'
+    catalog = CatalogSearchUseCase(e.products, pricing=e.service._pricing)
+    token = ShoppingContext.set(ShoppingContextSnapshot(session, 'buyer', 'zh-CN', 'CNY',
+        effective_search=compile_search(ShoppingWork(filters=Filters(price_max_major=1, target_currency='CNY')))))
+    try:
+        shown = await build_product_view_tool(catalog, e.evidence, e.bus)(
+            [{'product_id': 'P3021', 'sku_id': 'P3021-S2'}], '查看颈枕的当前资料。')
+        assert shown.ok
+        quote = await build_quote_tool(catalog.pricing, e.evidence, e.bus)(
+            [Choice(product_id='P3021', sku_id='P3021-S2', quantity=1)], 'CN', 'CNY')
+        assert quote.ok and quote.data['quote']['items'][0]['sku_id'] == 'P3021-S2'
+        assert await e.evidence.find_product('buyer', session, product_id='P3021', sku_id='P3021-S2') is None
+        with pytest.raises(ValueError):
+            await _verified_order_items(e.evidence, 'buyer', session, [{'product_id': 'P3021', 'sku_id': 'P3021-S2', 'quantity': 1}])
+        assert await e.evidence.find_observed_product('other', session, product_id='P3021', sku_id='P3021-S2') is None
+        assert (await e.store.list_orders(buyer_id='buyer'))['total'] == 0
+    finally:
+        ShoppingContext.reset(token)
+
+
+async def test_native_search_supplies_recommendation_facts_without_another_catalog_read(tmp_path, monkeypatch):
+    import json
+    from langchain_core.messages import ToolMessage
+    from tests.test_agent_handoff import ScriptedModel, call
     from tests.test_langgraph_runtime import _container
     from app.application.usecases.intents import SubmitIntentInput
-    from langchain_core.messages import AIMessage,ToolMessage
-    reads=AIMessage(content='',tool_calls=[{'id':pid,'name':'get_product_details','args':{'product_id':pid}}
-        for pid in ('P3020','P3021')])
-    model=ScriptedModel(responses=[call('set_shopping_requirements',{'changes': {
-        'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
-        reads,AIMessage(content='这款仍能查看；两个平台记录分别缺货或超预算，预算保持不变。')])
-    container=await _container(tmp_path,monkeypatch,model)
+
+    model = ScriptedModel(responses=[
+        call('product_search_tool', {'product_id': 'P1003', 'conditions': {'filters': {
+            'price_max_major': 200, 'target_currency': 'CNY', 'ship_to': 'CN'}}}),
+        call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S2',
+            'quantity': 1, 'reason': '轻便、可折叠，适合看重收纳便利性的需求。'}],
+            'guidance': '可以考虑这款背包。'}, turn_action='finish')])
+    container = await _container(tmp_path, monkeypatch, model)
     try:
-        result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY',
-            '商品价100元人民币，查看Roamix航空颈枕'))
-        assert result.status=='completed' and not result.presentations
-        agent=container.orchestrator._sessions._agents['s']
-        state=await agent.graph.aget_state(agent.config)
-        assert state.values['shopping_work']['filters']['price_max_major']==100
-        receipts=[json.loads(m.content) for m in model.seen[-1] if isinstance(m,ToolMessage) and m.name=='get_product_details']
-        assert len(receipts)==2 and all(len(p['hits'][0]['skus'])==2 for p in receipts)
-        assert {p['hits'][0]['source_platform'] for p in receipts}=={'amazon','ebay'}
-        assert not await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
-    finally:await container.shutdown()
-
-
-def test_repeated_detail_reads_ignore_new_refs_but_notice_stock_changes():
-    from app.application.harness.loop_detector import LoopDetector
-    detector=LoopDetector()
-    def result(index,stock):return {'hits':[{'product_id':'P3020','skus':[{'sku_id':'P3020-S1','stock':stock}]}],
-                                  'result_ref':f'new-{index}','observed_at':index}
-    state={}
-    for index in (1,2,3):
-        observation=detector.observation('get_product_details',{'product_id':'P3020'},result(index,0),'success',{}, read_only=True)
-        state,hint=detector.advance(state,[observation])
-        assert bool(hint)==(index==3)
-    state,hint=detector.advance(state,[detector.observation('get_product_details',{'product_id':'P3020'},result(4,1),'success',{}, read_only=True)])
-    assert hint is None and not state['stop']
-
-
-async def test_precise_missing_ids_and_all_skus_even_when_specific_sku_requested(confirmation_env):
-    e=confirmation_env;tool=build_product_details_tool(CatalogSearchUseCase(e.products),e.bus,e.evidence)
-    token=ShoppingContext.set(ShoppingContextSnapshot('details','buyer','zh-CN','CNY'))
-    try:
-        for product_id,sku_id,missing in [('P99999',None,'P99999'),('P3020','P3020-S99','P3020-S99')]:
-            data=json.loads((await tool(product_id,sku_id)).text)
-            assert data['hits']==[] and data['existence_checked'] and data['missing_identifiers']==[missing]
-        p=json.loads((await tool('P3020','P3020-S2')).text)['hits'][0]
-        assert p['default_sku_id']=='P3020-S2' and len(p['skus'])==2
-    finally:ShoppingContext.reset(token)
-
-
-async def test_readonly_quote_uses_details_without_granting_candidate_permission(confirmation_env):
-    from app.application.tools.recommendation_tools import build_quote_tool,Choice
-    e=confirmation_env;session='detail-quote'
-    catalog=CatalogSearchUseCase(e.products,pricing=e.service._pricing)
-    token=ShoppingContext.set(ShoppingContextSnapshot(session,'buyer','zh-CN','CNY',
-        effective_search=compile_search(ShoppingWork(filters=Filters(price_max_major=1,target_currency='CNY')))))
-    try:
-        details=await build_product_details_tool(catalog,e.bus,e.evidence)('P3021','P3021-S2')
-        assert details.ok
-        quote=await build_quote_tool(catalog.pricing,e.evidence,e.bus)(
-            [Choice(product_id='P3021',sku_id='P3021-S2',quantity=1)],'CN','CNY')
-        assert quote.ok and quote.data['quote']['items'][0]['sku_id']=='P3021-S2'
-        assert await e.evidence.find_product('buyer',session,product_id='P3021',sku_id='P3021-S2') is None
-        with pytest.raises(ValueError):
-            await _verified_order_items(e.evidence,'buyer',session,[{'product_id':'P3021','sku_id':'P3021-S2','quantity':1}])
-        assert await e.evidence.find_observed_product('other',session,product_id='P3021',sku_id='P3021-S2') is None
-        assert (await e.store.list_orders(buyer_id='buyer'))['total']==0
-    finally:ShoppingContext.reset(token)
+        result = await container.orchestrator.handle_intent(SubmitIntentInput('s', 'b', 'zh-CN', 'CNY',
+            '推荐200元以内、寄中国的通勤背包，展示商品卡，先不下单。'))
+        assert result.status == 'completed' and model.cursor == 2
+        session = container.orchestrator._sessions._agents['s']
+        tools = {tool.name for tool in session.context_policy.tools}
+        assert 'get_product_details' not in tools
+        receipt = next(m for m in model.seen[1] if isinstance(m, ToolMessage) and m.name == 'product_search_tool')
+        product = json.loads(receipt.content)['hits'][0]
+        assert product['description'] and product['weight_kg'] == .38
+        assert product['rating_summary']['average'] == 4.2
+        assert {sku['sku_id'] for sku in product['skus']} == {'P1003-S1', 'P1003-S2'}
+        assert all(sku['stock'] > 0 for sku in product['skus'])
+        card = result.presentations[0]['payload']['hits'][0]
+        assert card['default_sku_id'] == 'P1003-S2' and card['weight_kg'] == product['weight_kg']
+        assert card['landed_price']['items'][0]['sku_id'] == 'P1003-S2'
+        assert (await container.trade_store.list_orders(buyer_id='b'))['total'] == 0
+    finally:
+        await container.shutdown()

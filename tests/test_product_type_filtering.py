@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import ValidationError
 
 from app.application.agents.shopping_state import Filters, ShoppingWork, ShoppingUpdate, apply_update, compile_search
-from app.application.tools.product_details_tool import build_product_details_tool
+from app.application.tools.product_view_tool import build_product_view_tool
 from app.application.tools.recommendation_tools import build_recommendation_tool, Pick
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.usecases.catalog_search import CatalogSearchUseCase
@@ -57,7 +57,7 @@ async def test_exact_search_explains_mismatch_and_unknown_without_hiding_details
     effective = compile_search(ShoppingWork(filters=Filters(product_type='背包')))
     token = ShoppingContext.set(ShoppingContextSnapshot('s','b','zh-CN','CNY', effective_search=effective))
     try:
-        details = await build_product_details_tool(catalog, TradeEventBus(), ContextEvidenceStore(tmp_path/'e.db'))('P9901')
+        details = await build_product_view_tool(catalog, ContextEvidenceStore(tmp_path/'e.db'), TradeEventBus())([{'product_id':'P9901'}], '查看指定商品的资料。')
         assert details.ok and details.data['hits'][0]['product_id']=='P9901'
         assert details.data['hits'][0]['product_type']==kind
         assert reason in details.data['hits'][0]['skus'][0]['constraint_issues']

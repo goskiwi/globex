@@ -1,23 +1,34 @@
 """Main显式交付只读商品详情；不调用推荐筛选，不修改购物状态。"""
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.application.tools.order_tools import _ok, _fail
 from app.domain.catalog.product_search_spec import ProductSearchSpec
-from app.application.tools.product_details_tool import ProductDetailsInput
 from app.application.runtime.request_scope import ShoppingContext
+
+
+class ProductTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    product_id: str = Field(pattern=r"^P\d{4,}$", description="已从目录、历史或筛选拒绝摘要中识别的具体商品ID")
+    sku_id: str | None = Field(default=None, pattern=r"^P\d{4,}-S\d+$", description="可选的具体SKU；卡片仍展示全部规格，不隐藏缺货规格")
+
+    @model_validator(mode="after")
+    def matching_product(self):
+        if self.sku_id and self.sku_id.split('-S')[0] != self.product_id:
+            raise ValueError("product_id与sku_id必须属于同一商品")
+        return self
 
 
 class ProductViewInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    targets: list[ProductDetailsInput] = Field(min_length=1, max_length=12, description="要查看的商品与可选具体SKU；不同平台记录分别填写，明确规格须保持，不代表购买选购")
+    targets: list[ProductTarget] = Field(min_length=1, max_length=12, description="要查看的商品与可选具体SKU；不同平台记录分别填写，明确规格须保持，不代表购买选购")
     guidance: str = Field(min_length=1, max_length=600, description="对买家说的简短查看说明，用商品名称，不用内部编号。资料、规格、价格和库存由卡片展示，不逐项复述，不劝提高预算才能看")
 
 
 def build_product_view_tool(catalog, evidence_store, bus):
-    async def show_product_details(targets: list[ProductDetailsInput], guidance: str):
+    async def show_product_details(targets: list[ProductTarget], guidance: str):
         """把指定商品交付为只读详情卡，缺货、超预算或条件不满足也能展示。
 
-        用户要求看看、查看详情时可直接展示已指定对象；需要额外分析资料时再读取详情。
+        用户要求看看、查看详情时直接提交指定对象，本工具实时读取目录并展示完整资料。
         不确定对象时先从检索/历史定位目录ID。商品事实由代码实时读取，不由你重填。
         同款由页面按canonical_product_id合并为一张商品卡，卡内保留各平台全部规格和报价。
         targets仍提交各平台记录，不能自行丢掉报价；guidance不要按记录数说成多款或多张卡。

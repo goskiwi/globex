@@ -115,12 +115,11 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
     from app.application.usecases.intents import SubmitIntentInput
     guidance='下面是 Roamix 单侧颈枕的资料，按平台分别展示。'
     model=ScriptedModel(responses=[call('set_shopping_requirements',{'changes': {'filters':{'price_max_major':100,'target_currency':'CNY'}}}),
-        call('get_product_details',{'product_id':'P3020'}),
         call('show_product_details',{'targets':[{'product_id':'P3020'},{'product_id':'P3021'}],'guidance':guidance}, turn_action='finish')])
     container=await _container(tmp_path,monkeypatch,model)
     try:
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','商品价100元人民币，看看颈枕'))
-        assert (result.presentations[-1]["kind"]=="product_view") and result.final_text==guidance and model.cursor==3
+        assert (result.presentations[-1]["kind"]=="product_view") and result.final_text==guidance and model.cursor==2
         state=await container.orchestrator._sessions._agents['s'].graph.aget_state({'configurable':{'thread_id':'s'}})
         assert state.values['shopping_work']['filters']['price_max_major']==100
         batches = await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
@@ -135,17 +134,14 @@ async def test_readonly_target_retains_requested_sku_without_purchase(tmp_path,p
     from app.infrastructure.persistence.in_memory_repositories import InMemoryProductRepository
     from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
     from app.infrastructure.eventbus import TradeEventBus
-    from app.application.tools.product_details_tool import build_product_details_tool
     catalog=CatalogSearchUseCase(InMemoryProductRepository());store=ContextEvidenceStore(tmp_path/'evidence.db');bus=TradeEventBus()
     context=ShoppingContextSnapshot('view-target','buyer','zh-CN','CNY',effective_search={'parameters':{'target_currency':'CNY','ship_to':'CN'}})
     token=ShoppingContext.set(context)
     try:
-        read=await build_product_details_tool(catalog,bus,store)(product,sku)
         shown=await build_product_view_tool(catalog,store,bus)([{'product_id':product,'sku_id':sku}],f'查看 {sku} 当前规格和库存。')
         assert shown.ok
-        first=read.data['hits'][0];second=shown.data['hits'][0]
-        assert first['default_sku_id']==second['default_sku_id']==sku
-        assert first['price_major']==second['price_major']
+        second=shown.data['hits'][0]
+        assert second['default_sku_id']==sku
         assert second['landed_price']['items'][0]['sku_id']==sku
         assert ShoppingContext.current()==context and not context.selected_lines
     finally:ShoppingContext.reset(token)

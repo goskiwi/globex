@@ -5,7 +5,6 @@ from langchain_core.messages import AIMessage,HumanMessage
 from ag_ui.core import RunAgentInput
 from app.application.agents.shopping_state import ShoppingWork,Filters,compile_search
 from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
-from app.application.tools.product_details_tool import build_product_details_tool
 from app.application.tools.product_view_tool import build_product_view_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.intents import SubmitIntentInput
@@ -23,14 +22,14 @@ def context():
 
 
 @pytest.mark.parametrize('product,sku',[('P40018','P40018-S2'),('P3004','P3004-S2')])
-async def test_requested_sku_survives_read_to_display(tmp_path,product,sku):
+async def test_requested_sku_survives_direct_display(tmp_path,product,sku):
     catalog=CatalogSearchUseCase(InMemoryProductRepository());bus=TradeEventBus();evidence=ContextEvidenceStore(tmp_path/'evidence.db');token=context()
     try:
-        read=await build_product_details_tool(catalog,bus,evidence)(product,sku)
         shown=await build_product_view_tool(catalog,evidence,bus)([{'product_id':product,'sku_id':sku}],'查看这款商品的当前资料。')
-        a=read.data['hits'][0];b=shown.data['hits'][0]
-        print(json.dumps({'read_sku':a['default_sku_id'],'display_sku':b['default_sku_id'],'read_price':a['price_major'],'display_price':b['price_major'],'all_display_skus':[s['sku_id'] for s in b['skus']]},ensure_ascii=False))
-        assert a['default_sku_id']==b['default_sku_id'],'明确读取S2后，展示重新默认成S1'
+        assert shown.ok
+        card=shown.data['hits'][0]
+        assert card['default_sku_id']==sku, '明确请求的S2必须保持'
+        assert card['landed_price']['items'][0]['sku_id']==sku
     finally:ShoppingContext.reset(token)
 
 

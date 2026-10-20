@@ -141,7 +141,7 @@ class TaskEvidence:
             self.capture_lookup([ToolMessage(content="", name=name, tool_call_id=payload.get("tool_call_id","lookup"),
                 id=payload.get("tool_call_id"), artifact={"data":payload})])
             return
-        if name not in {"product_search_tool", "get_product_details", "category_insight_tool", "web_search_tool",
+        if name not in {"product_search_tool", "category_insight_tool", "web_search_tool",
                         "query_order_tool", "create_order_tool", "cancel_order_tool", "quote_products"}:
             return
         self.successful_tools.add(name)

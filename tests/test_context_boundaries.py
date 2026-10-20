@@ -16,7 +16,8 @@ from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.tool_view import bounded_tool_view
 from app.application.runtime.tools import as_langchain_tool
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
-from app.application.tools.product_details_tool import build_product_details_tool, ProductDetailsInput
+from app.application.tools.product_search_tool import build_product_search_tool, SearchQuery
+from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.domain.catalog.money import Money
 from app.domain.catalog.product import Product
@@ -36,21 +37,21 @@ from tests.test_retrieval import _settings
 
 @pytest.fixture
 def scope():
-    token = ShoppingContext.set(ShoppingContextSnapshot('handoff', 'buyer', 'zh-CN', 'CNY'))
+    token = ShoppingContext.set(ShoppingContextSnapshot('handoff', 'buyer', 'zh-CN', 'CNY', effective_search=compile_search(ShoppingWork(filters=Filters()))))
     yield
     ShoppingContext.reset(token)
 
 
 @pytest.mark.parametrize('count,window', [(1,128000),(3,24000)])
-async def test_unread_large_details_are_bounded_and_next_turn_recovers(tmp_path, scope, count, window):
+async def test_unread_large_search_results_are_bounded_and_next_turn_recovers(tmp_path, scope, count, window):
     description = '\n'.join(f'资料{i:05d}：完整商品信息与不同使用条件需要保留。' for i in range(5000))
     item = Product(product_id='P8800', title='合成资料', brand='测试', category='旅行装备', origin_country='CN',
                    description=description, skus=[Sku('P8800-S1','标准',Money.from_major_units(1500,'CNY'),5)])
     store = ContextEvidenceStore(tmp_path/'evidence.db')
     bus = TradeEventBus()
-    detail = build_product_details_tool(CatalogSearchUseCase(InMemoryProductRepository([item])), bus, store)
-    tool = as_langchain_tool(detail, args_schema=ProductDetailsInput)
-    first = AIMessage(content='',tool_calls=[{'id':f'detail-{i}','name':'get_product_details',
+    search = build_product_search_tool(CatalogSearchUseCase(InMemoryProductRepository([item])), bus, store)
+    tool = as_langchain_tool(search, args_schema=SearchQuery)
+    first = AIMessage(content='',tool_calls=[{'id':f'detail-{i}','name':'product_search_tool',
         'args':{'product_id':'P8800'}} for i in range(count)])
     model = ScriptedModel(responses=[first,AIMessage(content='资料已保存，可继续按需读取。'),AIMessage(content='你好')])
     summary = SimpleNamespace(ainvoke=AsyncMock(return_value=AIMessage(content=summary_selection())))
@@ -137,7 +138,7 @@ def test_incomplete_json_fragment_is_not_promoted_to_a_fact_quote():
     from app.application.runtime.context_summary import source_entries, build_summary
     data={'hits': [], 'fragment': '{"单价":150', 'fragment_format':'json_text',
           'incomplete':True, 'result_ref':'ctx_original'}
-    message=ToolMessage(id='large',name='get_product_details',tool_call_id='read',
+    message=ToolMessage(id='large',name='product_search_tool',tool_call_id='read',
                         content=json.dumps(data,ensure_ascii=False),artifact={'data':data})
     summary=build_summary(summary_selection(),source_entries([message]),'ctx_archive')
     assert summary['goals'][0]['content_scope']=='reference'

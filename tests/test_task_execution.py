@@ -21,10 +21,24 @@ from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 
 def expose_unfiltered_research_source(container, monkeypatch):
     """故意向测试专家开放不适格源，验证下游不会依赖搜索过滤而漏检。"""
-    from app.application.tools.product_details_tool import build_product_details_tool
+    from app.domain.catalog.product_search_spec import ProductSearchSpec
     factory = container.orchestrator._sessions._main_factory._search_factory
-    tools = [*factory.build_tools(), as_langchain_tool(build_product_details_tool(
-        factory.catalog_search, factory._bus, factory.evidence_store))]
+    original = factory.build_tools()
+    async def product_search_tool(product_id: str):
+        """测试中故意让检索后端泄漏不适格资料，验证研究提交仍独立核验。"""
+        context = ShoppingContext.current()
+        policy = context.effective_search
+        parameters = dict(policy['parameters'])
+        budget = parameters.pop('landed_budget_major', None)
+        spec = ProductSearchSpec(product_id=product_id, **parameters,
+            excluded_product_ids=tuple(policy.get('excluded_products', [])),
+            excluded_sku_ids=tuple(policy.get('excluded_skus', [])))
+        data = await factory.catalog_search.product_details(product_id, spec, landed_budget_major=budget)
+        data['recall_strategy'] = 'injected_unfiltered_result'
+        data['result_ref'] = await factory.evidence_store.save(context.buyer_id, context.shopping_session_id, 'product_view', data)
+        return ToolResult(data)
+    tools = [as_langchain_tool(product_search_tool, read_only=True),
+             *[tool for tool in original if tool.name != 'product_search_tool']]
     monkeypatch.setattr(factory, 'build_tools', lambda: tools)
 
 
@@ -113,7 +127,7 @@ def recommend(picks=None,*,bundle=False):
 @pytest.mark.parametrize('budget,extra_goal',[(100,False),(150,False),(150,True)])
 async def test_plan_verification_and_delivery_share_scoped_conditions(tmp_path,monkeypatch,budget,extra_goal):
     candidate={'product_id':'P1003','sku_id':'P1003-S1','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
-    child=ScriptedModel(responses=[call('get_product_details',{'product_id':'P1003'}),
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
                                   submission(candidates=[candidate]),submission(candidates=[candidate]),submission(candidates=[candidate])])
     steps=[{'id':'bag','goal':'选择背包','filters':{'price_max_major':budget}}]
     if extra_goal:steps.append({'id':'cup','goal':'选择水杯','depends_on':['bag']})
@@ -183,8 +197,8 @@ async def test_plan_dependency_blocks_early_dispatch(tmp_path,monkeypatch):
 async def test_ab_warning_and_stop_survive_rejected_approval_and_restart(tmp_path,monkeypatch):
     from tests.test_langgraph_runtime import PreferenceStore
     from app.application.memory.preference_selector import PreferenceSelector
-    a=call('get_product_details',{'product_id':'P1003'})
-    b=call('get_product_details',{'product_id':'P1001'})
+    a=call('product_search_tool',{'product_id':'P1003'})
+    b=call('product_search_tool',{'product_id':'P1001'})
     model=ScriptedModel(responses=[a,b,a,b,call('remember_preference_tool',{'kind':'like','statement':'喜欢轻便'}),
                                   a,b,AIMessage(content='已有资料不足，结束重复查询')])
     store=PreferenceStore()
@@ -200,7 +214,7 @@ async def test_ab_warning_and_stop_survive_rejected_approval_and_restart(tmp_pat
         result,state=await ask(c,'拒绝',confirmations=({'interrupt_id':event.reply_id+':'+event.tool_calls[0].id,'approved':False},))
         assert result.stop_reason=='repeated_path'
         assert any('研究阶段已结束' in m.text for m in model.seen[-1])
-        assert sum(isinstance(m,ToolMessage) and m.name=='get_product_details' for m in state['messages'])==6
+        assert sum(isinstance(m,ToolMessage) and m.name=='product_search_tool' for m in state['messages'])==6
         assert state['loop_state']['history']==[]
     finally:await c.shutdown()
 
@@ -274,7 +288,7 @@ async def test_implicit_task_conditions_cannot_be_omitted_at_delivery(tmp_path,m
 
 @pytest.mark.parametrize('within_budget',[False,True])
 async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_path,monkeypatch,within_budget):
-    child=ScriptedModel(responses=[call('get_product_details',{'product_id':'P1003'}),
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
         submission(candidates=[
             {'product_id':'P1003','sku_id':sku,'assessment':'适合优先考虑便携性的需求，实际适配仍需核验。'}
             for sku in ['P1003-S1','P1003-S2']],caveats=['研究尚未完成'])])

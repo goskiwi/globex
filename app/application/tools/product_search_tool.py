@@ -57,7 +57,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
     ) -> ToolResult:
         """检索符合本次需求的候选，返回SKU、规格、功能原文、价库存、限制和证据引用。
         conditions提交当前买家明确的需求变化，后端合并先前条件与长期偏好；省略则继承。
-        子任务不提交conditions，使用绑定的局部条件。精确ID也受这些条件筛选；只查看资料用get_product_details。
+        子任务不提交conditions，使用绑定的局部条件。精确ID也受这些条件筛选；用户明确要查看某款时用show_product_details直接展示。
         未命中不代表不存在；不猜分类、不放宽条件。候选匹配不等于符合全部用途，未知属性保持未知。
         SKU不能跨规格组合。price_major/currency为展示币种价，source_*及SKU原价为目录原币种；比较使用同币种。
         有目的地时附每SKU单件到手报价；多件报价及确认由对应业务操作计算。

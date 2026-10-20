@@ -43,7 +43,7 @@ async def test_actual_main_tools_declare_reads_and_keep_writes_out(tmp_path,monk
     c=await _container(tmp_path,monkeypatch,ScriptedModel())
     try:
         tools={t.name:t for t in c.orchestrator._sessions._main_factory.build().context_policy.tools}
-        for name in ['product_search_tool','category_insight_tool','conversation_fact_lookup','get_product_details','quote_products','query_order_tool','load_agent_skill_tool','lookup_strategy_memory_tool']:
+        for name in ['product_search_tool','category_insight_tool','conversation_fact_lookup','quote_products','query_order_tool','load_agent_skill_tool','lookup_strategy_memory_tool']:
             assert tools[name].metadata['read_only']
         for name in ['create_order_tool','cancel_order_tool','recommend_products','remember_preference_tool','update_preference_tool','forget_preference_tool','task_dispatch']:
             assert not tools[name].metadata['read_only']

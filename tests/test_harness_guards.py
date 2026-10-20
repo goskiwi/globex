@@ -88,7 +88,7 @@ class TestLoopDetector:
 
     def test_ab_warns_then_allows_one_cycle_to_adjust(self):
         detector=LoopDetector();state={}
-        for index,name in enumerate(['product_search_tool','get_product_details']*3):
+        for index,name in enumerate(['product_search_tool','quote_products']*3):
             state,hint=self.feed(detector,state,name)
             assert state['stop']==(index==5)
             if index==3:assert hint

@@ -262,7 +262,7 @@ async def test_parallel_results_do_not_share_evidence_and_failure_keeps_other_re
     assert bad.data["evidence_refs"] == []
 
 
-@pytest.mark.parametrize('kind',['products','product_details','product_view'])
+@pytest.mark.parametrize('kind',['products','product_view'])
 async def test_historical_lookup_is_valid_but_labelled_historical(tmp_path, monkeypatch, kind):
     from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
     factory, _, dispatch, _ = factories(tmp_path, monkeypatch, [])

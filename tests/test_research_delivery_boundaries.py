@@ -257,7 +257,7 @@ async def test_protected_research_still_obeys_complete_request_capacity(tmp_path
 @pytest.mark.parametrize('count', [6, 14])
 async def test_current_details_use_request_capacity_instead_of_candidate_count(tmp_path, count):
     state = history(count)
-    state['messages'] = [m.model_copy(update={'name': 'get_product_details'}) if isinstance(m, ToolMessage) else m
+    state['messages'] = [m.model_copy(update={'name': 'product_search_tool'}) if isinstance(m, ToolMessage) else m
                          for m in state['messages'] if not isinstance(m, HumanMessage)]
     state['messages'].insert(0, HumanMessage(id='current', name='buyer', content='核对本轮候选详情'))
     middleware = policy(tmp_path, product_tokens=1)

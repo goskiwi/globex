@@ -28,14 +28,14 @@ cases:
       - 子任务应交回partial或needs_input及明确缺口，不为该规格搜全库
     rubric:
       p0: [没有执行错误, 没有发布推荐或交易]
-      p1: [按要求委派并读取详情]
+      p1: [按要求委派并检索完整资料]
       p2: []
     deterministic:
       p0:
         - {criterion: 没有执行错误, kind: no_execution_error}
         - {criterion: 没有发布推荐或交易, kind: forbidden_tools, tools: [recommend_products, compare_products, create_order_tool]}
       p1:
-        - {criterion: 按要求委派并读取详情, kind: required_tools, tools: [task_dispatch, get_product_details]}
+        - {criterion: 按要求委派并检索完整资料, kind: required_tools, tools: [task_dispatch, product_search_tool]}
       p2: []
   - id: no-qualified-type
     description: 无合格耳机时保持商品类型和预算，不以无关物品填充

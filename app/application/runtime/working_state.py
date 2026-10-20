@@ -23,7 +23,7 @@ def shopping_access(call):
     """按领域字段/规格描述实际访问，写值一致才是幂等操作；不按工具组合免检。"""
     name,args=call['name'],call['args']
     conditions={'filters','preferences','sort','ignored_preferences','requirements','excluded_products','excluded_skus'}
-    reads=(conditions if name in {'product_search_tool','get_product_details','category_insight_tool',
+    reads=(conditions if name in {'product_search_tool','category_insight_tool',
         'show_product_details','recommend_products','recommend_bundle','compare_products','create_order_tool'} else set())
     if name=='task_dispatch':reads=conditions|{'plan','selections'}
     elif name in {'recommend_products','recommend_bundle','compare_products'}:reads=conditions|{'plan'}

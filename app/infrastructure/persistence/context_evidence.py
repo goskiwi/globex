@@ -85,7 +85,7 @@ class ContextEvidenceStore:
     async def find_observed_product(self, buyer: str, session: str, *, product_id: str = '', sku_id: str = '') -> dict | None:
         """只读观察包含权威读取及实际展示；不赋予候选、选购及交易资格。"""
         return await self._find_product(buyer, session, product_id, sku_id,
-            ('products','product_details','product_view','recommendation','comparison','display_batch'))
+            ('products','product_view','recommendation','comparison','display_batch'))
 
     async def _find_product(self, buyer, session, product_id, sku_id, kinds, *, qualified=False):
         if not product_id and not sku_id:

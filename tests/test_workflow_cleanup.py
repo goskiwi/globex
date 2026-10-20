@@ -149,7 +149,7 @@ def test_only_actual_state_conflicts_block_and_independent_calls_remain_runnable
     from app.application.runtime.working_state import conflicting_shopping_calls
     def c(name,args,identifier):return {'name':name,'args':args,'id':identifier}
     selected=c('select_products',{'items':[]},'selection')
-    detail=c('get_product_details',{'product_id':'P1003'},'details')
+    detail=c('product_search_tool',{'product_id':'P1003'},'details')
     assert not conflicting_shopping_calls([selected,detail])
     changing=c('set_shopping_requirements',{'changes':{'filters':{'ship_to':'CN'}}},'requirements')
     order=c('query_order_tool',{'order_id':'synthetic'},'order')

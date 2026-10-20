@@ -47,16 +47,15 @@ def test_condition_summary_uses_successful_structured_arguments_not_buyer_quote(
     assert '已满足' not in value
 
 
-def test_details_report_existing_facts_not_invented_properties_or_catalog_ids():
-    a=adapter();start(a,'d','get_product_details',{'product_id':'P1001'})
-    end(a,'d','get_product_details',{'hits':[{'product_id':'P1001','title':'通勤背包',
+def test_detail_delivery_reports_existing_scope_not_invented_properties_or_catalog_ids():
+    a=adapter();start(a,'d','show_product_details',{'targets':[{'product_id':'P1001'}]})
+    end(a,'d','show_product_details',{'hits':[{'product_id':'P1001','title':'通勤背包',
         'source_platform':'amazon','highlights':['35L','可折叠'],'skus':[{'stock':0},{'stock':10}]}]})
     entry=a.state['process']['steps'][0]
-    assert '通勤背包' in entry['label']
-    assert '35L' in entry['summary'] and '2个规格' in entry['summary']
+    assert entry['label']=='准备商品详情'
+    assert '1款商品的完整资料' in entry['summary'] and '1个平台' in entry['summary']
     assert 'P1001' not in json.dumps(entry,ensure_ascii=False)
     assert '背负' not in entry['summary']
-
 
 def test_quote_total_is_grouped_purchase_not_three_individual_alternative_prices():
     data={'quote':{'items':[{'title':'背包'},{'title':'耳机'}],'ship_to':'CN','currency':'CNY','total_amount_minor':47800}}
@@ -115,7 +114,7 @@ def test_pending_delivery_does_not_claim_published_before_commit():
 
 @pytest.mark.parametrize('cancelled,status',[ (True,'cancelled'),(False,'failed') ])
 def test_end_closes_only_unfinished_steps_without_fabricating_success(cancelled,status):
-    a=adapter();start(a,'done','get_product_details');end(a,'done','get_product_details',{'hits':[]})
+    a=adapter();start(a,'done','product_search_tool');end(a,'done','product_search_tool',{'hits':[]})
     start(a,'pending','quote_products')
     a.fail('结束',cancelled=cancelled)
     assert a.state['process']['status']==status
