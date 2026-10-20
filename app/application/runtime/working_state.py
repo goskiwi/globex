@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Overwrite
 from pydantic import ValidationError
 
-from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
+from app.application.agents.shopping_state import ShoppingWork, Filters, Choice, compile_search
 from app.application.runtime.request_scope import ShoppingContext
 from app.application.agents.shopping_changes import apply_shopping_change
 
@@ -30,11 +30,17 @@ def shopping_access(call):
     elif name=='present_research':reads={'plan'}
     elif name=='select_products':reads={'excluded_products','excluded_skus'}
     if name in {'select_products','create_order_tool'}:
-        items=args.get('items',[])
-        if not isinstance(items,list) or any(not isinstance(item,dict) or not item.get('sku_id') for item in items):
+        try:
+            items=args['items']
+            removes=args.get('remove_skus',[])
+            if not isinstance(items,list) or not isinstance(removes,list) or any(not isinstance(sku,str) for sku in removes):
+                return reads,{():None}
+            # 写意图与实际工具共用领域类型，不能把True/1.0等无效数量当作整数同值放行。
+            items=[Choice.model_validate(item) for item in items]
+        except (KeyError,TypeError,ValidationError):
             return reads,{():None}
-        writes={('selections',sku):None for sku in args.get('remove_skus',[])}
-        writes.update({('selections',item['sku_id']):item for item in items})
+        writes={('selections',sku):None for sku in removes}
+        writes.update({('selections',item.sku_id):item.model_dump() for item in items})
         return reads,writes
     if name=='set_research_plan':return reads,{('plan',):args.get('plan')}
     change=args.get('changes') if name=='set_shopping_requirements' else args.get('conditions') if name=='product_search_tool' else None

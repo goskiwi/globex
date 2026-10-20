@@ -111,3 +111,16 @@ async def test_order_source_is_read_once_and_foreign_source_cannot_write(confirm
  assert len(await env.store.list_confirmations(buyer_id='buyer',session_id='s'))==(0 if foreign else 1)
  assert bool(state['shopping_work']['selections']) is (not foreign)
  assert (await env.store.list_orders(buyer_id='buyer'))['total']==0 and await env.store.get_inventory()==before
+
+
+@pytest.mark.parametrize('quantity',[True,1.0,'1'])
+async def test_invalid_quantity_cannot_be_treated_as_same_write(confirmation_env,quantity):
+ env=confirmation_env
+ await env.evidence.save('buyer','s','products',{'hits':[{'product_id':'P1003','skus':[{'sku_id':'P1003-S1'}]}]})
+ item={'product_id':'P1003','sku_id':'P1003-S1','quantity':1}
+ address=asdict(Address('合成买家','CN','浙江','杭州','合成测试路1号','310000','13800000000'))
+ model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('select_products',{'items':[{**item,'quantity':quantity}]},'select'),call('create_order_tool',{'items':[item],'shipping_address':address},'prepare')]),AIMessage(content='数量不符合要求，请明确数量。')])
+ state=await create_agent(model,tools=[*build_shopping_operations(env.evidence),as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence))],middleware=[WorkingStateMiddleware()]).ainvoke({'messages':[HumanMessage(name='buyer',content='保存选择并准备确认')]})
+ assert not await env.store.list_confirmations(buyer_id='buyer',session_id='s')
+ assert not state['shopping_work']['selections']
+ assert len([m for m in state['messages'] if isinstance(m,ToolMessage) and m.status=='error'])==2
