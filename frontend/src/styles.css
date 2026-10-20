@@ -882,7 +882,8 @@ main {
 .compare-mini {
   display: flex;
 }
-.compare-mini img {
+.compare-mini > :is(img, .catalog-media-image, .image-placeholder) {
+  flex: 0 0 auto;
   width: 28px;
   height: 28px;
   object-fit: contain;
@@ -891,7 +892,7 @@ main {
   border-radius: 50%;
   margin-left: -6px;
 }
-.compare-mini img:first-child {
+.compare-mini > :first-child {
   margin-left: 0;
 }
 .compare-bar .compare-go {
@@ -1529,7 +1530,7 @@ main {
     font-size: 10px;
     gap: 6px;
   }
-  .compare-mini img {
+  .compare-mini > :is(img, .catalog-media-image, .image-placeholder) {
     width: 25px;
     height: 25px;
   }
@@ -2156,14 +2157,6 @@ main {
 .comparison-note {
   margin-top: 21px;
 }
-.compare-mini .image-placeholder {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #e8eddf;
-  border: 2px solid var(--green);
-  margin-left: -6px;
-}
 .compare-mini .image-placeholder svg {
   width: 15px;
   height: 15px;
@@ -2172,9 +2165,6 @@ main {
 .compare-mini .image-placeholder span,
 .compare-mini .image-placeholder small {
   display: none;
-}
-.compare-mini .image-placeholder:first-child {
-  margin-left: 0;
 }
 .compare-bar .compare-go svg {
   width: 12px;
