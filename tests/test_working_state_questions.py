@@ -108,13 +108,13 @@ async def test_native_update_search_followup_and_checkpoint_restore(tmp_path,mod
 
 async def test_update_cannot_race_search_and_old_state_rejected():
     called=[]
-    async def probe()->str:
-        """测试只读。"""
-        called.append(1);return 'ok'
+    async def product_search_tool()->str:
+        """读取当前购物条件，依赖本批需求变更。"""
+        called.append(ShoppingContext.current().effective_search);return 'ok'
     model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[
         {'id':'u','name':'set_shopping_requirements','args':{'changes': {'filters':{'price_max_major':300}}}},
-        {'id':'s','name':'probe','args':{}}]),AIMessage(content='重试')])
-    graph=create_agent(model,tools=[*build_shopping_operations(None),as_langchain_tool(probe)],middleware=[WorkingStateMiddleware()])
+        {'id':'s','name':'product_search_tool','args':{}}]),AIMessage(content='重试')])
+    graph=create_agent(model,tools=[*build_shopping_operations(None),as_langchain_tool(product_search_tool)],middleware=[WorkingStateMiddleware()])
     state=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='300')]})
     assert not called and state['shopping_work']['filters']['price_max_major'] is None
     assert len([m for m in state['messages'] if isinstance(m,ToolMessage) and m.status=='error'])==2

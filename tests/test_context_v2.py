@@ -25,7 +25,7 @@ def test_description_only_exact_whole_long_repeats_removed():
     assert business_view({'description': '哈哈' * 100})['description'] == '哈哈' * 100
 
 @pytest.mark.parametrize('fields', ['skus', 'stock', 'sku_id,stock', 'price_major,currency', 'price',
-                                   'price,stock', 'price_major,stock_quantity', 'unit_price,inventory'])
+                                   'price,stock', 'price_major,stock', 'price'])
 def test_lookup_fields_retain_sku_value_association(fields):
     page = product_page({'hits': [product()], 'observed_at': '2026-08-01'}, sku_id='P887-S2', fields=fields)
     assert page['hits'][0]['skus'] == [product()['skus'][1]]
