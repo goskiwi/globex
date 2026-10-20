@@ -71,3 +71,53 @@ async def test_display_batches_cannot_grant_candidate_permission(tmp_path):
     await store.save('buyer','s','recommendation',{'hits':[{**hit,'constraint_issues':[]}]})
     assert await store.find_product('buyer','s',product_id='P1003',sku_id='P1003-S1')
     assert await store.find_observed_product('other','s',product_id='P1003',sku_id='P1003-S1') is None
+
+
+async def test_completed_trade_preparation_is_not_an_undelivered_research_task(tmp_path, monkeypatch):
+    from dataclasses import asdict
+    from tests.test_agent_handoff import ScriptedModel, call, submission
+    from tests.test_langgraph_runtime import _container
+    from app.application.usecases.intents import SubmitIntentInput
+    from app.domain.order.address import Address
+    from langchain_core.messages import AIMessage
+    line = {'product_id':'P1003','sku_id':'P1003-S1','quantity':1}
+    address = Address('合成买家','CN','浙江','杭州','合成测试路1号','310000','13800000000')
+    parent = ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
+        call('select_products',{'items':[line]}),call('task_dispatch',{
+            'subagent_type':'trade_agent','task':{'goal':'按已选商品准备确认'}}),AIMessage(content='等待确认卡操作。')])
+    child = ScriptedModel(responses=[call('create_order_tool',{'items':[line],'shipping_address':asdict(address)}),
+        submission(status='completed')])
+    c = await _container(tmp_path,monkeypatch,parent)
+    monkeypatch.setattr('app.application.agents.trade_agent.create_chat_model',lambda *a,**kw:child)
+    try:
+        before = await c.trade_store.get_inventory()
+        result = await c.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY','选一件背包，请专家准备确认。'))
+        assert result.status == 'completed' and result.error is None
+        state = (await c.orchestrator._sessions._agents['s'].graph.aget_state(c.orchestrator._sessions._agents['s'].config)).values
+        assert not state['task_plan']['tasks']
+        cards = await c.trade_store.list_confirmations(buyer_id='buyer',session_id='s')
+        assert len(cards)==1 and cards[0]['status']=='pending'
+        assert await c.trade_store.get_inventory()==before
+        assert (await c.trade_store.list_orders(buyer_id='buyer'))['total']==0
+    finally:
+        await c.shutdown()
+
+
+@pytest.mark.parametrize('child_status,expected', [('failed','partial'),('needs_input','needs_input')])
+async def test_incomplete_trade_delegation_keeps_actual_outcome(tmp_path,monkeypatch,child_status,expected):
+    from tests.test_agent_handoff import ScriptedModel,call,submission
+    from tests.test_langgraph_runtime import _container
+    from app.application.usecases.intents import SubmitIntentInput
+    from langchain_core.messages import AIMessage
+    parent = ScriptedModel(responses=[call('task_dispatch',{'subagent_type':'trade_agent',
+        'task':{'goal':'核查订单准备取消'}}),AIMessage(content='已说明剩余事项。')])
+    child = ScriptedModel(responses=([call('query_order_tool',{'order_id':'synthetic-missing'}),
+        submission(status='failed',issues=['没有找到订单'])] if child_status=='failed' else
+        [submission(status='needs_input',questions=['请提供订单号'])]))
+    c = await _container(tmp_path,monkeypatch,parent)
+    monkeypatch.setattr('app.application.agents.trade_agent.create_chat_model',lambda *a,**kw:child)
+    try:
+        result = await c.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY','请专家核查订单。'))
+        assert result.status==expected
+    finally:
+        await c.shutdown()

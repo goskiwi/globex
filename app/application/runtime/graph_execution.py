@@ -99,10 +99,17 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
     request_id=(context.source_run_id or (latest.id if latest else '')) if context else ''
     current_tasks=[task for task in result.get('task_plan',{}).get('tasks',{}).values()
                    if request_id and task.get('scope',{}).get('request_id')==request_id]
+    # 交易任务的权威回执已经在原始工具消息中；不写入研究计划或伪造研究交付标记。
+    operations=[m.artifact['data'] for m in messages if isinstance(m,ToolMessage)
+                and m.name=='task_dispatch' and isinstance((m.artifact or {}).get('data'),dict)
+                and m.artifact['data'].get('agent')=='trade_agent'
+                and request_id and (m.artifact['data'].get('scope') or {}).get('request_id')==request_id]
     from app.application.runtime.research_plan import pending_plan_goals
     unfinished=(any(task['status']!='completed' or not task.get('delivery') for task in current_tasks)
+                or any(operation['status']!='completed' for operation in operations)
                 or bool(pending_plan_goals(result.get('task_plan',{}),request_id)))
 
-    return ExecutionResult(text, 'needs_input' if any(p['status']=='needs_input' for p in presentations) else
+    return ExecutionResult(text, 'needs_input' if (any(p['status']=='needs_input' for p in presentations)
+        or any(operation['status']=='needs_input' for operation in operations)) else
         'failed' if reason=='provider_refusal' else
         'partial' if reason or unfinished or any(p['status']=='partial' for p in presentations) else 'completed',reason,presentations)

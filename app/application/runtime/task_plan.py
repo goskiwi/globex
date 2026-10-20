@@ -40,7 +40,8 @@ class TaskPlanMiddleware(AgentMiddleware):
                         if isinstance(m, ToolMessage) and m.tool_call_id in calls]
             for receipt in receipts:
                 data = (receipt.artifact or {}).get('data')
-                if receipt.name == 'task_dispatch' and isinstance(data, dict) and data.get('scope'):
+                if (receipt.name == 'task_dispatch' and isinstance(data, dict)
+                        and data.get('agent') == 'search_agent' and data.get('scope')):
                     record_research(plan, work, data)
             plan = project_plan(work, policy, plan)
             # 工具可以并行产生独立成果，计划只在整批回执到齐后写一次。
