@@ -212,7 +212,8 @@ class AGUIRunAdapter:
     def on_trade_event(self, event: TradeEvent) -> None:
         if event.shopping_session_id != self.request.thread_id:
             return
-        payload = event.payload if isinstance(event.payload, dict) else {}
+        value = event.to_dict()['payload']
+        payload = value if isinstance(value, dict) else {}
         if event.type == "tool.lifecycle":
             from app.application.runtime.events import ToolEvent
             self.on_agent_event(ToolEvent(**payload))

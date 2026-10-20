@@ -78,12 +78,13 @@ class TradeEvent:
     payload: Any
     occurred_at: str
     correlation: dict[str, str] = field(default_factory=dict)
+    public_payload: Any = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
         return {
             "shopping_session_id": self.shopping_session_id,
             "type": self.type,
-            "payload": self.payload,
+            "payload": self.public_payload if self.public_payload is not None else self.payload,
             "occurred_at": self.occurred_at,
             "correlation": self.correlation,
         }
@@ -135,7 +136,7 @@ class TradeEventBus:
         for queue in self._subscribers.get(event.shopping_session_id, []):
             queue.put_nowait(event)
 
-    def publish(self, shopping_session_id: str, event_type: TradeEventType, payload: Any) -> None:
+    def publish(self, shopping_session_id: str, event_type: TradeEventType, payload: Any, *, public_payload=None) -> None:
         if event_type not in EVENT_TYPES:
             raise ValueError(f"未知事件类型：{event_type}")
         event = TradeEvent(
@@ -144,6 +145,7 @@ class TradeEventBus:
             payload=payload,
             occurred_at=datetime.now(timezone.utc).isoformat(),
             correlation=current_correlation(shopping_session_id),
+            public_payload=public_payload,
         )
         observe_event(event_type, payload)
         observer = _run_observer.get()

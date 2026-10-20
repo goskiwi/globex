@@ -68,10 +68,11 @@ class RunFinalizer:
             self._bus.unsubscribe(intent.shopping_session_id, trace)
             while not trace.empty():
                 event = trace.get_nowait()
+                payload = event.to_dict()['payload']
                 events.append(ConversationEventRecord(
                     session_id=intent.shopping_session_id,
                     type=event.type,
-                    payload=event.payload if isinstance(event.payload, dict) else {"value": event.payload},
+                    payload=payload if isinstance(payload, dict) else {"value": payload},
                     occurred_at=event.occurred_at,
                 ))
         try:

@@ -83,7 +83,6 @@ class BusinessToolMiddleware(AgentMiddleware):
                     public=(receipt.artifact or {}).get("event_data",full)
                     hit,data=clean(data); full_hit,full=clean(full)
                     _,public=clean(public)
-                    public=self.public_data(public)
                     if hit or full_hit:
                         notices.append("工具结果中的疑似提示词注入已过滤。")
                     if receipt.status == "success":
@@ -116,14 +115,14 @@ class BusinessToolMiddleware(AgentMiddleware):
                     processed.append(receipt)
                     record_evaluation_evidence("tool_result",{"tool":name,"arguments":request.tool_call["args"],
                         "state":receipt.status,"result":[data],"stage":"normalized"})
-                    payload={"tool":name,"tool_call_id":event_id}
+                    body={}
                     if isinstance(public,dict):
-                        payload.update(public)
-                        if isinstance(public.get("hits"),list):payload["hit_count"]=len(public["hits"])
-                    else:payload["result"]=public
+                        body.update(public)
+                        if isinstance(public.get("hits"),list):body["hit_count"]=len(public["hits"])
+                    else:body["result"]=public
                     if receipt.status=="error":
-                        payload["error"]=self.public_data(receipt.text)
-                        payload['failure'] = self.public_data(receipt_failure(receipt))
+                        body["error"]=receipt.text
+                        body['failure'] = receipt_failure(receipt)
                         span.set_status(Status(StatusCode.ERROR))
                     if receipt.status == 'success' and name in DELIVERY_KINDS:
                         accepted=presentation(name,self.public_data(full),event_id)
@@ -139,7 +138,8 @@ class BusinessToolMiddleware(AgentMiddleware):
                         receipt=project_data(receipt,{'confirmation_required':True,
                             'confirmation_id':operation['confirmation_id'], 'action':operation['action'], 'status':'pending'},notices=notices)
                         processed[-1]=receipt
-                    self.bus.publish(session,"tool.result",payload)
+                    self.bus.publish(session,"tool.result",{"tool":name,"tool_call_id":event_id,**body},
+                        public_payload={"tool":name,"tool_call_id":event_id,**self.public_data(body)})
                     emit("TOOL_RESULT_TEXT_DELTA",receipt.text)
                     emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))
                 observe_tool_result(failed=failed)

@@ -4,6 +4,7 @@ import pytest
 from langchain_core.messages import ToolMessage
 from app.application.usecases.intents import SubmitIntentInput
 from app.infrastructure.eventbus import observe_run_events
+from app.infrastructure.eventbus import TradeEventBus,TradeEvent
 from app.infrastructure.security.output_guard import audit_output
 from tests.test_agent_handoff import ScriptedModel,call
 from tests.test_langgraph_runtime import _container
@@ -17,6 +18,17 @@ def test_structured_output_audit_preserves_identifiers_amounts_and_input():
     safe,public=audit_output(value)
     assert not safe and marker not in json.dumps(public)
     assert value['guidance']==marker and public['hits']==value['hits'] and public['snapshot_hash']==value['snapshot_hash']
+
+
+def test_public_event_projection_does_not_replace_internal_evidence():
+    bus=TradeEventBus();queue=bus.subscribe('s');marker='sk-'+'x'*24
+    raw={'tool':'product_search_tool','hits':[{'product_id':'P1003','title':marker}]}
+    public={**raw,'hits':audit_output(raw['hits'])[1]}
+    bus.publish('s','tool.result',raw,public_payload=public)
+    event=queue.get_nowait()
+    assert event.payload==raw and event.to_dict()['payload']==public
+    assert marker not in json.dumps(event.to_dict())
+    assert TradeEvent.from_dict(event.to_dict()).payload==public
 
 
 @pytest.mark.parametrize('enabled',[True,False])
