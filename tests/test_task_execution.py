@@ -47,7 +47,7 @@ async def test_two_research_reports_end_without_cards_or_another_model_call(tmp_
         AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'args': {
             'subagent_type': 'search_agent', 'task': {'goal': step['goal'], 'step_id': step['id']}},
             'id': step['id']} for step in steps]),
-        call('present_research', {'reports': [{'task_id': task_id, 'title': {'bag':'背包研究','cup':'水杯研究'}[task_id]} for task_id in ['bag', 'cup']]}, finish=True),
+        call('present_research', {'reports': [{'task_id': task_id, 'title': {'bag':'背包研究','cup':'水杯研究'}[task_id]} for task_id in ['bag', 'cup']]}, turn_action='finish'),
         AIMessage(content='下一轮无需重新交付研究。')])
     c = await _container(tmp_path, monkeypatch, model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: next(child_models))
@@ -107,7 +107,7 @@ def pick(sku='P1003-S1',task_id='bag'):
 
 
 def recommend(picks=None,*,bundle=False):
-    return call('recommend_bundle' if bundle else 'recommend_products', {'picks': picks or [pick()], 'guidance': '可考虑这款旅行背包。'})
+    return call('recommend_bundle' if bundle else 'recommend_products', {'picks': picks or [pick()], 'guidance': '可考虑这款旅行背包。'}, turn_action='continue')
 
 
 @pytest.mark.parametrize('budget,extra_goal',[(100,False),(150,False),(150,True)])
@@ -281,7 +281,7 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
     model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': [{'id':'bag','goal':'100元内的背包','filters':{'price_max_major':150 if within_budget else 100}}]})],
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'研究背包','step_id':'bag'}}),
         call('compare_products',{'entries':[pick(),pick('P1003-S2')],'preferred_sku_id':None,
-                                 'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}, finish=True),AIMessage(content='研究仍有缺口')])
+                                 'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}, turn_action='finish'),AIMessage(content='研究仍有缺口')])
     c=await _container(tmp_path,monkeypatch,model)
     expose_unfiltered_research_source(c, monkeypatch)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)

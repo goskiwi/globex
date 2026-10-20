@@ -100,7 +100,7 @@ async def test_native_agent_delivers_valid_id_explanation_without_another_genera
     from tests.test_langgraph_runtime import _container
     from app.application.usecases.intents import SubmitIntentInput
     guidance='按你指定的P1012展示这款充气颈枕。'
-    model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1012'}),call('recommend_products', {'picks': [{'product_id': 'P1012', 'sku_id': 'P1012-S1', 'quantity': 1, 'reason': '方便收纳'}], 'guidance': guidance}, finish=True)])
+    model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1012'}),call('recommend_products', {'picks': [{'product_id': 'P1012', 'sku_id': 'P1012-S1', 'quantity': 1, 'reason': '方便收纳'}], 'guidance': guidance}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,model)
     try:
         result=await c.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','推荐充气颈枕'))

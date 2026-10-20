@@ -31,7 +31,7 @@ async def test_view_replaces_visible_referents_and_supports_quote_without_candid
     from app.application.usecases.intents import SubmitIntentInput
     from langchain_core.messages import AIMessage, ToolMessage
     model = ScriptedModel(responses=[call('show_product_details', {
-        'targets':[{'product_id':'P3020'},{'product_id':'P3021'},{'product_id':'P1003'}], 'guidance':'查看这两款。'}, finish=True),
+        'targets':[{'product_id':'P3020'},{'product_id':'P3021'},{'product_id':'P1003'}], 'guidance':'查看这两款。'}, turn_action='finish'),
         call('quote_products', {'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':2}],
             'ship_to':'CN','currency':'CNY'}), AIMessage(content='报价已取得。')])
     c = await _container(tmp_path, monkeypatch, model)
@@ -165,10 +165,10 @@ async def test_existing_delivery_and_independent_research_can_progress_in_same_b
     dispatch={'name':'task_dispatch','id':'research','args':{'subagent_type':'search_agent',
         'task':{'step_id':'cup','goal':'水杯研究'}}}
     deliver={'name':'recommend_products','id':'cards','args':{'picks':[{'product_id':'P1003',
-        'sku_id':'P1003-S1','quantity':1,'reason':'已读背包候选'}],'guidance':'先交付已读背包。'}}
+        'sku_id':'P1003-S1','quantity':1,'reason':'已读背包候选'}],'guidance':'先交付已读背包。','turn_action':'continue'}}
     parent=ScriptedModel(responses=[call('set_research_plan',{'plan':[{'id':'cup','goal':'水杯研究'}]}),
         call('product_search_tool',{'product_id':'P1003'}),AIMessage(content='',tool_calls=[dispatch,deliver]),
-        call('present_research',{'reports':[{'task_id':'cup','title':'水杯研究'}]}, finish=True)])
+        call('present_research',{'reports':[{'task_id':'cup','title':'水杯研究'}]}, turn_action='finish')])
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008'}),
         submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'杯子候选'}])])
     c=await _container(tmp_path,monkeypatch,parent)
@@ -190,8 +190,8 @@ async def test_confirmation_does_not_end_undelivered_implicit_research(tmp_path,
     parent=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'独立研究水杯'}},identifier='cup-study'),
         call('create_order_tool',{'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],
-            'shipping_address':asdict(Address('合成买家','CN','浙江','杭州','合成路1号','310000','13800000000'))}, finish=True),
-        call('present_research',{'reports':[{'task_id':'cup-study-round-2','title':'水杯研究'}]}, finish=True)])
+            'shipping_address':asdict(Address('合成买家','CN','浙江','杭州','合成路1号','310000','13800000000'))}, turn_action='finish'),
+        call('present_research',{'reports':[{'task_id':'cup-study-round-2','title':'水杯研究'}]}, turn_action='finish')])
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008'}),
         submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'已核验水杯候选'}])])
     c=await _container(tmp_path,monkeypatch,parent)

@@ -56,11 +56,11 @@ class TradeAgentFactory:
     def bind_harness(self, loop_detector: Any) -> None:
         self._loop_detector = loop_detector
 
-    def build_tools(self) -> list[BaseTool]:
+    def build_tools(self, *, turn_delivery: bool = False) -> list[BaseTool]:
         return [
-            as_langchain_tool(build_create_order_tool(self._place_order, self._bus, self.evidence_store)),
+            as_langchain_tool(build_create_order_tool(self._place_order, self._bus, self.evidence_store), turn_delivery=turn_delivery),
             as_langchain_tool(build_query_order_tool(self._query_order, self._bus)),
-            as_langchain_tool(build_cancel_order_tool(self._cancel_order, self._bus)),
+            as_langchain_tool(build_cancel_order_tool(self._cancel_order, self._bus), turn_delivery=turn_delivery),
         ]
 
     def build(self):

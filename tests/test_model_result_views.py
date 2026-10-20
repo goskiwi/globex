@@ -67,7 +67,7 @@ async def test_delivered_card_stays_complete_while_next_model_receives_only_rece
     model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}),
         AIMessage(content='', tool_calls=[
             {'id': 'present', 'name': 'recommend_products', 'args': {
-                'guidance': '这款适合随身携带，详细资料在卡片。',
+                    'guidance': '这款适合随身携带，详细资料在卡片。', 'turn_action':'finish',
                 'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1,
                            'reason': '重量轻且可折叠', 'tradeoffs': ['未标注电脑隔层']}]}},
             {'id': 'read', 'name': 'query_order_tool', 'args': {'order_id': 'UNKNOWN'}}]),

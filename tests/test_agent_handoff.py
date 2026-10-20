@@ -54,10 +54,10 @@ class ScriptedModel(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=response)])
 
 
-def call(name, args, identifier="call-1", *, finish=False):
+def call(name, args, identifier="call-1", *, turn_action=None):
     calls = [{"name": name, "args": args, "id": identifier}]
-    if finish:
-        calls.append({"name": "finish_turn", "args": {}, "id": identifier+"-finish"})
+    if turn_action is not None:
+        calls[0]['args'] = {**args, 'turn_action': turn_action}
     return AIMessage(content="", tool_calls=calls)
 
 
@@ -114,7 +114,7 @@ async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_p
         "filters":{"price_max_major":300,"target_currency":"CNY"}}}),call("task_dispatch", {
         "subagent_type": "search_agent", "task": task()}, "dispatch-1"), AIMessage(content="主 Agent 汇总完成")])
     monkeypatch.setattr("app.application.agents.main_agent.create_chat_model", lambda *a, **kw: parent)
-    trade = SimpleNamespace(build_tools=lambda: [], bind_harness=lambda *args: None)
+    trade = SimpleNamespace(build_tools=lambda **kwargs: [], bind_harness=lambda *args: None)
     from tests.test_ag_ui import EmptyPreferences
     main_factory = MainAgentFactory(search._settings, search, trade, bus, EmptyPreferences(),
         CircuitBreakerRegistry(), GatewayThrottle(5, 0), checkpointer=InMemorySaver(), model_client=None)

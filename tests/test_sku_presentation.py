@@ -31,7 +31,7 @@ async def test_view_multiple_skus_keeps_one_platform_record_and_order(tmp_path,t
 
 async def test_sibling_comparison_then_prepare_second_sku_without_searching_again(tmp_path,monkeypatch):
     address={'recipient_name':'合成测试买家','country':'CN','state':'浙江','city':'杭州','address_line':'合成测试路1号','postal_code':'310000','phone':'13800000000'}
-    parent=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1001'}),call('compare_products',{'entries':[{'product_id':'P1001','sku_id':sid,'quantity':1,'reason':'比较颜色规格'} for sid in ['P1001-S1','P1001-S2']],'preferred_sku_id':'P1001-S1','dimensions':['颜色'],'guidance':'按颜色偏好选择。'}, finish=True),call('select_products',{'items': [{'product_id':'P1001','sku_id':'P1001-S2','quantity':2}]}),call('create_order_tool',{'items':[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 2} for sku in ['P1001-S2']],'shipping_address':address}, finish=True),AIMessage(content='确认单已准备，请核对。')])
+    parent=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1001'}),call('compare_products',{'entries':[{'product_id':'P1001','sku_id':sid,'quantity':1,'reason':'比较颜色规格'} for sid in ['P1001-S1','P1001-S2']],'preferred_sku_id':'P1001-S1','dimensions':['颜色'],'guidance':'按颜色偏好选择。'}, turn_action='finish'),call('select_products',{'items': [{'product_id':'P1001','sku_id':'P1001-S2','quantity':2}]}),call('create_order_tool',{'items':[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 2} for sku in ['P1001-S2']],'shipping_address':address}, turn_action='finish'),AIMessage(content='确认单已准备，请核对。')])
     c=await _container(tmp_path,monkeypatch,parent)
     try:
         compared,_=await ask(c,'比较同款两个规格，之后再选择。')

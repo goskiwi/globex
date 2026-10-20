@@ -78,28 +78,28 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
     async def recommend_products():
         """提交已有选择，不执行交易。"""
         return ToolResult({'guidance': '已有候选满足用途，缺少的第四款尚未确认。', 'hits': []})
-    delivery = as_langchain_tool(recommend_products) if main else build_submission_tool(ResearchSubmission)
+    delivery = as_langchain_tool(recommend_products, turn_delivery=True) if main else build_submission_tool(ResearchSubmission)
     def handler(request):
         body = json.loads(request.content)
         requests.append(body)
         name = 'read' if len(requests) == 1 else delivery.name
-        args = {} if main or len(requests) == 1 else {
+        args = ({'turn_action':'finish'} if main and len(requests)>1 else {}) if main or len(requests) == 1 else {
             'caveats': ['候选不足']}
         response = completion()
         response['choices'][0].update(message={'role': 'assistant', 'content': '', 'tool_calls': [
             {'id': f'c{len(requests)}', 'type': 'function',
-             'function': {'name': name, 'arguments': json.dumps(args)}}, *([{'id':'finish','type':'function','function':{'name':'finish_turn','arguments':'{}'}}] if main and len(requests)>1 else [])]}, finish_reason='tool_calls')
+             'function': {'name': name, 'arguments': json.dumps(args)}}]}, finish_reason='tool_calls')
         return httpx.Response(200, json=response)
     model = await client_model(tmp_path, handler)
     try:
-        execution = ExecutionMiddleware(2, main=main, delivery_tools=(delivery.name,'finish_turn') if main else (delivery.name,))
+        execution = ExecutionMiddleware(2, main=main, delivery_tools=(delivery.name,))
         middleware = [execution, *delivery_middlewares()] if main else [HandoffMiddleware(), execution]
         graph = create_agent(model, tools=[read, delivery], middleware=middleware,
                              context_schema=None if main else HandoffContext)
         result = await graph.ainvoke({'messages': [HumanMessage(content='研究')]},
                                     context=None if main else HandoffContext(evidence))
         assert reads == [1] and len(requests) == 2
-        assert {t['function']['name'] for t in requests[1]['tools']} == ({delivery.name,'finish_turn'} if main else {delivery.name})
+        assert {t['function']['name'] for t in requests[1]['tools']} == {delivery.name}
         assert result['execution_stop'] == 'model_call_limit'
         if main:
             assert result['presentations'][-1]['kind']=='recommendation'
@@ -141,9 +141,9 @@ async def test_closing_form_is_needs_input_not_failed():
     async def show_shopping_form():
         """已创建并保存问题。"""
         return ToolResult({'form_id':'saved-form','form':{'form_id':'saved-form','messages':[]},'status':'awaiting_input'})
-    model=ScriptedModel(responses=[call('read',{}),call('show_shopping_form',{}, finish=True)])
-    graph=create_agent(model,tools=[as_langchain_tool(read),as_langchain_tool(show_shopping_form)],
-        middleware=[ExecutionMiddleware(2,main=True,delivery_tools=('show_shopping_form','finish_turn')),
+    model=ScriptedModel(responses=[call('read',{}),call('show_shopping_form',{}, turn_action='finish')])
+    graph=create_agent(model,tools=[as_langchain_tool(read),as_langchain_tool(show_shopping_form, turn_delivery=True)],
+        middleware=[ExecutionMiddleware(2,main=True,delivery_tools=('show_shopping_form',)),
                     *delivery_middlewares()],checkpointer=InMemorySaver())
     runner,session=root(graph,TradeEventBus())
     output=await runner._reply('handoff',session,[HumanMessage(content='需要补充用途')])

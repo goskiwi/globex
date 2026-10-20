@@ -6,17 +6,19 @@ import functools
 import inspect
 from collections.abc import AsyncGenerator, Callable
 from contextlib import aclosing
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from langchain_core.tools import StructuredTool
 from langchain.tools import ToolRuntime
 from langchain_core.messages import ToolMessage
 from app.application.runtime.results import ToolResult, input_failure
-from pydantic import BaseModel, ConfigDict, ValidationError, create_model
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
 
 # 通用适配器不限定所属图的上下文类型；裸 ToolRuntime 的 context 默认为 None。
 InjectedRuntime = ToolRuntime[Any]
+TurnAction = Annotated[Literal['continue', 'finish'], Field(
+    description='本次交付后还需处理用continue，本轮最后的展示或待确认卡用finish。')]
 
 
 def validation_feedback(error):
@@ -69,11 +71,12 @@ class TypedTool(StructuredTool):
         return visible
 
 
-def _message(value, runtime, name):
+def _message(value, runtime, name, turn_action=None):
     """错误类别走运行时元数据；模型看到业务解释，不靠文字前缀推断状态。"""
     if isinstance(value, ToolResult):
         artifact={"data":value.data, "notices":[],
                   "error_code":value.error_code.value if value.error_code else None}
+        if turn_action is not None: artifact['turn_action'] = turn_action
         if value.error_reason is not None: artifact['error_reason'] = value.error_reason
         if value.model_data is not None: artifact["model_data"]=value.model_data
         if value.event_data is not None: artifact["event_data"]=value.event_data
@@ -87,7 +90,8 @@ def _message(value, runtime, name):
         return message
     import json
     return ToolMessage(content=value if isinstance(value,str) else json.dumps(value,ensure_ascii=False),
-        tool_call_id=runtime.tool_call_id, name=name, artifact={"data":value,"notices":[]})
+        tool_call_id=runtime.tool_call_id, name=name, artifact={"data":value,"notices":[],
+            **({'turn_action': turn_action} if turn_action is not None else {})})
 
 
 async def _collect_async_generator(generator: AsyncGenerator[Any, None], runtime, name):
@@ -100,7 +104,8 @@ async def _collect_async_generator(generator: AsyncGenerator[Any, None], runtime
     return "\n".join(part for part in chunks if part)
 
 
-def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, args_schema=None) -> StructuredTool:
+def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, args_schema=None,
+                      turn_delivery: bool = False) -> StructuredTool:
     """保留原函数签名和文档，统一异步函数及异步生成器的输出。"""
     signature = inspect.signature(function)
     args_schema = args_schema or getattr(function, "input_model", None)
@@ -109,6 +114,7 @@ def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, 
     @functools.wraps(function)
     async def invoke(**kwargs: Any) -> str:
         runtime = kwargs[runtime_name]
+        turn_action = kwargs.pop('turn_action') if turn_delivery else None
         if runtime_name == "tool_runtime":
             kwargs.pop(runtime_name)
         result = function(**kwargs)
@@ -116,17 +122,21 @@ def as_langchain_tool(function: Callable[..., Any], *, name: str | None = None, 
             return await _collect_async_generator(result, runtime, name or function.__name__)
         if inspect.isawaitable(result):
             result = await result
-        return _message(result, runtime, name or function.__name__)
+        return _message(result, runtime, name or function.__name__, turn_action)
 
     parameters = [p.replace(annotation=InjectedRuntime) if p.name == runtime_name else p
                   for p in signature.parameters.values()]
     if runtime_name == "tool_runtime":
         parameters.append(inspect.Parameter(runtime_name, inspect.Parameter.KEYWORD_ONLY, annotation=InjectedRuntime))
+    if turn_delivery:
+        parameters.append(inspect.Parameter('turn_action', inspect.Parameter.KEYWORD_ONLY, annotation=TurnAction))
     invoke.__signature__ = signature.replace(parameters=parameters)
     invoke.__annotations__ = {**function.__annotations__, runtime_name: InjectedRuntime}
+    if turn_delivery: invoke.__annotations__['turn_action'] = TurnAction
     if args_schema is not None:
         args_schema = create_model(args_schema.__name__ + "Runtime", __base__=args_schema,
-            __config__=ConfigDict(arbitrary_types_allowed=True), **{runtime_name: (InjectedRuntime, ...)})
+            __config__=ConfigDict(arbitrary_types_allowed=True), **{runtime_name: (InjectedRuntime, ...),
+                **({'turn_action': (TurnAction, ...)} if turn_delivery else {})})
     tool = TypedTool.from_function(
         coroutine=invoke,
         name=name or function.__name__,

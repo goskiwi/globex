@@ -12,7 +12,7 @@ async def test_verified_requirement_can_complete_delivery(tmp_path,monkeypatch):
         'id':'bag','goal':'找一款配防雨罩的背包','filters':{'product_type':'背包','price_max_major':300,'target_currency':'CNY','ship_to':'CN'},
         'requirements':['必须明确配防雨罩']} ]}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'goal':'按计划研究','step_id':'bag'}}),
-        call('recommend_products', {'picks': [{'product_id': 'P3008', 'sku_id': 'P3008-S1', 'quantity': 1, 'reason': '目录配防雨罩', 'task_id': 'bag'}], 'guidance': '这款目录明确配防雨罩，符合明确需求。'}, finish=True)])
+        call('recommend_products', {'picks': [{'product_id': 'P3008', 'sku_id': 'P3008-S1', 'quantity': 1, 'reason': '目录配防雨罩', 'task_id': 'bag'}], 'guidance': '这款目录明确配防雨罩，符合明确需求。'}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,model)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:

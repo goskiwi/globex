@@ -7,7 +7,7 @@ TOOL_LABELS = {
     'quote_products': '核对到手报价', 'recommend_products': '准备最终推荐', 'recommend_bundle': '准备组合推荐',
     'compare_products': '准备比较结果', 'show_shopping_form': '补充选购需求',
     'SubagentResult': '提交任务结果', 'category_insight_tool': '查询选购知识',
-    'present_research': '交付研究报告', 'finish_turn': '提交本轮答复',
+    'present_research': '交付研究报告',
     'web_search_tool': '核实外部资料', 'task_dispatch': '委派专家任务',
     'remember_preference_tool': '保存购物偏好', 'forget_preference_tool': '删除购物偏好',
     'update_preference_tool': '修改购物偏好', 'create_order_tool': '准备下单确认',

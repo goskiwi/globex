@@ -54,7 +54,7 @@ async def test_search_applies_current_conditions_without_a_separate_state_round(
 async def test_order_preparation_accepts_explicit_items_and_saves_them_without_select_round(tmp_path, monkeypatch):
     model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}), AIMessage(content='已查询'),
         call('create_order_tool', {'items': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 2}],
-                                 'shipping_address': asdict(sample_address())}, finish=True), AIMessage(content='等待确认')])
+                                 'shipping_address': asdict(sample_address())}, turn_action='finish'), AIMessage(content='等待确认')])
     c = await _container(tmp_path, monkeypatch, model)
     try:
         await c.orchestrator.handle_intent(SubmitIntentInput('s', 'b', 'zh-CN', 'CNY', '查询这个背包'))

@@ -16,7 +16,7 @@ class Model(FakeMessagesListChatModel):
 
 
 def call(identifier):
-    return AIMessage(content="", tool_calls=[{"id": identifier, "name": "recommend_products", "args": {}}, {"id":identifier+"-finish","name":"finish_turn","args":{}}])
+    return AIMessage(content="", tool_calls=[{"id": identifier, "name": "recommend_products", "args": {"turn_action":"finish"}}])
 
 
 @pytest.mark.asyncio
@@ -27,7 +27,7 @@ async def test_failed_recommendation_can_correct_and_success_stops_then_new_turn
         attempts.append(1)
         return _fail("超过预算") if len(attempts) == 1 else _ok({"guidance": "通勤更看重轻便时，我推荐这款；需要防雨时再看另一款。", "hits": [{"product_id": "P1001", "default_sku_id": "P1001-S1"}]})
     model = Model(responses=[call("first"), call("second"), AIMessage(content="下一轮正常咨询"), AIMessage(content="不应调用")])
-    graph = create_agent(model, tools=[as_langchain_tool(recommend_products)],
+    graph = create_agent(model, tools=[as_langchain_tool(recommend_products, turn_delivery=True)],
         middleware=delivery_middlewares(), checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "test"}}
     result = await graph.ainvoke({"messages": [HumanMessage(content="推荐商品")]}, config)

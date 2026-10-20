@@ -33,11 +33,11 @@ async def test_select_and_prepare_same_batch_commits_once_or_rejects_real_confli
  item={'product_id':'P1003','sku_id':'P1003-S1','quantity':1}
  address=asdict(Address('合成买家','CN','浙江','杭州','合成测试路1号','310000','13800000000'))
  model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('select_products',{'items':[item]},'select'),
-  call('create_order_tool',{'items':[{**item,'quantity':2 if different else 1}],'shipping_address':address},'prepare'),call('finish_turn',{},'finish')]),AIMessage(content='选择数量冲突，尚未准备确认')])
- graph=create_agent(model,tools=[*build_shopping_operations(env.evidence),as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence))],middleware=[WorkingStateMiddleware(),*delivery_middlewares()],checkpointer=InMemorySaver())
+  call('create_order_tool',{'items':[{**item,'quantity':2 if different else 1}],'shipping_address':address,'turn_action':'finish'},'prepare')]),AIMessage(content='选择数量冲突，尚未准备确认')])
+ graph=create_agent(model,tools=[*build_shopping_operations(env.evidence),as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence),turn_delivery=True)],middleware=[WorkingStateMiddleware(),*delivery_middlewares()],checkpointer=InMemorySaver())
  before=await env.store.get_inventory()
  state=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='保存选择并准备确认')]},{'configurable':{'thread_id':'s'}})
- receipts=[m for m in state['messages'] if isinstance(m,ToolMessage) and m.name!='finish_turn']
+ receipts=[m for m in state['messages'] if isinstance(m,ToolMessage)]
  assert [m.status for m in receipts]==(['error','error'] if different else ['success','success'])
  cards=await env.store.list_confirmations(buyer_id='buyer',session_id='s')
  assert len(cards)==(0 if different else 1)
@@ -103,8 +103,8 @@ async def test_order_source_is_read_once_and_foreign_source_cannot_write(confirm
  await env.evidence.save('other' if foreign else 'buyer','s','products',{'hits':[{'product_id':'P1003','skus':[{'sku_id':'P1003-S1'}]}]})
  lookup=AsyncMock(wraps=env.evidence.find_product);monkeypatch.setattr(env.evidence,'find_product',lookup)
  address=asdict(Address('合成买家','CN','浙江','杭州','合成测试路1号','310000','13800000000'))
- model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('create_order_tool',{'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],'shipping_address':address},'prepare'),call('finish_turn',{},'finish')]),AIMessage(content='来源不符合要求，不能准备确认。')])
- graph=create_agent(model,tools=[as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence))],middleware=[WorkingStateMiddleware(),*delivery_middlewares()])
+ model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('create_order_tool',{'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],'shipping_address':address,'turn_action':'finish'},'prepare')]),AIMessage(content='来源不符合要求，不能准备确认。')])
+ graph=create_agent(model,tools=[as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence),turn_delivery=True)],middleware=[WorkingStateMiddleware(),*delivery_middlewares()])
  before=await env.store.get_inventory()
  state=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='准备这一款的确认卡')]})
  assert lookup.await_count==1
@@ -119,7 +119,7 @@ async def test_invalid_quantity_cannot_be_treated_as_same_write(confirmation_env
  await env.evidence.save('buyer','s','products',{'hits':[{'product_id':'P1003','skus':[{'sku_id':'P1003-S1'}]}]})
  item={'product_id':'P1003','sku_id':'P1003-S1','quantity':1}
  address=asdict(Address('合成买家','CN','浙江','杭州','合成测试路1号','310000','13800000000'))
- model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('select_products',{'items':[{**item,'quantity':quantity}]},'select'),call('create_order_tool',{'items':[item],'shipping_address':address},'prepare')]),AIMessage(content='数量不符合要求，请明确数量。')])
+ model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('select_products',{'items':[{**item,'quantity':quantity}]},'select'),call('create_order_tool',{'items':[item],'shipping_address':address,'turn_action':'finish'},'prepare')]),AIMessage(content='数量不符合要求，请明确数量。')])
  state=await create_agent(model,tools=[*build_shopping_operations(env.evidence),as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence))],middleware=[WorkingStateMiddleware()]).ainvoke({'messages':[HumanMessage(name='buyer',content='保存选择并准备确认')]})
  assert not await env.store.list_confirmations(buyer_id='buyer',session_id='s')
  assert not state['shopping_work']['selections']
