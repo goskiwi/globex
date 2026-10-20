@@ -78,8 +78,8 @@ def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evid
                     if any(scoped.get(item.sku_id) != item.model_dump() for item in items):
                         raise ValueError('交易子任务不能更换父任务绑定的SKU或数量')
             shipping_address = request.shipping_address.model_dump()
-            work = await selected_work(runtime, items, [], evidence_store) if runtime is not None and 'shopping_work' in runtime.state else None
             order_items = await _verified_order_items(evidence_store, buyer_id, session_id, [x.model_dump() for x in items])
+            work = selected_work(runtime, items, []) if runtime is not None and 'shopping_work' in runtime.state else None
             address = Address(
                 recipient_name=shipping_address.get("recipient_name", ""),
                 country=shipping_address.get("country", ""),

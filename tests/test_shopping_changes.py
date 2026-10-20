@@ -94,3 +94,20 @@ def test_full_snapshot_cannot_replace_existing_state_from_tools():
  assert apply_shopping_change(None,work)==work
  with pytest.raises(ValueError,match='业务工具必须提交领域增量'):
   apply_shopping_change(work,work)
+
+
+@pytest.mark.parametrize('foreign',[False,True])
+async def test_order_source_is_read_once_and_foreign_source_cannot_write(confirmation_env,monkeypatch,foreign):
+ from unittest.mock import AsyncMock
+ env=confirmation_env
+ await env.evidence.save('other' if foreign else 'buyer','s','products',{'hits':[{'product_id':'P1003','skus':[{'sku_id':'P1003-S1'}]}]})
+ lookup=AsyncMock(wraps=env.evidence.find_product);monkeypatch.setattr(env.evidence,'find_product',lookup)
+ address=asdict(Address('合成买家','CN','浙江','杭州','合成测试路1号','310000','13800000000'))
+ model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[call('create_order_tool',{'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],'shipping_address':address},'prepare'),call('finish_turn',{},'finish')]),AIMessage(content='来源不符合要求，不能准备确认。')])
+ graph=create_agent(model,tools=[as_langchain_tool(build_create_order_tool(PlaceOrderUseCase(env.service),env.bus,env.evidence))],middleware=[WorkingStateMiddleware(),*delivery_middlewares()])
+ before=await env.store.get_inventory()
+ state=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='准备这一款的确认卡')]})
+ assert lookup.await_count==1
+ assert len(await env.store.list_confirmations(buyer_id='buyer',session_id='s'))==(0 if foreign else 1)
+ assert bool(state['shopping_work']['selections']) is (not foreign)
+ assert (await env.store.list_orders(buyer_id='buyer'))['total']==0 and await env.store.get_inventory()==before

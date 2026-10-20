@@ -9,6 +9,7 @@ from app.application.runtime.request_scope import ShoppingContext
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.runtime.tools import as_langchain_tool
 from app.application.agents.shopping_changes import ShoppingChange
+from app.application.catalog_evidence import verified_sku_items
 
 
 class RequirementChange(StrictModel):
@@ -47,15 +48,8 @@ def search_requirements(runtime, context, conditions):
     return compile_search(work, context.preference_facts, context.currency), updates
 
 
-async def selected_work(runtime, items, remove_skus, evidence_store):
-    context = ShoppingContext.current()
-    work = changed_work(runtime, ShoppingUpdate(selections=items, remove_skus=remove_skus))
-    for item in items:
-        if evidence_store is None or not await evidence_store.find_product(
-                context.buyer_id, context.shopping_session_id,
-                product_id=item.product_id, sku_id=item.sku_id):
-            raise ValueError(f'当前会话没有规格来源：{item.sku_id}')
-    return work
+def selected_work(runtime, items, remove_skus):
+    return changed_work(runtime, ShoppingUpdate(selections=items, remove_skus=remove_skus))
 
 
 def failed(error):
@@ -82,7 +76,13 @@ def build_shopping_operations(evidence_store):
         同轮需要准备确认时直接调用create_order_tool提交items与地址，不必先选购。
         """
         try:
-            work = await selected_work(runtime, items, remove_skus, evidence_store)
+            work = selected_work(runtime, items, remove_skus)
+            context=ShoppingContext.current()
+            if evidence_store is None and items:
+                raise ValueError('商品检索证据未接入，不能保存选购项')
+            if items:
+                await verified_sku_items(evidence_store.find_product,context.buyer_id,
+                    context.shopping_session_id,[item.model_dump() for item in items])
         except ValueError as error:
             return failed(error)
         return ToolResult({'selected_items': [x.model_dump() for x in work.selections.values()]},
