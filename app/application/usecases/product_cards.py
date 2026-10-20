@@ -143,3 +143,17 @@ def assemble_product_card(score: float, product: Product, spec: ProductSearchSpe
         image_kind=media.image_kind,
         image_alt=media.image_alt,
     )
+
+
+def display_groups(kind, hits):
+    """按实际卡片顺序投影指代；只读查看按目录同款主键合组，不赋予选购资格。"""
+    groups = {}
+    for index, hit in enumerate(hits):
+        key = (hit.get('canonical_product_id') or hit['product_id']) if kind == 'product_view' else index
+        group = groups.setdefault(key, {'position': len(groups) + 1, 'title': hit['title'], 'items': []})
+        item = {'product_id': hit['product_id'], 'sku_ids': (
+            [s['sku_id'] for s in hit['skus']] if kind == 'product_view' else [hit['default_sku_id']])}
+        if kind != 'product_view':
+            item['quantity'] = hit['quantity']
+        group['items'].append(item)
+    return list(groups.values())

@@ -241,11 +241,8 @@ class MainAgentOrchestrator:
                     latest = candidates[0]
                     inputs.insert(0, SystemMessage(content=(
                         "最近已交付商品的顺序仅用于解析指代；当前价格和库存仍须重新核验。\n"
-                        + json.dumps({"result_ref": latest["result_ref"], "candidates": [
-                            {"position": index + 1, "product_id": item["product_id"], "title": item["title"],
-                             "sku_id": item.get("default_sku_id"), "quantity": item.get("quantity", 1)}
-                            for index, item in enumerate(latest["data"].get("hits", []))
-                        ]}, ensure_ascii=False)
+                        + json.dumps({"result_ref": latest["result_ref"],
+                            "candidates": latest["data"]["display_groups"]}, ensure_ascii=False)
                     ), name="candidate_state"))
 
             await self._remove_stale_runtime_hints(session, messages)

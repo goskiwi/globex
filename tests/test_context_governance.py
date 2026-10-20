@@ -199,8 +199,8 @@ async def test_explicit_comparison_order_survives_persistence_and_restart(tmp_pa
         # 检索完成顺序不决定展示；明确提交的比较顺序才进入展示批次。
         cards=[]
         for identifier in ['P1003-S1','P1001-S2']:
-            result = await agent.usecase.execute(ProductSearchSpec(normalized_query=identifier))
-            cards.extend(result['hits'])
+            result = await agent.usecase.execute(ProductSearchSpec(sku_id=identifier))
+            cards.extend({**hit,'quantity':1} for hit in result['hits'])
             orchestrator._bus.publish(session, 'tool.result', {'tool':'product_search_tool', **result})
         from tests.presentation_helpers import presentation
         orchestrator._bus.publish(session,'presentation.result',presentation('comparison',{'hits':list(reversed(cards))}))

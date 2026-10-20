@@ -83,7 +83,12 @@ def product_page(result, *, offset=0, limit=5, token_limit=3000, product_id='', 
     selected_fields = field_selection(fields)
     hits = result.get('hits', [])
     if position:
-        hits = hits[position-1:position]
+        if 'display_groups' in result:
+            group = next((g for g in result['display_groups'] if g['position'] == position), None)
+            identifiers = {item['product_id'] for item in group['items']} if group else set()
+            hits = [hit for hit in hits if hit['product_id'] in identifiers]
+        else:
+            hits = hits[position-1:position]
     hits = [h for h in hits if (not product_id or h.get('product_id') == product_id)
             and (not sku_id or sku_id in {h.get('sku_id'), h.get('default_sku_id')} or any(s.get('sku_id') == sku_id for s in h.get('skus', [])))]
     page = {'hits': [], 'total': len(hits), 'offset': offset, 'next_offset': None,

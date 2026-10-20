@@ -123,7 +123,10 @@ async def test_native_main_closes_with_view_and_keeps_budget(tmp_path,monkeypatc
         assert (result.presentations[-1]["kind"]=="product_view") and result.final_text==guidance and model.cursor==3
         state=await container.orchestrator._sessions._agents['s'].graph.aget_state({'configurable':{'thread_id':'s'}})
         assert state.values['shopping_work']['filters']['price_max_major']==100
-        assert not await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
+        batches = await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
+        assert batches[0]['data']['presentation_kind'] == 'product_view'
+        assert len(batches[0]['data']['display_groups']) == 1
+        assert not await container.orchestrator._evidence_store.find_product('b','s',product_id='P3021',sku_id='P3021-S2')
     finally:await container.shutdown()
 
 

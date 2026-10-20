@@ -66,7 +66,7 @@ def build_conversation_fact_lookup(store, *, mode='strict'):
                 else:
                     records = await store.search(ctx.buyer_id, ctx.shopping_session_id, kind='display_batch', limit=1)
             elif product_id or sku_id:
-                item = await store.find_product(ctx.buyer_id, ctx.shopping_session_id,
+                item = await store.find_observed_product(ctx.buyer_id, ctx.shopping_session_id,
                                                 product_id=product_id, sku_id=sku_id)
                 records = [item] if item else []
             else:

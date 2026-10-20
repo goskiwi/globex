@@ -32,8 +32,12 @@ class RunFinalizer:
             saved = True
             if self._evidence_store is not None:
                 for accepted in presentations or ():
-                    if accepted['kind'] in {'recommendation','comparison'}:
-                        await self._evidence_store.save(intent.buyer_id, session_id, "display_batch", accepted['payload'])
+                    from app.application.usecases.intents import PRODUCT_DELIVERIES
+                    if accepted['kind'] in PRODUCT_DELIVERIES:
+                        from app.application.usecases.product_cards import display_groups
+                        await self._evidence_store.save(intent.buyer_id, session_id, "display_batch", {
+                            **accepted['payload'], 'presentation_kind': accepted['kind'],
+                            'display_groups': display_groups(accepted['kind'], accepted['payload']['hits'])})
                 await self._evidence_store.save(intent.buyer_id, session_id, "conversation", {
                     "buyer": intent.raw_query, "agent": text,
                 })
