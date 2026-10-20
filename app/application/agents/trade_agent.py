@@ -66,7 +66,7 @@ class TradeAgentFactory:
     def build(self):
         prompts = load_prompts()["sub_agents"]["trade"]
         tools = [*self.build_tools(),as_langchain_tool(build_conversation_fact_lookup(
-            self.evidence_store,mode=self._settings.context_lookup_mode))]
+            self.evidence_store))]
         names = {t.name for t in tools}
         if self.capability_registry is not None:
             tools.extend(as_langchain_tool(fn) for fn in build_capability_tools(

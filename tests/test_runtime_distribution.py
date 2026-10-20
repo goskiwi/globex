@@ -39,7 +39,7 @@ def test_empty_fallback_does_not_inject_another_provider_model():
 def test_compose_shares_context_and_independent_embedding_configuration():
     compose = yaml.safe_load((PROJECT_ROOT / "docker/docker-compose.yaml").read_text())
     required = {
-        "CONTEXT_STRATEGY": "${CONTEXT_STRATEGY:-layered}",
+        "LLM_THINKING_MODE": "${LLM_THINKING_MODE:-default}",
         "CONTEXT_PRUNING_TIMING": "${CONTEXT_PRUNING_TIMING:-pressure}",
         "CONTEXT_PRODUCT_TOKENS": "${CONTEXT_PRODUCT_TOKENS:-6000}",
         "CONTEXT_TARGET_TOKENS": "${CONTEXT_TARGET_TOKENS:-48000}",

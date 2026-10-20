@@ -71,7 +71,6 @@ class SearchAgentFactory:
             ),
             build_conversation_fact_lookup(
                 self.evidence_store,
-                mode=self._settings.context_lookup_mode,
             ),
         ]
         if self._settings.tavily_api_key:

@@ -70,6 +70,7 @@ class Settings:
     # ---- 四期：模型回退与网关配额闸门 ----
     # 这组给默认值：前面几期每次扩字段都会打断测试里手工构造的 Settings，
     # 新增可选配置一律带默认值，避免同样的修改成本反复发生。
+    llm_thinking_mode: str = "default"  # default沿用服务端；off关闭，low/high/max指定强度
     llm_fallback_model: str = ""  # 空 = 不回退，重试用尽直接报错
     llm_max_concurrency: int = 2  # 同时在飞的模型请求上限
     llm_min_interval_seconds: float = 1.0  # 相邻请求起跑最小间隔，治速率爬升过快
@@ -80,13 +81,11 @@ class Settings:
     # ---- 四期：存储 ----
     # 默认 SQLite（零外部依赖，落在 DATA_DIR/globex.db）。
     # 换服务型数据库需自行装异步驱动（aiomysql / asyncpg）并改此 URL，本仓未验证。
-    context_strategy: str = "layered"  # 商品正文投影策略，不切换 Agent Runtime
     context_pruning_timing: str = "pressure"
     context_product_tokens: int = 6000
     context_prompt_layout: str = "stable_prefix"  # 固定轨迹缓存实验的布局参数
     context_state_mode: str = "snapshot"  # delta 只用于稳定前缀的独立实验
     context_prune_low_ratio: float = 1.0  # 小于 1 时触发后回收到较低水位
-    context_lookup_mode: str = "strict"  # bounded 兼容明确字段别名及限额分页
     context_compact_result_rules: bool = False  # 固定说明提升到规则，JSON只移除空白
     context_target_tokens: int = 48000
     database_url: str = ""
@@ -150,19 +149,18 @@ def load_settings() -> Settings:
     data_dir = Path(os.getenv("DATA_DIR", str(PROJECT_ROOT / "data")))
     data_dir.mkdir(parents=True, exist_ok=True)  # SQLite 默认落在此目录，建库前必须存在
     return Settings(
-        context_strategy=os.getenv("CONTEXT_STRATEGY", "layered"),
         skill_catalog_mode=os.getenv("SKILL_CATALOG_MODE", "legacy"),
         context_pruning_timing=os.getenv("CONTEXT_PRUNING_TIMING", "pressure"),
         context_product_tokens=int(os.getenv("CONTEXT_PRODUCT_TOKENS", "6000")),
         context_prompt_layout=os.getenv("CONTEXT_PROMPT_LAYOUT", "stable_prefix"),
         context_state_mode=os.getenv("CONTEXT_STATE_MODE", "snapshot"),
         context_prune_low_ratio=float(os.getenv("CONTEXT_PRUNE_LOW_RATIO", "1")),
-        context_lookup_mode=os.getenv("CONTEXT_LOOKUP_MODE", "strict"),
         context_compact_result_rules=os.getenv("CONTEXT_COMPACT_RESULT_RULES", "0") == "1",
         context_target_tokens=int(os.getenv("CONTEXT_TARGET_TOKENS", "48000")),
         llm_base_url=llm_base_url,
         llm_api_key=llm_api_key,
         llm_model=os.getenv("LLM_MODEL", "qwen3-max"),
+        llm_thinking_mode=os.getenv("LLM_THINKING_MODE", "default"),
         reranker_mode=os.getenv("RERANKER_MODE", "http"),
         reranker_api_key=os.getenv("RERANKER_API_KEY") or llm_api_key,
         reranker_protocol=os.getenv("RERANKER_PROTOCOL", "flat"),
@@ -206,10 +204,9 @@ def load_settings() -> Settings:
         llm_max_retries=int(os.getenv("LLM_MAX_RETRIES", "2")),
         prompt_cache_mode=os.getenv("PROMPT_CACHE_MODE", "passthrough"),
         prompt_cache_policy=os.getenv("PROMPT_CACHE_POLICY", "static"),
-        # 兼容早期变量名 MYSQL_URL；两者都没配时默认本地 SQLite
+        # 数据库仅使用DATABASE_URL；未配置时落在当前DATA_DIR。
         database_url=(
             os.getenv("DATABASE_URL")
-            or os.getenv("MYSQL_URL")
             or f"sqlite+aiosqlite:///{data_dir / 'globex.db'}"
         ),
         redis_url=os.getenv("REDIS_URL", ""),

@@ -11,8 +11,8 @@ from importlib.metadata import version
 ROOT = Path(__file__).resolve().parents[3]
 SUITE = ROOT / 'eval/harness/v1/suite.json'
 SCHEMA_VERSION = 'harness-eval-v1'
-POLICY_FIELDS = {'skill_catalog_mode', 'context_strategy', 'context_pruning_timing', 'context_product_tokens',
-                 'context_target_tokens', 'context_prompt_layout', 'context_state_mode', 'context_lookup_mode', 'context_prune_low_ratio', 'context_compact_result_rules', 'prompt_cache_mode', 'prompt_cache_policy'}
+POLICY_FIELDS = {'skill_catalog_mode', 'context_pruning_timing', 'context_product_tokens',
+                 'context_target_tokens', 'context_prompt_layout', 'context_state_mode', 'context_prune_low_ratio', 'context_compact_result_rules', 'prompt_cache_mode', 'prompt_cache_policy'}
 WATCHED = ('app/application/agents/', 'app/application/harness/', 'app/application/memory/',
            'app/application/runtime/', 'app/infrastructure/langchain_model.py',
            'app/infrastructure/persistence/graph_checkpointer.py',
@@ -37,7 +37,7 @@ RUNTIME_FIELDS = ('tool_result_limit', 'tool_failure_threshold', 'tool_circuit_r
                   'harness_enabled', 'loop_repeat_threshold', 'output_guard_enabled',
                   'reply_token_budget', 'token_budget_total', 'preference_relevance_enabled',
                   'preference_top_k', 'session_owner_binding',
-                  'llm_max_retries', 'llm_fallback_model')
+                  'llm_max_retries', 'llm_fallback_model', 'llm_thinking_mode')
 
 
 def execution_environment(settings):

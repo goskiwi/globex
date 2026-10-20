@@ -12,7 +12,8 @@ from app.application.runtime.errors import ExecutionStopped
 import httpx
 from tests.native_model_helpers import client_model, completion
 from app.infrastructure.throttle import GatewayThrottle
-from app.infrastructure.persistence.context_evidence import ContextEvidenceStore, product_decision_view
+from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
+from scripts.eval.run_context import product_decision_view
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
 

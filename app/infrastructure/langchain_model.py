@@ -2,7 +2,7 @@
 import json
 import time
 from contextlib import AsyncExitStack
-from typing import Any
+from typing import Any, Literal
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, convert_to_openai_messages
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -25,7 +25,7 @@ class ChatModelAdapter(BaseChatModel):
     streaming: bool = True
     max_tokens: int = 8192
     temperature: float | None = None
-    reasoning_effort: str | None = None
+    thinking_mode: Literal['default','off','low','high','max'] = 'default'
     gateway: Any = Field(default=None, exclude=True)
     cache_mode: str = "passthrough"
     cache_policy: str = "static"
@@ -37,7 +37,7 @@ class ChatModelAdapter(BaseChatModel):
 
     @property
     def _identifying_params(self):
-        return {"model_name": self.model_name}
+        return {"model_name": self.model_name, "thinking_mode": self.thinking_mode}
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         raise NotImplementedError("本项目模型入口使用 ainvoke，不输出半成品工具参数")
@@ -76,7 +76,10 @@ class ChatModelAdapter(BaseChatModel):
                    "max_completion_tokens":self.max_tokens}
         if self.temperature is not None: payload["temperature"] = self.temperature
         if stop is not None: payload["stop"] = stop
-        if self.reasoning_effort: payload["reasoning_effort"] = self.reasoning_effort
+        if self.thinking_mode == 'off':
+            payload['extra_body'] = {'enable_thinking': False}
+        elif self.thinking_mode != 'default':
+            payload['reasoning_effort'] = self.thinking_mode
         payload.update({k:v for k,v in kwargs.items() if k in {
             "model", "tools", "tool_choice", "temperature", "max_completion_tokens", "response_format", "seed"}})
         if self.streaming: payload["stream_options"] = {"include_usage": True}

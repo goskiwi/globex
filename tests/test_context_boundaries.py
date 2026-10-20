@@ -187,7 +187,7 @@ async def test_structured_knowledge_archive_roundtrip_preserves_content_and_sour
         reference = json.loads(updates['messages'][0].content)['result_ref']
         saved = await middleware.store.get('b', 's', reference)
         assert saved['kind'] == 'tool_archive' and saved['data'] == payload
-        lookup = build_conversation_fact_lookup(middleware.store, mode='bounded')
+        lookup = build_conversation_fact_lookup(middleware.store)
         offset, pieces = 0, []
         while offset is not None:
             result = await lookup(result_ref=reference, field_offset=offset)

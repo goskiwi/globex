@@ -65,11 +65,11 @@ def render(output: Path, manifest, rows):
         ratio=s['cache_read_ratio']
         parts.append('<tr><td>'+e(name)+'</td><td>'+cell(s['cache_read_tokens']['total'])+' / '+cell(ratio*100 if ratio is not None else None,'%')+'</td><td>'+cell(d['comparable_calls'])+'</td><td>'+cell(d['system_changes'])+' / '+cell(d['tool_changes'])+'</td><td>'+cell(d['history_rewrites'])+' / '+cell(d['append_calls'])+'</td><td>'+' / '.join(cell(t[k],' ms') for k in ('initial','followup','after_rebuild'))+'</td></tr>')
     parts+=['</table></div><p class="muted">前缀比较使用同模型、同买家会话、同调用类型的规范 JSON；只有带随机密钥的摘要与计数，不记录买家正文。重建/模型重建可能正常改写前缀或开始新比较。完整消息字节前缀不是供应商缓存 token，也不证明未命中的原因。passthrough 仍可能命中隐式缓存。固定轨迹的首次调用不保证供应商完全冷缓存；其合成摘要没有真实摘要成本，不能代替长对话评测。</p></section>']
-    parts+=['<section><h2>调用增量与治理归因</h2><div class="scroll"><table><tr><th>策略</th><th>回查错误 / 观测</th><th>参数归一化 / 待续页</th><th>状态写入 / 跳过重复</th><th>整理改写批次 / 归档结果</th><th>模型耗时 P95 / 首字后 P95</th></tr>']
+    parts+=['<section><h2>调用增量与治理归因</h2><div class="scroll"><table><tr><th>策略</th><th>回查错误 / 观测</th><th>返回记录 / 待续页</th><th>状态写入 / 跳过重复</th><th>整理改写批次 / 归档结果</th><th>模型耗时 P95 / 首字后 P95</th></tr>']
     for name, summary in report['strategies'].items():
         d=summary['efficiency_diagnostics']
-        parts.append('<tr><td>'+e(name)+'</td><td>'+cell(d['lookup_errors'])+' / '+cell(d['lookup_observed'])+'</td><td>'+cell(d['lookup_normalized'])+' / '+cell(d['lookup_pages_with_more'])+'</td><td>'+cell(d['state_emitted'])+' / '+cell(d['state_skipped'])+'</td><td>'+cell(d['archive_passes'])+' / '+cell(d['archived_results'])+'</td><td>'+cell(d['model_elapsed_p95_ms'],' ms')+' / '+cell(d['after_first_text_p95_ms'],' ms')+'</td></tr>')
-    parts+=['</table></div><p class="muted">没有诊断数据的项目显示未知。首字后耗时只统计具备真实流式首字记录的调用，不能代表全部调用的解码时间。参数归一化不会扩大页大小或绕过买家归属。</p>']
+        parts.append('<tr><td>'+e(name)+'</td><td>'+cell(d['lookup_errors'])+' / '+cell(d['lookup_observed'])+'</td><td>'+cell(d['lookup_records'])+' / '+cell(d['lookup_pages_with_more'])+'</td><td>'+cell(d['state_emitted'])+' / '+cell(d['state_skipped'])+'</td><td>'+cell(d['archive_passes'])+' / '+cell(d['archived_results'])+'</td><td>'+cell(d['model_elapsed_p95_ms'],' ms')+' / '+cell(d['after_first_text_p95_ms'],' ms')+'</td></tr>')
+    parts+=['</table></div><p class="muted">没有诊断数据的项目显示未知。首字后耗时只统计具备真实流式首字记录的调用，不能代表全部调用的解码时间。分页不会扩大页大小或绕过买家归属。</p>']
     for name, summary in report['strategies'].items():
         d=summary['efficiency_diagnostics']
         parts.append('<details><summary>'+e(name)+' · 整理状态与分区估算</summary><pre>'+e(json.dumps({'observed_requests':d['measured_requests'],'request_statuses':d['request_statuses'],'estimated_sections':d['estimated_sections']},ensure_ascii=False,indent=2))+'</pre></details>')

@@ -60,39 +60,27 @@ def test_diagnostic_html_keeps_unknowns_and_escapes_events(tmp_path):
     assert '调用增量与治理归因' in html and '&lt;script&gt;bad' in html
     assert '<script>bad</script>' not in html
 
-@pytest.mark.parametrize('mode,success', [('strict', False), ('bounded', True)])
-async def test_lookup_repairs_only_unambiguous_parameters_and_keeps_all_pages(tmp_path, mode, success):
+async def test_lookup_uses_one_explicit_protocol_and_preserves_pages(tmp_path):
     store = ContextEvidenceStore(tmp_path / 'e.db')
     hits = [{'product_id': f'P{i}', 'title': '背包', 'skus': [{'sku_id': f'P{i}-S1', 'spec': '黑色', 'price_major': 10 + i, 'currency': 'CNY'}]} for i in range(7)]
     ref = await store.save('b', 's', 'display_batch', {'hits': hits})
-    lookup = build_conversation_fact_lookup(store, mode=mode)
-    events = []; token = context_diagnostic_sink.set(events.append)
-    try:
-        result = await lookup(result_ref=ref, fields='skus.sku_id,skus.spec,skus.price_major,skus.currency', limit=10)
-        assert (result.state.value == 'success') == success
-        if not success:
-            assert events[-1]['error_code'] == 'invalid_request'
-            return
-        payload = json.loads(result.text)
-        page = payload['records'][0]['data']
-        assert page['hits'] == hits[:5] and page['next_offset'] == 5 and page['total'] == 7
-        assert not payload['page_contract']['complete_selection']
-        assert events[-1]['limit_capped'] and events[-1]['fields_normalized']
-        more = json.loads((await lookup(result_ref=ref, fields='skus', offset=5)).text)
-        assert more['records'][0]['data']['hits'] == hits[5:]
-        assert more['page_contract']['complete_selection']
-        assert token_estimate(payload) <= 3000 and token_estimate(more) <= 3000
-    finally:
-        context_diagnostic_sink.reset(token)
+    lookup = build_conversation_fact_lookup(store)
+    for fields in ('inventory','unit_price','stock_quantity','skus.price_major'):
+        assert not (await lookup(result_ref=ref, fields=fields)).ok
+    assert not (await lookup(result_ref=ref, limit=10)).ok
+    first = (await lookup(result_ref=ref, fields='all', limit=5)).data['records'][0]['data']
+    more = (await lookup(result_ref=ref, fields='all', offset=5)).data['records'][0]['data']
+    assert first['hits'] == hits[:5] and first['next_offset'] == 5
+    assert more['hits'] == hits[5:] and more['next_offset'] is None
 
 async def test_lookup_rejects_unknown_fields_and_cross_buyer_reference(tmp_path):
     store = ContextEvidenceStore(tmp_path / 'e.db')
     ref = await store.save('other', 's', 'display_batch', {'hits': [{'product_id': 'P99'}]})
-    lookup = build_conversation_fact_lookup(store, mode='bounded')
+    lookup = build_conversation_fact_lookup(store)
     assert (await lookup(fields='skus.secret')).state.value == 'error'
     assert (await lookup(limit=0)).state.value == 'error'
     result = json.loads((await lookup(result_ref=ref)).text)
-    assert result['records'] == [] and not result['page_contract']['complete_selection']
+    assert result['records'] == []
 
 async def test_synthetic_lookup_trace_preserves_actual_parameters_pages_and_errors(tmp_path):
     from app.infrastructure.context_usage import evaluation_evidence_sink
@@ -100,14 +88,14 @@ async def test_synthetic_lookup_trace_preserves_actual_parameters_pages_and_erro
     ref = await store.save('b', 's', 'display_batch', {'hits': [
         {'product_id': f'P{i}', 'skus': [{'sku_id': f'P{i}-S1', 'spec': '黑色', 'price_major': i, 'currency': 'CNY'}]}
         for i in range(7)]})
-    lookup = build_conversation_fact_lookup(store, mode='bounded')
+    lookup = build_conversation_fact_lookup(store)
     events = []; token = evaluation_evidence_sink.set(events.append)
     try:
-        response = await lookup(result_ref=ref, fields='skus.price_major,skus.currency', limit=10)
+        response = await lookup(result_ref=ref, fields='price', limit=5)
         page = events[-1]
         assert page['kind'] == 'lookup_result'
-        assert page['payload']['arguments']['limit'] == 10
-        assert page['payload']['effective_limit'] == 5
+        assert page['payload']['arguments']['limit'] == 5
+        assert page['payload']['limit'] == 5
         assert page['payload']['result'] == json.loads(response.text)
         assert page['payload']['result']['records'][0]['data']['next_offset'] == 5
         await lookup(result_ref=ref, fields='unknown-secret-field')
@@ -121,7 +109,7 @@ async def test_bounded_page_budget_includes_evidence_envelope(tmp_path):
     store = ContextEvidenceStore(tmp_path / 'e.db')
     hits = [{'product_id': f'P{i}', 'description': '限制' * 500, 'title': '包'} for i in range(6)]
     ref = await store.save('b', 's', 'display_batch', {'hits': hits, 'query_conditions': {'query': '旅行' * 70}})
-    lookup = build_conversation_fact_lookup(store, mode='bounded')
+    lookup = build_conversation_fact_lookup(store)
     collected = []; offset = 0
     while True:
         chunk = await lookup(result_ref=ref, offset=offset)
@@ -141,7 +129,7 @@ def test_efficiency_suite_preserves_model_permissions_and_default_switches(tmp_p
     assert suite['profiles']['efficiency']['repetitions'] == 3
     assert len(suite['profiles']['long_efficiency']['cases']) == 2
     settings = _settings(tmp_path)
-    assert settings.context_state_mode == 'snapshot' and settings.context_lookup_mode == 'strict'
+    assert settings.context_state_mode == 'snapshot'
     assert settings.context_prune_low_ratio == 1.0
     assert suite['strategies']['candidate']['overrides']['context_prune_low_ratio'] == .65
 

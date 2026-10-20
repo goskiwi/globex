@@ -18,7 +18,7 @@ from pathlib import Path
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.context_products import business_view, token_estimate, result_identity
 from app.infrastructure.context_usage import context_usage_sink
-from app.infrastructure.persistence.context_evidence import ContextEvidenceStore, product_decision_view
+from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from app.infrastructure.persistence.sql.session_store import SqlFencedSessionStore
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
@@ -64,6 +64,14 @@ async def compact_for_evaluation(graph, middleware, config):
 
 
 
+def product_decision_view(result: dict) -> dict:
+    """离线合成实验的旧投影对照，不进入应用配置或业务调用。"""
+    fields = ("product_id", "title", "brand", "category", "price_major", "currency", "source_price_major", "source_currency", "skus", "landed_price", "material_tags", "ships_to", "highlights", "default_sku_id", "canonical_product_id", "weight_kg", "dimensions_cm", "package_dimensions_cm", "origin_country", "source_platform")
+    return {**{k: v for k, v in result.items() if k != "hits"}, "hits": [
+        {k: hit[k] for k in fields if k in hit} for hit in result.get("hits", [])
+    ]}
+
+
 class Benchmark:
     def __init__(self, settings, throttle, folder, timing="pressure", *, stream=False, output_limit=8192, usage_hook=None, request_timeout=None):
         self.settings,self.throttle,self.folder=settings,throttle,folder
@@ -97,7 +105,7 @@ class Benchmark:
             raise ValueError('未知上下文策略')
         policy_settings=replace(self.settings,context_product_tokens=10**9 if strategy=='legacy' else self.settings.context_product_tokens,
             context_pruning_timing=strategy if strategy in {'after_use','pressure'} else self.timing)
-        lookup_impl=build_conversation_fact_lookup(store,mode=self.settings.context_lookup_mode)
+        lookup_impl=build_conversation_fact_lookup(store)
         saver_context=AsyncSqliteSaver.from_conn_string(str(folder/'graph.db'))
         saver=await saver_context.__aenter__()
         config={'configurable':{'thread_id':session},'recursion_limit':24}

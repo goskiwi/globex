@@ -118,7 +118,7 @@ def summarize(manifest, rows):
         strategies[name]['efficiency_diagnostics'] = {
             'lookup_observed': len(lookups),
             'lookup_errors': sum(d['status'] != 'success' for d in lookups) if lookups else None,
-            'lookup_normalized': sum(d.get('limit_capped', False) or d.get('fields_normalized', False) for d in lookups) if lookups else None,
+            'lookup_records': sum(d.get('records', 0) for d in lookups) if lookups else None,
             'lookup_pages_with_more': sum(d.get('has_more', False) for d in lookups) if lookups else None,
             'state_emitted': sum(d['emitted'] for d in states) if states else None,
             'state_skipped': sum(not d['emitted'] for d in states) if states else None,

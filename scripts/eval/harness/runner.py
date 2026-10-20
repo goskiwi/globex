@@ -81,7 +81,7 @@ async def execute_case(case, strategy, repetition, settings, suite, work, thrott
         runner=Benchmark(configured,throttle,work,configured.context_pruning_timing,stream=False,
                          output_limit=suite['runtime']['output_limit'],usage_hook=collect,
                          request_timeout=suite['runtime']['request_timeout_seconds'])
-        row=await runner.run_case(case,'layered' if configured.context_strategy=='layered' else 'legacy',repetition)
+        row=await runner.run_case(case,'layered',repetition)
         row=score([row],{case['id']:case})[0]
         if case.get('expected_black_skus'):
             expected=case['expected_black_skus']

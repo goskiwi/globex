@@ -52,7 +52,7 @@ class TestHarnessMiddleware:
         from app.infrastructure.eventbus import TradeEventBus
         from app.infrastructure.throttle import GatewayThrottle
         from tests.test_retrieval import _settings
-        settings = replace(_settings(tmp_path), harness_enabled=True, context_lookup_mode='bounded')
+        settings = replace(_settings(tmp_path), harness_enabled=True)
         bus, circuit, throttle = TradeEventBus(), CircuitBreakerRegistry(), GatewayThrottle(1, 0)
         search = SearchAgentFactory(settings, __import__('app.application.usecases.catalog_search', fromlist=['CatalogSearchUseCase']).CatalogSearchUseCase(None), bus, None, circuit, throttle, model_client=None)
         orders = TradeAgentFactory(settings, None, None, None, bus, circuit, throttle, model_client=None)

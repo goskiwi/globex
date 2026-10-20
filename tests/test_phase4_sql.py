@@ -83,7 +83,6 @@ class TestEngineSelection:
         monkeypatch.setenv("LLM_API_KEY", "test-key")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
         monkeypatch.delenv("DATABASE_URL", raising=False)
-        monkeypatch.delenv("MYSQL_URL", raising=False)
 
         settings = load_settings()
         assert settings.database_url.startswith("sqlite+aiosqlite:///")

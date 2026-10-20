@@ -113,11 +113,3 @@ class ContextEvidenceStore:
         if hashlib.sha256(row["payload"].encode()).hexdigest() != row["sha256"]:
             raise ValueError("上下文证据校验失败")
         return {"result_ref": row["ref"], "kind": row["kind"], "sha256": row["sha256"], "created_at": row["created"], "session_fence": row["fence"], "data": json.loads(row["payload"])}
-
-
-def product_decision_view(result: dict) -> dict:
-    """保留决策所需标识、顺序、价格、库存、配送和硬约束，剔除展示冗余。"""
-    fields = ("product_id", "title", "brand", "category", "price_major", "currency", "source_price_major", "source_currency", "skus", "landed_price", "material_tags", "ships_to", "highlights", "default_sku_id", "canonical_product_id", "weight_kg", "dimensions_cm", "package_dimensions_cm", "origin_country", "source_platform")
-    return {**{k: v for k, v in result.items() if k != "hits"}, "hits": [
-        {k: hit[k] for k in fields if k in hit} for hit in result.get("hits", [])
-    ]}

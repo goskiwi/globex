@@ -7,7 +7,6 @@
     "current": {
       "label": "稳定前缀 / 原治理",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -15,29 +14,12 @@
         "prompt_cache_policy": "static",
         "context_prompt_layout": "stable_prefix",
         "context_state_mode": "snapshot",
-        "context_lookup_mode": "strict",
-        "context_prune_low_ratio": 1.0
-      }
-    },
-    "lookup": {
-      "label": "仅回查归一化",
-      "overrides": {
-        "context_strategy": "layered",
-        "context_pruning_timing": "pressure",
-        "context_product_tokens": 6000,
-        "context_target_tokens": 48000,
-        "prompt_cache_mode": "passthrough",
-        "prompt_cache_policy": "static",
-        "context_prompt_layout": "stable_prefix",
-        "context_state_mode": "snapshot",
-        "context_lookup_mode": "bounded",
         "context_prune_low_ratio": 1.0
       }
     },
     "state": {
-      "label": "回查 + 状态增量",
+      "label": "状态增量",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -45,14 +27,12 @@
         "prompt_cache_policy": "static",
         "context_prompt_layout": "stable_prefix",
         "context_state_mode": "delta",
-        "context_lookup_mode": "bounded",
         "context_prune_low_ratio": 1.0
       }
     },
     "compact": {
-      "label": "回查 + 状态增量 + 固定说明去重",
+      "label": "状态增量 + 固定说明去重",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -60,15 +40,13 @@
         "prompt_cache_policy": "static",
         "context_prompt_layout": "stable_prefix",
         "context_state_mode": "delta",
-        "context_lookup_mode": "bounded",
         "context_prune_low_ratio": 1.0,
         "context_compact_result_rules": true
       }
     },
     "candidate": {
-      "label": "回查 + 状态增量 + 固定说明去重 + 分批整理",
+      "label": "状态增量 + 固定说明去重 + 分批整理",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -76,7 +54,6 @@
         "prompt_cache_policy": "static",
         "context_prompt_layout": "stable_prefix",
         "context_state_mode": "delta",
-        "context_lookup_mode": "bounded",
         "context_prune_low_ratio": 0.65,
         "context_compact_result_rules": true
       }

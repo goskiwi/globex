@@ -7,7 +7,6 @@
     "current": {
       "label": "legacy_system / passthrough",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -19,7 +18,6 @@
     "current_cp": {
       "label": "legacy_system / explicit",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -31,7 +29,6 @@
     "candidate": {
       "label": "stable_prefix / passthrough",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,
@@ -43,7 +40,6 @@
     "candidate_cp": {
       "label": "stable_prefix / explicit",
       "overrides": {
-        "context_strategy": "layered",
         "context_pruning_timing": "pressure",
         "context_product_tokens": 6000,
         "context_target_tokens": 48000,

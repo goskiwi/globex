@@ -430,12 +430,3 @@ class TracingASGIMiddleware:
                     raise
                 finally:
                     logger.info("HTTP 请求结束 method=%s status=%s", method, status)
-
-
-def build_agent_middlewares(settings: Settings) -> list:
-    """兼容旧扩展入口；LangGraph 中间件在主图创建时显式装配。"""
-    if settings.context_strategy not in {'legacy', 'layered'}:
-        raise ValueError('CONTEXT_STRATEGY 仅支持 legacy/layered')
-    if settings.context_pruning_timing not in {'after_use', 'pressure'}:
-        raise ValueError('CONTEXT_PRUNING_TIMING 必须是 after_use 或 pressure，入口有损只供实验')
-    return []

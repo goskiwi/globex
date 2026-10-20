@@ -41,16 +41,6 @@ FIELD_GROUPS = {
 }
 
 
-def normalize_lookup_fields(fields):
-    """只兼容可确定的 SKU 子字段；返回完整 SKU 组，保留规格与数值归属。"""
-    names = re.split(r'[,，\s]+', fields.strip())
-    sku_fields = {'sku_id', 'spec', 'price_major', 'currency', 'stock', 'stock_quantity'}
-    mapped = ['skus' if name.startswith('skus.') and name[5:] in sku_fields else name for name in names]
-    normalized = ','.join(dict.fromkeys(mapped))
-    field_selection(normalized)  # 未知字段仍拒绝，不能悄悄忽略模型所需信息。
-    return normalized
-
-
 def field_selection(fields):
     """接受字段组和明确字段列表；SKU价、库存请求始终带完整规格，避免顶层价冒充规格价。"""
     if fields == 'all':
@@ -58,10 +48,8 @@ def field_selection(fields):
     if fields in FIELD_GROUPS:
         return FIELD_GROUPS[fields]
     requested = set(re.split(r'[,，\s]+', fields.strip()))
-    aliases = {'stock_quantity': 'stock', 'inventory': 'stock', 'unit_price': 'price_major'}
     names = set()
     for name in requested:
-        name = aliases.get(name, name)
         names.update(FIELD_GROUPS.get(name, {name}))
     allowed = set().union(*FIELD_GROUPS.values()) | {
         'sku_id', 'spec', 'stock', 'origin_country', 'brand', 'category',
