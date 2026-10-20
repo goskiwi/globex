@@ -154,7 +154,7 @@ def test_only_actual_state_conflicts_block_and_independent_calls_remain_runnable
     changing=c('set_shopping_requirements',{'changes':{'filters':{'ship_to':'CN'}}},'requirements')
     order=c('query_order_tool',{'order_id':'synthetic'},'order')
     assert conflicting_shopping_calls([changing,detail,order])=={'requirements','details'}
-    assert conflicting_shopping_calls([changing,selected,order])=={'requirements','selection'}
+    assert not conflicting_shopping_calls([changing,selected,order])
 
 
 async def test_existing_delivery_and_independent_research_can_progress_in_same_batch(tmp_path,monkeypatch):

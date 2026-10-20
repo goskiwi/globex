@@ -97,8 +97,9 @@ class FinalDeliveryMiddleware(AgentMiddleware):
                 if not isinstance(message,ToolMessage):break
                 business.insert(0,message)
         if not business or any(r.status!='success' or (r.artifact or {}).get('notices') for r in business):return None
-        values=[accepted.get((r.artifact or {}).get('execution_id')) for r in business]
-        if not all(values):return None
+        values=[accepted[(r.artifact or {})['execution_id']] for r in business
+                if (r.artifact or {}).get('execution_id') in accepted]
+        if not values:return None
         lines=[(p['guidance'] if p['id'] in operations else
                 '请填写下方的问题，提交后我会继续选购。' if p['kind']=='clarification' else p['payload']['guidance']) for p in values]
         from app.application.runtime.request_scope import ShoppingContext

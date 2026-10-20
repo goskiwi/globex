@@ -1,56 +1,71 @@
 """投影当前状态，并为业务工具绑定同一份条件和选购项。"""
 from dataclasses import replace
 import json
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, Annotated
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langgraph.types import Overwrite
 from pydantic import ValidationError
 
 from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 from app.application.runtime.request_scope import ShoppingContext
+from app.application.agents.shopping_changes import apply_shopping_change
 
 
 class WorkingState(AgentState):
-    shopping_work: NotRequired[dict]
+    shopping_work: NotRequired[Annotated[dict | None, apply_shopping_change]]
     shopping_work_owner: NotRequired[str]
 
 
 def shopping_access(call):
-    """现有业务操作对购物状态的实际读写范围；订单查询、报价、历史回查不读取该状态。"""
-    name, args = call['name'], call['args']
-    conditions = {'filters','preferences','sort','ignored_preferences','requirements','excluded_products','excluded_skus'}
-    reads = (conditions if name in {'product_search_tool','get_product_details','category_insight_tool',
+    """按领域字段/规格描述实际访问，写值一致才是幂等操作；不按工具组合免检。"""
+    name,args=call['name'],call['args']
+    conditions={'filters','preferences','sort','ignored_preferences','requirements','excluded_products','excluded_skus'}
+    reads=(conditions if name in {'product_search_tool','get_product_details','category_insight_tool',
         'show_product_details','recommend_products','recommend_bundle','compare_products','create_order_tool'} else set())
-    if name == 'task_dispatch':
-        reads = conditions | {'plan','selections'}
-    elif name in {'recommend_products','recommend_bundle','compare_products'}:
-        reads = conditions | {'plan'}
-    elif name == 'present_research':
-        reads = {'plan'}
-    elif name == 'select_products':
-        reads = {'selections','excluded_products','excluded_skus'}
+    if name=='task_dispatch':reads=conditions|{'plan','selections'}
+    elif name in {'recommend_products','recommend_bundle','compare_products'}:reads=conditions|{'plan'}
+    elif name=='present_research':reads={'plan'}
+    elif name=='select_products':reads={'excluded_products','excluded_skus'}
     if name in {'select_products','create_order_tool'}:
-        return reads, {'selections'}
-    if name == 'set_research_plan':
-        return reads, {'plan'}
-    change = args.get('changes') if name == 'set_shopping_requirements' else args.get('conditions') if name == 'product_search_tool' else None
-    if change is not None:
-        return reads, (set(ShoppingWork.model_fields) if not isinstance(change,dict) or change.get('reset')
-                       else set(change) - {'reset'})
-    return reads, None
+        items=args.get('items',[])
+        if not isinstance(items,list) or any(not isinstance(item,dict) or not item.get('sku_id') for item in items):
+            return reads,{():None}
+        writes={('selections',sku):None for sku in args.get('remove_skus',[])}
+        writes.update({('selections',item['sku_id']):item for item in items})
+        return reads,writes
+    if name=='set_research_plan':return reads,{('plan',):args.get('plan')}
+    change=args.get('changes') if name=='set_shopping_requirements' else args.get('conditions') if name=='product_search_tool' else None
+    if change is None:return reads,{}
+    if not isinstance(change,dict) or change.get('reset'):return reads,{():None}
+    writes={}
+    for key,value in change.items():
+        if key=='reset':continue
+        if key=='filters' and isinstance(value,dict):
+            writes.update({('filters',field):item for field,item in value.items()})
+        else:writes[(key,)]=value
+    return reads,writes
+
+
+def overlapping(left,right):
+    return left[:min(len(left),len(right))]==right[:min(len(left),len(right))]
 
 
 def conflicting_shopping_calls(calls):
-    access = {call['id']: shopping_access(call) for call in calls}
-    writers = {key for key, (_, fields) in access.items() if fields is not None}
-    # Command写回整个shopping_work；同批多写者即使改不同字段也不能覆盖彼此。
-    conflicts = set(writers) if len(writers) > 1 else set()
-    for writer in writers:
-        for reader, (fields, _) in access.items():
-            if reader != writer and fields.intersection(access[writer][1]):
-                conflicts.update({writer, reader})
+    access={call['id']:shopping_access(call) for call in calls}
+    conflicts=set()
+    for writer,(_,writes) in access.items():
+        for reader,(reads,other_writes) in access.items():
+            if reader==writer:continue
+            incompatible=any(overlapping(a,b) and (a!=b or x!=y or not a)
+                for a,x in writes.items() for b,y in other_writes.items())
+            # 自带同值变更的业务操作在自身领域校验中应用该值，不依赖同批另一写者。
+            dependent=any(any(overlapping(path,(field,)) for field in reads)
+                and not (path in other_writes and other_writes[path]==value and path)
+                for path,value in writes.items())
+            if incompatible or dependent:conflicts.update({writer,reader})
     return conflicts
 
 
@@ -88,10 +103,10 @@ class WorkingStateMiddleware(AgentMiddleware):
             raise ValueError("旧购物状态不再支持继续执行，请新建会话；历史记录保留") from None
         buyers = [m for m in state["messages"] if isinstance(m, HumanMessage) and m.name == context.buyer_id]
         if not buyers or buyers[-1].id == work.source_message_id:
-            return {"shopping_work": work.model_dump(), "shopping_work_owner": context.buyer_id}
+            return {"shopping_work": Overwrite(work.model_dump()) if "shopping_work" in state else work.model_dump(), "shopping_work_owner": context.buyer_id}
         message = buyers[-1]
         work.latest_request, work.source_message_id = message.text, message.id
-        updates = {"shopping_work": work.model_dump(), "shopping_work_owner": context.buyer_id}
+        updates = {"shopping_work": Overwrite(work.model_dump()) if "shopping_work" in state else work.model_dump(), "shopping_work_owner": context.buyer_id}
         if self.mode == "delta":
             from app.application.runtime.state_projection import next_state_message
             hint = next_state_message(state["messages"], work.model_dump())

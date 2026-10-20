@@ -90,7 +90,10 @@ class BusinessToolMiddleware(AgentMiddleware):
                         from app.domain.buyer.preference import BuyerPreference
                         context = ShoppingContext.current()
                         conditions = context.effective_search if context else None
-                        work = output.update.get('shopping_work', request.state.get('shopping_work')) if isinstance(output, Command) else request.state.get('shopping_work')
+                        work = request.state.get('shopping_work')
+                        if isinstance(output,Command) and 'shopping_work' in output.update:
+                            from app.application.agents.shopping_changes import apply_shopping_change
+                            work = apply_shopping_change(work,output.update['shopping_work'])
                         if work is not None:
                             facts = tuple(BuyerPreference(**p) for p in request.state.get("preference_snapshot", {}).get("facts", []))
                             conditions = compile_search(ShoppingWork.model_validate(work),

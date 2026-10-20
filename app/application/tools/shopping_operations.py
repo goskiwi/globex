@@ -8,6 +8,7 @@ from app.application.agents.shopping_state import (
 from app.application.runtime.request_scope import ShoppingContext
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.runtime.tools import as_langchain_tool
+from app.application.agents.shopping_changes import ShoppingChange
 
 
 class RequirementChange(StrictModel):
@@ -31,11 +32,16 @@ def changed_work(runtime, change):
     return apply_update(work, change, context.source_message_id, context.preference_facts)
 
 
+def work_update(runtime, work, *, reset=False):
+    before=ShoppingWork.model_validate(runtime.state['shopping_work'])
+    return {'shopping_work':ShoppingChange.between(before,work,reset=reset)}
+
+
 def search_requirements(runtime, context, conditions):
     if conditions is None:
         return context.effective_search if context else None, None
     work = changed_work(runtime, ShoppingUpdate(**conditions.model_dump(exclude_unset=True)))
-    updates = {'shopping_work': work.model_dump()}
+    updates = work_update(runtime,work,reset=conditions.reset)
     if conditions.reset:
         updates['task_plan'] = {}
     return compile_search(work, context.preference_facts, context.currency), updates
@@ -69,7 +75,7 @@ def build_shopping_operations(evidence_store):
         except ValueError as error:
             return failed(error)
         return ToolResult({'requirements_updated': True}, event_data={'filters': work.filters.model_dump()},
-                          state_updates={'shopping_work': work.model_dump(), **({'task_plan': {}} if changes.reset else {})})
+                          state_updates={**work_update(runtime,work,reset=changes.reset), **({'task_plan': {}} if changes.reset else {})})
 
     async def select_products(items: list[Choice], runtime: ToolRuntime, remove_skus: list[str] = []):
         """仅保存明确选择的SKU和数量，或移除指定SKU；不准备订单确认。
@@ -80,7 +86,7 @@ def build_shopping_operations(evidence_store):
         except ValueError as error:
             return failed(error)
         return ToolResult({'selected_items': [x.model_dump() for x in work.selections.values()]},
-                          state_updates={'shopping_work': work.model_dump()})
+                          state_updates=work_update(runtime,work))
 
     async def set_research_plan(plan: list[PlanStep], runtime: ToolRuntime):
         """保存复杂多目标研究计划；每步含局部条件和依赖，[]清空。单次搜索不建计划。
@@ -91,7 +97,7 @@ def build_shopping_operations(evidence_store):
         except ValueError as error:
             return failed(error)
         return ToolResult({'plan': [step.model_dump() for step in work.plan]},
-                          state_updates={'shopping_work': work.model_dump()})
+                          state_updates=work_update(runtime,work))
 
     return [as_langchain_tool(function) for function in (
         set_shopping_requirements, select_products, set_research_plan)]

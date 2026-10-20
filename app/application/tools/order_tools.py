@@ -8,7 +8,7 @@ MainAgent 单干与 TradeAgent 派发两条路径共用。写工具只准备确�
 import json
 from langchain.tools import ToolRuntime
 from app.application.agents.shopping_state import Choice
-from app.application.tools.shopping_operations import selected_work
+from app.application.tools.shopping_operations import selected_work,work_update
 
 from app.application.runtime.results import ToolResult, ToolResultState
 
@@ -94,7 +94,7 @@ def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evid
             )
         except (ValueError, KeyError, TypeError) as err:
             return _fail(str(err))
-        return ToolResult(result, state_updates={'shopping_work': work.model_dump()} if work is not None else None)
+        return ToolResult(result, state_updates=work_update(runtime,work) if work is not None else None)
 
     create_order_tool.input_model = CreateOrderInput
     return create_order_tool

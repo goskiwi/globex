@@ -42,6 +42,7 @@ class SearchQuery(BaseModel):
             raise ValueError("product_id 与 sku_id 必须属于同一商品")
         return self
 from app.application.runtime.tool_view import bounded_tool_view
+from app.application.agents.shopping_changes import apply_shopping_change
 
 
 def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus, evidence_store=None):
@@ -131,7 +132,7 @@ def build_product_search_tool(usecase: CatalogSearchUseCase, bus: TradeEventBus,
         view = await bounded_tool_view(result, evidence_store, snapshot_ctx, kind='products')
         return ToolResult(data=result, model_data=view, state=ToolResultState.SUCCESS,
                           state_updates=state_updates, event_data={**result,
-                              'filters': state_updates['shopping_work']['filters']} if state_updates else None)
+                              'filters': apply_shopping_change(runtime.state['shopping_work'],state_updates['shopping_work'])['filters']} if state_updates else None)
 
     product_search_tool.input_model = SearchQuery
     return product_search_tool
