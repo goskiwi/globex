@@ -141,8 +141,10 @@ class MainAgentOrchestrator:
                 await finalizer.finish(intent, text, accepted, persistence_guard, cancelled=True)
                 raise
             try:
-                await finalizer.finish(intent, result.final_text, accepted, persistence_guard)
-            except RunPersistenceError as error:
+                saved = await finalizer.finish(intent, result.final_text, accepted, persistence_guard)
+                if saved is False and result.error is None:
+                    raise RunPersistenceError("执行记录未保存")
+            except RunPersistenceError:
                 logger.exception("执行收尾失败，不自动重放业务操作")
                 message = "本轮操作可能已生效，但执行记录保存未完成；请先核查订单、确认单和会话状态，不要直接重复操作。"
                 result = SubmitIntentOutput(session_id, message, message,

@@ -14,7 +14,9 @@ export function readProcess(value:unknown):RunProcess|null {
       ||!stepStatuses.includes(item.status as ProcessStepStatus))continue;
     steps.set(item.id,{id:item.id,label:item.label,summary:item.summary,status:item.status as ProcessStepStatus});
   }
-  return {runId:value.runId,userMessageId:value.userMessageId,status:value.status as ProcessStatus,steps:[...steps.values()]};
+  return {runId:value.runId,userMessageId:value.userMessageId,status:value.status as ProcessStatus,steps:[...steps.values()],
+    ...(record(value.error)&&typeof value.error.message==='string'&&(value.error.code===null||typeof value.error.code==='string')
+      ?{error:{code:value.error.code,message:value.error.message}}:{})};
 }
 export function readProcesses(value:unknown):RunProcess[] {
   return Array.isArray(value)?value.flatMap(item=>{const process=readProcess(item);return process?[process]:[];}):[];

@@ -26,6 +26,7 @@ from ag_ui.core import (
 )
 
 from app.infrastructure.eventbus import TradeEvent
+from app.application.runtime.outcomes import apply_run_error
 from app.application.agents.execution_summary import TOOL_LABELS as _TOOL_LABELS, DELIVERY_TOOLS, label, request_summary, result_summary, delivery_summary, step_status
 
 class AGUIRunAdapter:
@@ -277,6 +278,8 @@ class AGUIRunAdapter:
         for entry in self.state['process']['steps']:
             if entry['status']=='running':
                 entry.update(status='unconfirmed',summary='本轮已结束，未收到完整执行结果')
+        if status == "failed":
+            apply_run_error(self.state, final_text, stop_reason or "EXECUTION_FAILED")
         self.snapshot()
         outcome={"type":"interrupt","interrupts":[{"id":p["id"],"reason":"tool_confirmation","message":p["label"]} for p in self.state["toolApprovals"]]} if self.state["toolApprovals"] else {"type":"success"}
         if status == "failed":
@@ -290,10 +293,7 @@ class AGUIRunAdapter:
         self._completed = True
         self._close_streams()
         self._close_skill_reads("本轮已中断，方案读取尚未完成。")
-        self.state["status"] = "cancelled" if cancelled else "error"
-        self.state['process']['status']='cancelled' if cancelled else 'failed'
-        for entry in self.state["process"]['steps']:
-            if entry["status"] == "running":
-                entry.update(status='cancelled' if cancelled else 'unconfirmed',summary='未收到完整执行结果')
+        error_code = "CANCELLED" if cancelled else (code or "AGENT_ERROR")
+        apply_run_error(self.state, message, error_code)
         self.snapshot()
-        self.emit(RunErrorEvent(message=message, code="CANCELLED" if cancelled else (code or "AGENT_ERROR")))
+        self.emit(RunErrorEvent(message=message, code=error_code))

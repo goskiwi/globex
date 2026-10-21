@@ -340,3 +340,28 @@ it("版本过期保留会话与完整需求，不自动改写为新会话重发"
   expect(client.getSnapshot().confirmationError).toBeNull();
   finish();await pending;
  });
+
+it('服务端恢复保留失败核查提示，后续成功仍保留旧轮错误',async()=>{
+  const storage=store();
+  const warning='操作可能已生效，请先核查，不直接重放。';
+  let later=false,posts=0;
+  const failed={runId:'failed',userMessageId:'u1',status:'failed',steps:[],error:{code:'PERSISTENCE_FAILED',message:warning}};
+  const completed={runId:'next',userMessageId:'u2',status:'completed',steps:[]};
+  const fetch=async(url:string,init:RequestInit)=>{
+    if(init.method==='POST')posts++;
+    if(url.includes('/sessions?'))return json({sessions:[{id:'s',title:'合成历史',updatedAt:1}]});
+    return json({messages:[{id:'u1',role:'user',content:'第一轮'}],presentations:[],events:[],
+      processes:later?[failed,completed]:[failed],run:{runId:later?'next':'failed',threadId:'s',
+        status:later?'completed':'error',messages:[],state:later?{process:completed}:{process:failed,executionError:warning}}});
+  };
+  const first=new CommerceClient({url:'/commerce/ag-ui/run',storage,fetch});
+  await first.initialize();
+  expect(first.getSnapshot().error).toBe(warning);
+  expect(first.getSnapshot().processes[0].error?.code).toBe('PERSISTENCE_FAILED');
+  first.detach();later=true;
+  const restored=new CommerceClient({url:'/commerce/ag-ui/run',storage,fetch});
+  await restored.initialize();
+  expect(restored.getSnapshot().error).toBeNull();
+  expect(restored.getSnapshot().processes[0].error?.message).toBe(warning);
+  expect(posts).toBe(0);
+});

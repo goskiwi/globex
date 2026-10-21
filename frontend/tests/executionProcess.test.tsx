@@ -110,3 +110,17 @@ it('SDK只认取消终态，保留之前完成的步骤；迟到旧轮不覆盖�
   expect(client.getSnapshot().processes[0].steps[0].status).toBe('completed');
   client.reset();expect(client.getSnapshot().processes).toEqual([]);
 });
+
+it('失败后的具体核查提示在过程折叠及后续成功时仍可见',async()=>{
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+  const failed=readProcess({runId:'old-failure',userMessageId:'u1',status:'failed',steps:[],
+    error:{code:'PERSISTENCE_FAILED',message:'操作可能已生效，请先核查，不直接重放。'}})!;
+  const next=readProcess({runId:'next-success',userMessageId:'u2',status:'completed',steps:[]})!;
+  try{
+    await act(async()=>root.render(<><ExecutionProcess process={failed}/><ExecutionProcess process={next}/></>));
+    expect(host.querySelector('[data-run-id="old-failure"] [role="alert"]')?.textContent).toContain('请先核查');
+    expect(host.querySelector('[data-run-id="next-success"] [role="alert"]')).toBeNull();
+    expect(host.querySelector('.execution-steps')).toBeNull();
+  }finally{await act(async()=>root.unmount());host.remove();}
+});

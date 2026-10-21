@@ -65,3 +65,31 @@ async def test_nested_graph_rejection_is_recorded_before_subtask_failure(tmp_pat
         assert len({r['call_id'] for r in receipts})==len(receipts)==2
         assert child.cursor==1 and parent.cursor==2
     finally:await c.shutdown()
+
+async def test_pending_memory_rejection_after_restart_has_one_unexecuted_receipt(tmp_path,monkeypatch):
+    from tests.test_langgraph_runtime import ScriptedModel as MemoryModel,PreferenceStore
+    store=PreferenceStore()
+    c=await _container(tmp_path,monkeypatch,MemoryModel(mode='approval'))
+    c.orchestrator._sessions._main_factory._preference_store=store
+    try:
+        await c.runs.startup();await c.runs.start(request('pending-memory'),'buyer')
+        pending=await c.runs.wait('pending-memory','buyer',10)
+        assert pending['result']['status']=='needs_input' and not store.items
+        approvals=pending['state']['toolApprovals'];assert len(approvals)==1
+        rows,_,_=await c.runs.journal.events('pending-memory','buyer')
+        assert not tool_observations([r['event'] for r in rows])
+        await c.shutdown()
+        c=await _container(tmp_path,monkeypatch,MemoryModel(mode='approval'))
+        c.orchestrator._sessions._main_factory._preference_store=store
+        await c.runs.startup()
+        body=request('reject-memory').model_dump(mode='json',by_alias=True)
+        body['resume']=[{'interruptId':approvals[0]['id'],'status':'resolved','payload':{'approved':False}}]
+        await c.runs.start(RunAgentInput.model_validate(body),'buyer')
+        rejected=await c.runs.wait('reject-memory','buyer',10)
+        rows,_,_=await c.runs.journal.events('reject-memory','buyer')
+        receipts=tool_observations([r['event'] for r in rows])
+        assert len(receipts)==1 and receipts[0]['failure']=={'code':'user_rejected','executed':False}
+        assert not store.items and not rejected['state']['toolApprovals']
+        session=await c.runs.journal.session('facts-session','buyer')
+        assert len(session['processes'])==2
+    finally:await c.shutdown()

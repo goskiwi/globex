@@ -7,9 +7,6 @@ logger = logging.getLogger(__name__)
 
 class RunPersistenceError(RuntimeError):
     """业务可能已经执行，但必要的会话或证据保存未完成。"""
-    def __init__(self, message, *, session_saved=False):
-        super().__init__(message)
-        self.session_saved = session_saved
 
 
 class RunFinalizer:
@@ -44,4 +41,4 @@ class RunFinalizer:
                 # 保存故障不能覆盖取消信号，也不能把中断改成可自动重试的故障。
                 logger.warning("中断收尾保存失败：%s", type(error).__name__)
                 return saved
-            raise RunPersistenceError("执行后的必要记录保存失败", session_saved=saved) from error
+            raise RunPersistenceError("执行后的必要记录保存失败") from error

@@ -12,6 +12,7 @@ import uuid
 from typing import Any
 
 import aiosqlite
+from app.application.runtime.outcomes import apply_run_error, error_events
 
 
 class JournalConflict(ValueError):
@@ -136,6 +137,8 @@ class AGUIJournal:
         projection = json.loads(row["projection_json"])
         pending = row['status'] in {'queued','running'}
         state = projection['state']
+        if state.get('executionError'):
+            apply_run_error(state, state['executionError'], state.get('errorCode'))
         final = next((m.get('content','') for m in reversed(projection['messages'])
                       if m.get('id') == row['run_id']+':final:answer'), '')
         result = None if pending else {'text':state.get('executionError') or final,
@@ -229,8 +232,7 @@ class AGUIJournal:
         elif kind == "TEXT_MESSAGE_END":
             projection["openMessages"] = [i for i in projection["openMessages"] if i != event["messageId"]]
         elif kind == "RUN_ERROR":
-            projection['state']['executionError'] = event['message']
-            projection['state']['errorCode'] = event.get('code')
+            apply_run_error(projection['state'], event['message'], event.get('code'))
         elif kind == "TOOL_CALL_START":
             projection["openTools"].append(event["toolCallId"])
         elif kind == "TOOL_CALL_END":
@@ -275,8 +277,9 @@ class AGUIJournal:
             if row["last_seq"] == 0:
                 events.insert(0, {"type": "RUN_STARTED", "threadId": row["session_id"], "runId": row["run_id"]})
             events += [{"type": "TOOL_CALL_END", "toolCallId": i} for i in projection["openTools"]]
-            events += [{"type": "STATE_SNAPSHOT", "snapshot": {**projection["state"], "status": "cancelled" if stopped else "error"}},
-                       {"type": "RUN_ERROR", "message": "本轮已明确停止" if stopped else "服务重启或执行租约失效，本轮未完成；已恢复保存的内容，可重新提交需求。", "code": "CANCELLED" if stopped else "SERVER_RESTART"}]
+            events += error_events(projection['state'], "本轮已明确停止" if stopped else
+                "服务重启或执行租约失效，本轮未完成；已保存内容仍可恢复，涉及写入请先核查状态，不直接重放。",
+                "CANCELLED" if stopped else "SERVER_RESTART")
             await self._append(db, row, events)
 
     async def recover_expired(self):
@@ -318,9 +321,7 @@ class AGUIJournal:
                 await db.execute("UPDATE agui_runs SET stop_requested=1 WHERE run_id=?", (run_id,))
                 if row['status'] == 'queued':
                     projection=json.loads(row['projection_json']); state=projection['state']
-                    process={**state.get('process',{}), 'status':'cancelled'}
-                    await self._append(db,row,[{'type':'STATE_SNAPSHOT','snapshot':{**state,'process':process,'status':'cancelled','executionStatus':'partial','stopReason':'cancelled'}},
-                        {'type':'RUN_ERROR','code':'CANCELLED','message':'本轮已在排队阶段停止，未执行模型或业务工具。'}])
+                    await self._append(db,row,error_events(state, '本轮已在排队阶段停止，未执行模型或业务工具。', 'CANCELLED'))
         return await self.run(run_id, buyer_id)
 
     async def end_owned(self, run_id, owner, *, stopped=False):
@@ -334,8 +335,9 @@ class AGUIJournal:
             if row["last_seq"] == 0:
                 events.insert(0, {"type": "RUN_STARTED", "threadId": row["session_id"], "runId": row["run_id"]})
             events += [{"type": "TOOL_CALL_END", "toolCallId": i} for i in projection["openTools"]]
-            events += [{"type": "STATE_SNAPSHOT", "snapshot": {**projection["state"], "status": "cancelled" if stopped else "error"}},
-                       {"type": "RUN_ERROR", "message": "本轮已明确停止" if stopped else "服务已关闭，本轮已保存为中断，可恢复查看已有内容。", "code": "CANCELLED" if stopped else "SERVER_RESTART"}]
+            events += error_events(projection['state'], "本轮已明确停止" if stopped else
+                "服务已关闭，本轮已保存为中断；涉及写入请先核查状态，不直接重放。",
+                "CANCELLED" if stopped else "SERVER_RESTART")
             await self._append(db, row, events)
 
     async def sessions(self, buyer_id):
@@ -390,6 +392,8 @@ class AGUIJournal:
                     for message in projection["messages"]:
                         messages[message["id"]] = message
                     state = projection["state"]
+                    if state.get('executionError'):
+                        apply_run_error(state, state['executionError'], state.get('errorCode'))
                     process = state.get('process')
                     if isinstance(process,dict) and process.get('runId')==saved['run_id']:
                         # 进程中断后未必收到终态快照；只据日志的真实终态标为未确认，不伪装成功。

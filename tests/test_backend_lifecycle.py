@@ -145,3 +145,13 @@ async def test_shutdown_finishes_compaction_cancelled_before_its_first_schedule(
         assert (await service.store.context_operation(following["operation_id"], "buyer"))["status"] == "noop"
     finally:
         await container.shutdown()
+
+
+async def test_unsaved_result_cannot_be_published_as_success():
+    orchestrator, agent, sessions = make_orchestrator()
+    sessions.persist = AsyncMock(return_value=False)
+    events = await collect(orchestrator)
+    assert agent.calls == 1
+    assert events[-1]['type'] == 'RUN_ERROR' and events[-1]['code'] == 'PERSISTENCE_FAILED'
+    assert '核查' in events[-1]['message']
+    assert not any(e['type'] == 'RUN_FINISHED' for e in events)

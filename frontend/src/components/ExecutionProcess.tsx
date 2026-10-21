@@ -22,6 +22,7 @@ export default function ExecutionProcess({process,connection='idle',inputResolve
       {process.steps.length>0&&<small>{process.steps.length}个步骤</small>}
       <Icon name="chevronDown"/>
     </button>
+    {process.error&&<p className="execution-error" role="alert">{process.error.message}</p>}
     {running&&!open&&<div className="execution-current"><span>{current?.label||'正在处理本轮需求'}</span>
       <p>{current?.summary||(connection==='reconnecting'?'正在恢复接收进度，不会重新执行工具。':'可展开查看实际查询和核对结果。')}</p></div>}
     {open&&<ol className="execution-steps">{process.steps.map(step=><li key={step.id} data-step-id={step.id} className={`execution-step execution-step--${step.status}`}>

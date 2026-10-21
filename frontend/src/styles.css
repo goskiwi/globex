@@ -2477,3 +2477,5 @@ main {
     font-size: 10px;
   }
 }
+
+.execution-error { margin:8px 0 8px 24px; font-size:13px; color:var(--ink); }

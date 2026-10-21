@@ -1,21 +1,5 @@
 /// <reference types="vite/client" />
 
-export type TradeEventType =
-  | "agent.dispatch"
-  | "tool.invoke"
-  | "tool.result"
-  | "plan.update"
-  | "context.compressed"
-  | "model.fallback"
-  | "final.result"
-  | "error";
-
-export interface TradeEvent {
-  type: TradeEventType;
-  payload: Record<string, any>;
-  occurred_at: string;
-}
-
 export interface PriceLine {
   product_id: string;
   sku_id: string;
@@ -105,7 +89,7 @@ export interface DiagnosticEvent {
 export type ProcessStatus = 'queued'|'running'|'completed'|'partial'|'failed'|'cancelled'|'interrupted'|'waiting_input'|'waiting_confirmation';
 export type ProcessStepStatus = 'running'|'completed'|'partial'|'failed'|'cancelled'|'waiting_input'|'waiting_confirmation'|'unconfirmed';
 export interface ProcessStep { id:string; label:string; status:ProcessStepStatus; summary:string }
-export interface RunProcess { runId:string; userMessageId:string; status:ProcessStatus; steps:ProcessStep[] }
+export interface RunProcess { runId:string; userMessageId:string; status:ProcessStatus; steps:ProcessStep[]; error?:{code:string|null;message:string} }
 export type ConnectionState = 'idle'|'connecting'|'connected'|'reconnecting'|'disconnected';
 
 export interface SessionSummary {

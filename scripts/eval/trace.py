@@ -58,7 +58,7 @@ def final_results(frames):
         elif kind in {'RUN_FINISHED', 'RUN_ERROR'}:
             rows.append({'text': frame['message'] if kind == 'RUN_ERROR' else next(
                 (m['content'] for m in reversed(messages) if m['role'] == 'assistant'), ''),
-                'status': 'failed' if kind == 'RUN_ERROR' else state.get('executionStatus', 'completed'),
+                'status': state.get('executionStatus', 'failed' if kind == 'RUN_ERROR' else 'completed'),
                 'stop_reason': frame.get('code') if kind == 'RUN_ERROR' else state.get('stopReason')})
     return rows
 

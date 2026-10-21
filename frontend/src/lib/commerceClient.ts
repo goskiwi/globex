@@ -635,7 +635,7 @@ export class CommerceClient {
       onRunErrorEvent: ({ event }) => {
         terminal = true;
         if (current()) this.update({ recoverableRunId: null });
-        if(current())this.update({processes:this.snapshot.processes.map(p=>p.runId===runId?{...p,status:event.code==='CANCELLED'?'cancelled':'failed',
+        if(current())this.update({processes:this.snapshot.processes.map(p=>p.runId===runId?{...p,status:event.code==='CANCELLED'?'cancelled':event.code==='SERVER_RESTART'?'interrupted':'failed',
           steps:p.steps.map(s=>s.status==='running'?{...s,status:event.code==='CANCELLED'?'cancelled':'unconfirmed',summary:'未收到完整执行结果'}:s)}:p)});
         if (event.code === "CANCELLED" && current()) this.update({ status: "stopped", error: null, connectionState:'idle' });
         else fail(event.message);
@@ -746,7 +746,8 @@ export class CommerceClient {
       ...(process?{processes:upsertProcess(this.snapshot.processes,process)}:{}),
       connectionState:running?'reconnecting':'idle',
       stopRequested:false,
-      error: ["error", "interrupted"].includes(String(run.status)) ? "该运行未完成，已恢复保存的内容；可重新提交需求。" : null,
+      error: ["error", "interrupted"].includes(String(run.status))
+        ? process?.error?.message ?? (typeof state.executionError === "string" ? state.executionError : "该运行未完成；涉及写入请先核查状态，不直接重放。") : null,
     });
   }
 
