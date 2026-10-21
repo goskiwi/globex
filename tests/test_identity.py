@@ -193,3 +193,13 @@ async def test_operational_metrics_require_allowlisted_signed_operator(secured, 
         assert "version=0.0.4" in result.headers["content-type"]
     api.state.identity_policy = IdentityPolicy()
     assert (await secured.client.get(path, headers=auth("ops-reader"))).status_code == 503
+
+@pytest.mark.parametrize('available',[True,False])
+async def test_health_reads_prompt_registry_and_reports_unavailable(secured,available):
+    def describe():
+        if not available:raise ValueError('合成不可用状态')
+        return {'status':'ready'}
+    secured.container.prompt_registry=SimpleNamespace(describe=describe)
+    response=await secured.client.get('/health')
+    assert response.status_code==(200 if available else 503)
+    assert response.json()['prompt_registry']=={'status':'ready' if available else 'unavailable'}
