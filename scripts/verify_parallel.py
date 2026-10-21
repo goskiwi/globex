@@ -8,7 +8,7 @@
 原理：同一个"三品类分头调研"意图跑两遍——
     并行版：prompt 已要求同一轮一次性发起多个 task_dispatch（2.0 会并发批执行）
     串行版：在 query 里显式要求"一个一个来，做完一个再做下一个"
-对比 wall time，并从 WS 事件流的 agent.dispatch.started_at / tool.result.finished_at
+对比 wall time，并从 持久 SSE 业务事件的 agent.dispatch.started_at / tool.result.finished_at
 判断多次派发的时间区间是否重叠（重叠即真并行）。
 """
 from __future__ import annotations
@@ -22,14 +22,15 @@ import uuid
 from datetime import datetime
 
 import httpx
-import websockets
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.run_stream import submit_stream
 
 BASE_URL = "http://127.0.0.1:8000"
-WS_URL = "ws://127.0.0.1:8000/commerce/events"
 BUYER_ID = os.getenv("GLOBEX_BUYER_ID", "buyer-001")
 API_TOKEN = os.getenv("GLOBEX_API_TOKEN", "")
 AUTH_HEADERS = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
-WS_PROTOCOLS = ["globex-events", f"globex-auth.{API_TOKEN}"] if API_TOKEN else ["globex-events"]
 
 PARALLEL_QUERY = (
     "我下个月去高原露营，请分头调研三类装备：露营照明、登山杖、速干毛巾。"
@@ -40,19 +41,6 @@ SERIAL_QUERY = (
     "请严格一个一个来：先把露营照明彻底做完，再做登山杖，最后做速干毛巾，"
     "每次只派一个检索子代理，不要同时派多个。"
 )
-
-
-async def collect_events(session_id: str, stop: asyncio.Event) -> list[dict]:
-    events: list[dict] = []
-    async with websockets.connect(WS_URL, subprotocols=WS_PROTOCOLS) as ws:
-        await ws.send(json.dumps({"shopping_session_id": session_id, "buyer_id": BUYER_ID}))
-        while not stop.is_set():
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=1)
-            except asyncio.TimeoutError:
-                continue
-            events.append(json.loads(raw))
-    return events
 
 
 def _dispatch_intervals(events: list[dict]) -> list[tuple[str, str, str]]:
@@ -88,28 +76,10 @@ def parallel_verdict(result: dict) -> bool:
 
 async def run_round(label: str, query: str) -> dict:
     session_id = f"parallel-{label}-{uuid.uuid4().hex[:6]}"
-    stop = asyncio.Event()
-    listener = asyncio.create_task(collect_events(session_id, stop))
-    await asyncio.sleep(0.5)
-
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=900, headers=AUTH_HEADERS) as client:
-        response = await client.post(
-            f"{BASE_URL}/commerce/intents",
-            json={
-                "shopping_session_id": session_id,
-                "buyer_id": BUYER_ID,
-                "locale": "zh-CN",
-                "currency": "CNY",
-                "raw_query": query,
-            },
-        )
-        response.raise_for_status()
+        _,events,_ = await submit_stream(client,BASE_URL,session_id,BUYER_ID,query,timeout=900)
     wall_seconds = time.monotonic() - started
-
-    await asyncio.sleep(1)
-    stop.set()
-    events = await listener
 
     intervals = _dispatch_intervals(events)
     return {

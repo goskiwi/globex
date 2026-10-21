@@ -1,5 +1,5 @@
 """签名登录、对话改名和完整删除；临时SQLite，无真实买家数据。"""
-from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
+from tests.sql_fixtures import read_session_state
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

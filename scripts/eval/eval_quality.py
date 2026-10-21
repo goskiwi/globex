@@ -47,7 +47,7 @@ def validate_bucket_split_coverage(rows: list[dict[str, Any]], bucket_key: str, 
 
 def validate_product_case_constraints(row: dict[str, Any], catalog: dict[str, dict[str, Any]]) -> list[str]:
     """独立复算正式商品金标是否真的满足声明的硬约束。"""
-    constraints = row.get("constraints") or {}
+    constraints = row
     target_currency = row.get("target_currency")
     if not isinstance(constraints, dict) or target_currency not in _RATES_TO_CNY:
         return []
@@ -152,8 +152,8 @@ def validate_official_eval_fixture(root: Path) -> tuple[list[str], dict[str, dic
             declared_canonical = row.get("relevant_canonical_ids")
             if declared_canonical is None:
                 problems.append(f"{row['id']} 缺少 relevant_canonical_ids")
-            if not isinstance(row.get("constraints"), dict) or not row.get("target_currency"):
-                problems.append(f"{row['id']} 缺少 constraints 或 target_currency")
+            if "constraints" in row or not row.get("target_currency"):
+                problems.append(f"{row['id']} 约束应直接声明且必须提供 target_currency")
             if row.get("expected_empty"):
                 if relevant:
                     problems.append(f"{row['id']} 是无结果题却有 relevant")

@@ -4,11 +4,9 @@ import asyncio
 import json
 import sys
 import tempfile
-from functools import partial
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
@@ -20,7 +18,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from app.infrastructure.settings import load_settings
 from app.infrastructure.tracing import SanitizingSpanExporter
 from scripts import eval_regression as runner
-from scripts.eval.interview_runtime import LocalCollector, isolated_runtime, retrieval_evidence
+from scripts.eval.interview_runtime import capture_evaluation, isolated_runtime, retrieval_evidence
 
 
 async def replay_confirmations(client, container, result):
@@ -101,9 +99,9 @@ async def main(argv=None):
                                 "研究通勤背包、耳机的使用场景和选购取舍时使用。",
                                 "分别研究不同品类，先核对预算与目的地，再查询商品。候选只用核实过的SKU，给出证据引用；冲突参数不作比较依据。")
                         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=runner.BASE_URL) as client:
-                            with patch.object(runner, "SessionEventCollector", partial(LocalCollector, events=case_events)):
+                            with capture_evaluation(case_events):
                                 async with asyncio.timeout(240):
-                                    result = await runner.run_case(client, case, "", identity_policy=app.state.identity_policy)
+                                    result = await runner.run_case(client, case, "", identity_policy=app.state.identity_policy,evidence_events=case_events)
                                     if case.get("replay_confirmation"):
                                         from scripts.eval.http_actions import BuyerAPIClient
                                         signed_client = BuyerAPIClient(client, runner.BASE_URL,

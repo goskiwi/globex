@@ -301,3 +301,27 @@ it('服务端消息替换临时身份，跨轮历史与过程锚点保持一致'
   expect(snapshot.messages.filter(m=>m.role==='user').map(m=>m.id)).toEqual(['server-user-1','server-user-2']);
   expect(snapshot.processes.map(p=>p.userMessageId)).toEqual(['server-user-1','server-user-2']);
 });
+
+it('排队/运行时即采用持久消息身份，中断后仍能关联过程',async()=>{
+  let controller!:ReadableStreamDefaultController<Uint8Array>;
+  const encoder=new TextEncoder();
+  const emit=(event:unknown)=>controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  const client=new CommerceClient({url:'/commerce/ag-ui/run',fetch:async(_,init)=>{
+    const body:RequestBody=JSON.parse(String(init.body));
+    return new Response(new ReadableStream<Uint8Array>({start(c){
+      controller=c;emit(started(body));
+      emit({type:'MESSAGES_SNAPSHOT',messages:[{...body.messages.at(-1)!,id:'canonical-queued-user'}]});
+      emit({type:'STATE_SNAPSHOT',snapshot:{process:{runId:body.runId,userMessageId:'canonical-queued-user',status:'queued',steps:[]}}});
+    }}),{headers:{'Content-Type':'text/event-stream'}});
+  }});
+  const pending=client.submit('排队等待');
+  const deadline=Date.now()+2000;
+  while(client.getSnapshot().processes.at(-1)?.userMessageId!=='canonical-queued-user'){
+    if(Date.now()>deadline)throw new Error('排队身份未同步');
+    await new Promise(resolve=>setTimeout(resolve,5));
+  }
+  expect(client.getSnapshot().messages.map(m=>m.id)).toEqual(['canonical-queued-user']);
+  emit({type:'RUN_ERROR',message:'合成中断',code:'SERVER_RESTART'});controller.close();await pending;
+  expect(client.getSnapshot().messages.map(m=>m.id)).toEqual(['canonical-queued-user']);
+  expect(client.getSnapshot().processes.at(-1)?.userMessageId).toBe('canonical-queued-user');
+});

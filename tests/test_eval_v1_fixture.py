@@ -105,11 +105,9 @@ def test_product_gold_validator_rejects_a_hard_constraint_violation():
 
     row = {
         "id": "prod-bad", "relevant": ["P-BAD"], "target_currency": "CNY",
-        "constraints": {
             "category": "户外运动", "ship_to": "CN", "require_in_stock": True,
             "required_material_tags": ["金属"], "excluded_material_tags": ["合成聚合物"],
             "price_max_major": 100,
-        },
     }
     catalog = {
         "P-BAD": {

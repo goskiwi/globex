@@ -5,7 +5,7 @@
 只需换 DATABASE_URL 与异步驱动，但那些驱动的特有行为本仓未验证。
 """
 from __future__ import annotations
-from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
+from tests.sql_fixtures import read_session_state, save_session_state
 
 from datetime import datetime, timezone
 

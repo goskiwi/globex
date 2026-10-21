@@ -1,6 +1,6 @@
 """独立连接/Registry 的持久 fencing 验证，不依赖 Redis 和外部模型。"""
 from __future__ import annotations
-from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
+from tests.sql_fixtures import read_session_state, seed_historical_state
 
 from tests.sql_fixtures import preference_store
 

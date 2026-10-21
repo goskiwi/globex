@@ -32,7 +32,7 @@ def raise_if_tool_stopped(messages):
         if isinstance(message, AIMessage):
             break
         if isinstance(message, HumanMessage) and message.name not in {
-            "handoff_feedback", "shopping_state", "shopping_state_delta", "context_summary"
+            "handoff_feedback", "shopping_state", "context_summary"
         }:
             break
         if isinstance(message, ToolMessage) and isinstance(message.artifact, dict):

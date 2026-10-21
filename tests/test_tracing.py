@@ -234,7 +234,7 @@ async def test_otlp_real_http_path_auth_and_native_graph_parent_chain(traced, mo
         events.append(observed.get_nowait())
     assert all(event.correlation["trace_id"] == response.headers["x-trace-id"] for event in events)
     assert all(event.correlation["request_id"] == task.request_id for event in events)
-    assert TradeEvent.from_dict(events[-1].to_dict()) == events[-1]
+    assert TradeEvent.from_dict(events[-1].to_dict()).to_dict() == events[-1].to_dict()
 
 
 async def test_w3c_remote_parent_and_tracestate_survive_http_and_queue(traced):

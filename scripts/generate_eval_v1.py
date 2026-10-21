@@ -87,9 +87,8 @@ def _base_product_row(
     return {
         "id": f"prod-{index + 1:03d}", "group_id": family, "template_family": family,
         "split": split, "kind": kind, "query": query, "relevant": relevant,
-        "relevant_canonical_ids": relevant_canonical_ids, "target_currency": constraints["target_currency"],
-        "constraints": constraints, "note": note,
-        # 保留顶层字段以兼容既有运行器与手写旧集。
+        "relevant_canonical_ids": relevant_canonical_ids,
+        "note": note,
         **constraints,
     }
 

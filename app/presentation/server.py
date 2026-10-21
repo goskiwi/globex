@@ -1,47 +1,26 @@
 # -*- coding: utf-8 -*-
-"""FastAPI 服务入口
+"""FastAPI 入口：意图与 AG-UI 共用持久 RunService，公开事件统一从 SSE 恢复。
 
-路由：
-    POST /commerce/intents                 提交买家意图（同步返回最终回复；启用队列时内部入队后等结果）
-    POST /commerce/intents/async           提交买家意图（立即返回 task_id，结果走 WS 或轮询）
-    GET  /commerce/tasks/{task_id}         查任务状态（queued / running / done / failed）
-    WS   /commerce/events                  订阅会话事件流
-    GET  /commerce/orders/{order_id}       查询订单（直连 UseCase，不过 Agent）
-    POST /commerce/orders/{order_id}/cancel  取消订单（直连 UseCase）
-    GET  /health                           健康检查（含依赖连通性与队列深度）
-
-启动：
-    uv run uvicorn app.presentation.server:app --port 8000
-    uv run python -m app.worker          # 启用队列时另起消费进程
-
-同步接口为什么保留：13 case 评测脚本与前端都依赖它直接返回 final_text，
-改成纯异步会一次性搞挂回归与前端。削峰由 worker 并发度保证，与接口形态无关。
+REST 意图提交提供等待结果/立即返回运行ID两种响应，执行均经过相同接纳与队列。
+订单与确认 HTTP 资源处理用户业务动作，不构成第二条模型执行链路。
 """
 from __future__ import annotations
 
-import asyncio
-import contextlib
-import hashlib
 import logging
-import time
-import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.application.usecases.intents import SubmitIntentInput
 from app.composition import Container, build_container
-from app.domain.queue.ports.task_queue import IntentTask
-from app.presentation.connection import ConnectionManager
 from app.presentation.confirmations import register_confirmation_routes, confirmation_error
 from app.presentation.ag_ui import register_ag_ui_routes
 from app.presentation.buyer_workspace import register_buyer_workspace_routes
-from app.presentation.identity import require_buyer, require_session, require_task
+from app.presentation.identity import require_buyer, require_session
 from app.presentation.metrics import configure_metrics_access, register_metrics_routes
-from app.infrastructure.tracing import TracingASGIMiddleware, inject_task_context, install_log_correlation
+from app.infrastructure.tracing import TracingASGIMiddleware, install_log_correlation
 from app.presentation.dto import (
     CancelOrderRequest,
     SubmitIntentRequest,
@@ -53,24 +32,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 logger = logging.getLogger(__name__)
 
-# 轮数计数器存活时长：比幂等窗口长得多，让一整段会话都能被正确分类
-_TURN_COUNTER_TTL_SECONDS = 86400
-
-
 def build_app() -> FastAPI:
     state: dict = {}
-
-    async def _forward_remote_events(c: Container) -> None:
-        """把其他进程（worker）广播的事件转发给本进程的 WS 订阅者。"""
-        if c.backplane is None:
-            return
-        try:
-            async for event in c.backplane.listen():
-                c.bus.deliver_local(event)
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:  # noqa: BLE001
-            logger.warning("事件背板监听中断：%s", err)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -78,19 +41,11 @@ def build_app() -> FastAPI:
         state["c"] = c
         application.state.session_store = getattr(c, "session_store", None)
         application.state.session_owner_binding = getattr(getattr(c, "settings", None), "session_owner_binding", True)
-        state["connections"] = ConnectionManager(c.bus)
         try:
             configure_metrics_access(application, c.settings, c.identity_policy)
             await c.startup()
-            if c.backplane is not None:
-                state["forwarder"] = asyncio.create_task(_forward_remote_events(c))
             yield
         finally:
-            forwarder = state.pop("forwarder", None)
-            if forwarder is not None:
-                forwarder.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await forwarder
             state.pop("c", None)
             await c.shutdown()
 
@@ -112,7 +67,7 @@ def build_app() -> FastAPI:
         expose_headers=["X-Request-ID", "X-Trace-ID"],
     )
 
-    # AG-UI 首版在本进程直跑；旧 intents 接口继续使用原有 Redis 队列语义。
+    # 所有模型入口共用持久接纳、队列及执行权。
     from app.presentation.auth import register_auth_routes
     register_auth_routes(api, lambda: container().settings)
     from app.presentation.product_media import register_product_media_routes
@@ -123,7 +78,7 @@ def build_app() -> FastAPI:
                          get_runtime=lambda: container().runs)
     from app.presentation.context_workspace import register_context_routes
     register_context_routes(api, lambda: container().context_service)
-    register_confirmation_routes(api, lambda: container().confirmations)
+    register_confirmation_routes(api, lambda: container().confirmations, projection=lambda: container().bus.projection)
     register_buyer_workspace_routes(api, lambda: container().buyer_workspace)
     from app.presentation.shopping_forms import register_shopping_form_routes
     register_shopping_form_routes(api, lambda: container().shopping_form_store)
@@ -200,7 +155,7 @@ def build_app() -> FastAPI:
     async def submit_intent(request: Request,body: SubmitIntentRequest):
         c=container();run=await submit_run(request,body)
         timeout=c.settings.queue_wait_seconds if c.task_queue is not None else None
-        run=await c.runs.wait(run['runId'],body.buyer_id,timeout)
+        run=c.bus.projection.run(await c.runs.wait(run['runId'],body.buyer_id,timeout))
         result=run['result']
         if result is None:
             return SubmitIntentResponse(run_id=run['runId'],shopping_session_id=run['threadId'],final_text='请求已接收，仍在排队或执行；可按运行ID查询。',
@@ -217,7 +172,7 @@ def build_app() -> FastAPI:
     async def get_task(request: Request,task_id: str,buyer_id: str=Query(min_length=1)):
         from app.infrastructure.ag_ui_journal import JournalForbidden,JournalNotFound
         buyer=await require_buyer(request,buyer_id)
-        try:run=await container().runs.journal.run(task_id,buyer)
+        try:run=container().bus.projection.run(await container().runs.journal.run(task_id,buyer))
         except (JournalForbidden,JournalNotFound) as error:
             raise HTTPException(403 if isinstance(error,JournalForbidden) else 404,str(error)) from error
         result=run['result']
@@ -225,22 +180,18 @@ def build_app() -> FastAPI:
                 'execution_status':result['status'] if result else None,'stop_reason':result['stop_reason'] if result else None,
                 'error':run['state'].get('executionError'),'queue_position':None}
 
-    @api.websocket("/commerce/events")
-    async def commerce_events(websocket: WebSocket) -> None:
-        await state["connections"].serve(websocket)
-
     @api.get("/commerce/orders")
     async def list_orders(request: Request, buyer_id: str = Query(min_length=1),
                           status: str | None = Query(default=None, pattern="^(CONFIRMED|CANCELLED|DRAFT)$"),
                           offset: int = Query(default=0, ge=0), limit: int = Query(default=20, ge=1, le=100)) -> dict:
         buyer = await require_buyer(request, buyer_id)
-        return await container().trade_store.list_orders(buyer_id=buyer, status=status, offset=offset, limit=limit)
+        return container().bus.projection.business(await container().trade_store.list_orders(buyer_id=buyer, status=status, offset=offset, limit=limit))
 
     @api.get("/commerce/orders/{order_id}")
     async def get_order(request: Request, order_id: str, buyer_id: str = Query(min_length=1)) -> dict:
         buyer_id = await require_buyer(request, buyer_id)
         try:
-            return await container().query_order.execute(order_id, buyer_id=buyer_id)
+            return container().bus.projection.business(await container().query_order.execute(order_id, buyer_id=buyer_id))
         except ValueError as err:
             raise HTTPException(status_code=404, detail=str(err)) from err
 
@@ -249,7 +200,7 @@ def build_app() -> FastAPI:
         body.buyer_id = await require_buyer(request, body.buyer_id)
         await require_session(request, body.buyer_id, body.session_id, create=True)
         try:
-            return await container().cancel_order.execute(order_id, body.reason, buyer_id=body.buyer_id, session_id=body.session_id)
+            return container().bus.projection.business(await container().cancel_order.execute(order_id, body.reason, buyer_id=body.buyer_id, session_id=body.session_id))
         except ValueError as err:
             raise confirmation_error(err) from err
 

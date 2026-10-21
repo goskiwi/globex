@@ -20,7 +20,6 @@ from app.infrastructure.resilience import DEFAULT_TIMEOUTS, _allow, _record_fail
 from app.infrastructure.transient import is_transient_error
 from app.application.harness.assertions import check_schema
 from app.infrastructure.security.content_filter import sanitize_tool_output
-from app.infrastructure.security.output_guard import audit_output
 from app.infrastructure.context_usage import record_evaluation_evidence
 from app.application.runtime.errors import ExecutionStopped
 from app.infrastructure.operational_metrics import observe_tool_result
@@ -31,14 +30,12 @@ class BusinessToolMiddleware(AgentMiddleware):
 
     state_schema = DeliveryState
 
-    def __init__(self, loops, bus, *, output_guard_enabled=True):
+    def __init__(self, loops, bus):
         self.loops, self.bus = loops, bus
-        self.output_guard_enabled = output_guard_enabled
 
     def public_data(self, value):
         """公开业务数据共用既有审核；协议标识与内部事实不经过此投影。"""
-        from copy import deepcopy
-        return audit_output(value)[1] if self.output_guard_enabled else deepcopy(value)
+        return self.bus.projection.business(value)
 
     async def awrap_tool_call(self, request, handler):
         from app.application.runtime.results import message_data, project_data, tool_receipts, replace_receipts, receipt_failure
@@ -48,9 +45,9 @@ class BusinessToolMiddleware(AgentMiddleware):
         event_id = f"{execution.task_id}:{execution.node_attempt}:{call_id}"
         def emit(kind, delta="", state="success", data=None, failure=None):
             self.bus.publish(session, "tool.lifecycle", {"type":kind,"tool_call_id":event_id,
-                "tool_call_name":name,"delta":self.public_data(delta),"state":state,
-                "data":self.public_data(data),"failure":self.public_data(failure),
-                "arguments":self.public_data(request.tool_call["args"]) if kind=="TOOL_CALL_START" else None})
+                "tool_call_name":name,"delta":delta,"state":state,
+                "data":data,"failure":failure,
+                "arguments":request.tool_call["args"] if kind=="TOOL_CALL_START" else None})
         emit("TOOL_CALL_START")
         emit("TOOL_CALL_DELTA", json.dumps(request.tool_call["args"],ensure_ascii=False))
         emit("TOOL_CALL_END");emit("TOOL_RESULT_START")
@@ -139,8 +136,7 @@ class BusinessToolMiddleware(AgentMiddleware):
                         receipt=project_data(receipt,{'confirmation_required':True,
                             'confirmation_id':operation['confirmation_id'], 'action':operation['action'], 'status':'pending'},notices=notices)
                         processed[-1]=receipt
-                    self.bus.publish(session,"tool.result",{"tool":name,"tool_call_id":event_id,**body},
-                        public_payload={"tool":name,"tool_call_id":event_id,**self.public_data(body)})
+                    self.bus.publish(session,"tool.result",{"tool":name,"tool_call_id":event_id,**body})
                     emit("TOOL_RESULT_TEXT_DELTA",receipt.text)
                     emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))
                 observe_tool_result(failed=failed)
@@ -297,8 +293,7 @@ class ToolResilienceMiddleware(AgentMiddleware):
 def runtime_middlewares(settings, throttle, circuit_registry, bus, loops=None) -> list[AgentMiddleware]:
     from app.application.runtime.loops import LoopMiddleware
     return [
-        BusinessToolMiddleware(loops if settings.harness_enabled else None, bus,
-                               output_guard_enabled=settings.output_guard_enabled),
+        BusinessToolMiddleware(loops if settings.harness_enabled else None, bus),
         ToolResilienceMiddleware(circuit_registry, bus),
         *([LoopMiddleware(loops)] if settings.harness_enabled and loops is not None else []),
     ]

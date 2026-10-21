@@ -1,7 +1,7 @@
 # scripts/loadtest.py
 # 依赖：httpx（uv add --group dev httpx）
 # 运行：uv run python scripts/loadtest.py --base-url http://localhost:8000 --stages 5,10,20,40
-"""Globex 同步意图接口阶梯压测。
+"""Globex 持久运行接口阶梯压测。
 
 与 scripts/verify_parallel.py 的分工：verify_parallel 验「单条意图内部有没有真并行」，
 本脚本验「多条意图并发时系统扛不扛得住、端到端多快、什么时候开始排队」。
@@ -14,6 +14,12 @@ import statistics
 import time
 
 import httpx
+import os
+import uuid
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.run_stream import submit_stream
 
 # 混合负载：检索型（只读、快）与交易型（含确认、慢）按 8:2 取样
 SEARCH_QUERIES = [
@@ -32,17 +38,11 @@ def _pick_query(i: int) -> str:
 
 
 async def _one_intent(client: httpx.AsyncClient, i: int) -> tuple[bool, float]:
-    payload = {
-        "buyer_id": f"load-user-{i:04d}",
-        "raw_query": _pick_query(i),
-        "locale": "zh-CN",
-        "currency": "CNY",
-    }
     started = time.monotonic()
     try:
-        resp = await client.post("/commerce/intents", json=payload)
-        ok = resp.status_code == 200
-    except (httpx.HTTPError, asyncio.TimeoutError):
+        await submit_stream(client,'',f'load-{uuid.uuid4().hex}',os.environ['GLOBEX_BUYER_ID'],_pick_query(i),timeout=120)
+        ok = True
+    except (httpx.HTTPError, asyncio.TimeoutError, ValueError):
         ok = False
     return ok, time.monotonic() - started
 
@@ -50,7 +50,7 @@ async def _one_intent(client: httpx.AsyncClient, i: int) -> tuple[bool, float]:
 async def _run_stage(base_url: str, concurrency: int) -> None:
     # timeout 要大于单意图端到端最坏耗时，否则测的是客户端超时不是服务端能力
     limits = httpx.Limits(max_connections=concurrency + 10, max_keepalive_connections=concurrency)
-    async with httpx.AsyncClient(base_url=base_url, timeout=120.0, limits=limits) as client:
+    async with httpx.AsyncClient(base_url=base_url, timeout=120.0, limits=limits, headers={'Authorization':'Bearer '+os.environ['GLOBEX_API_TOKEN']}) as client:
         wall_start = time.monotonic()
         results = await asyncio.gather(*[_one_intent(client, i) for i in range(concurrency)])
         wall = time.monotonic() - wall_start

@@ -47,7 +47,6 @@ from app.infrastructure.persistence.sql.repositories import (
     create_engine,
 )
 from app.infrastructure.queue.redis_stream_queue import (
-    RedisEventBackplane,
     RedisStreamTaskQueue,
 )
 from app.infrastructure.rag.category_knowledge import (
@@ -83,7 +82,6 @@ class Container:
     orchestrator: MainAgentOrchestrator
     cache: RedisCache
     task_queue: Optional[TaskQueue]
-    backplane: Optional[RedisEventBackplane]
     query_order: QueryOrderUseCase
     cancel_order: CancelOrderUseCase
     product_repo: InMemoryProductRepository
@@ -162,7 +160,9 @@ async def build_container() -> Container:
 
     # ---- Infrastructure ----
     product_repo = InMemoryProductRepository()
-    bus = TradeEventBus()
+    from app.infrastructure.security.public_projection import PublicProjection
+    public_projection = PublicProjection(settings.output_guard_enabled)
+    bus = TradeEventBus(projection=public_projection)
     vector_index = QdrantProductIndex(settings)
 
     cache = RedisCache(settings.redis_url)
@@ -180,15 +180,11 @@ async def build_container() -> Container:
     graph_checkpointer = await graph_checkpointer_context.__aenter__()
     await graph_checkpointer.setup()
 
-    # 队列与事件背板都依赖 Redis：没有 Redis 就退回单进程直跑
+    # 调度使用 Redis Stream；事件由执行者写持久日志，SSE 按游标读取。
     task_queue: Optional[TaskQueue] = None
-    backplane: Optional[RedisEventBackplane] = None
     if cache.enabled and settings.queue_enabled:
         task_queue = RedisStreamTaskQueue(cache.client, QueueArchive(settings.data_dir / "queue_archive.db"))
-        backplane = RedisEventBackplane(cache.client)
-        # 关键：worker 与 API 是两个进程，不接背板前端收不到 worker 产生的事件
-        bus.attach_backplane(backplane)
-        logger.info("队列已启用（Redis Stream），事件走跨进程背板")
+        logger.info("队列已启用（Redis Stream），公开事件由持久运行提供")
     else:
         logger.info("队列未启用，意图在当前进程内直接执行")
 
@@ -281,7 +277,6 @@ async def build_container() -> Container:
             lambda: {tool.name for tool in [*search_factory.build_tools(), *trade_factory.build_tools()]})
         orchestrator = MainAgentOrchestrator(
             sessions, bus, conversation_store=conversation_store,
-            output_guard_enabled=settings.output_guard_enabled,
             loop_detector=loop_detector,
             token_budget_total=settings.token_budget_total,
             session_lease_factory=task_queue.session_lease if task_queue is not None else None,
@@ -292,7 +287,7 @@ async def build_container() -> Container:
     
         from app.application.agents.context_service import ContextService
         from app.application.usecases.session_management import SessionManagement
-        journal=AGUIJournal(settings.data_dir / "ag_ui_runs.db")
+        journal=AGUIJournal(settings.data_dir / "ag_ui_runs.db", projection=public_projection)
         return Container(
             settings=settings,
             buyer_workspace=workspace,
@@ -303,7 +298,6 @@ async def build_container() -> Container:
             context_service=ContextService(orchestrator, session_store, search_factory.evidence_store, confirmations),
             cache=cache,
             task_queue=task_queue,
-            backplane=backplane,
             query_order=query_order,
             cancel_order=cancel_order,
             product_repo=product_repo,

@@ -45,7 +45,7 @@ def request_parts(system, messages, tools, available):
               "skill_tokens":0,"state_tokens":0,"other_fixed_tokens":0,"history_tokens":0}
     for message in messages:
         key=("skill_tokens" if message.name in {"skill_reference","skill_catalog"} else
-             "state_tokens" if message.name in {"shopping_state","shopping_state_delta"} else
+             "state_tokens" if message.name in {"shopping_state"} else
              "other_fixed_tokens" if isinstance(message,SystemMessage) or message.name in RequestComposition.FIXED_NAMES else
              "history_tokens")
         sections[key]+=token_estimate(message.model_dump(mode="json"))
@@ -59,7 +59,7 @@ def request_parts(system, messages, tools, available):
 
 class RequestComposition:
     """一轮请求的资料快照；所有候选历史都用相同规则重新装配和计量。"""
-    FIXED_NAMES = {"skill_reference","skill_catalog","shopping_state","shopping_state_delta",
+    FIXED_NAMES = {"skill_reference","skill_catalog","shopping_state",
                    "memory_hint","task_plan","loop_feedback","trade_state","candidate_state","delegated_task"}
 
     def __init__(self, request, settings, skill_parts):

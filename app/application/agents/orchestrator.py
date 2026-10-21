@@ -22,7 +22,6 @@ from app.application.runtime.request_scope import ShoppingContext, ShoppingConte
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.operational_metrics import begin_request, finish_request
 from app.infrastructure.prompt_registry import PromptContractChanged
-from app.infrastructure.security.output_guard import audit_output
 from app.application.runtime.errors import ContextCapacityError
 from app.application.runtime.execution import ExecutionResult
 from app.application.usecases.intents import SubmitIntentInput, SubmitIntentOutput
@@ -40,7 +39,6 @@ class MainAgentOrchestrator:
         bus: TradeEventBus,
         *,
         conversation_store: Optional[ConversationStore] = None,
-        output_guard_enabled: bool = True,
         loop_detector: Any = None,
         token_budget_total: int = 0,
         session_lease_factory: Callable[..., Any] | None = None,
@@ -52,7 +50,6 @@ class MainAgentOrchestrator:
         self.buyer_workspace = buyer_workspace
         self._bus = bus
         self._conversation_store = conversation_store
-        self._output_guard_enabled = output_guard_enabled
         self._loop_detector = loop_detector
         self._token_budget_total = token_budget_total
         self._session_lease_factory = session_lease_factory
@@ -83,10 +80,8 @@ class MainAgentOrchestrator:
             yield lease
 
     def _guard_final_text(self, session_id: str, text: str) -> str:
-        if not self._output_guard_enabled or not text:
-            return text
-        safe, cleaned = audit_output(text)
-        if not safe:
+        cleaned = self._bus.projection.business(text)
+        if cleaned != text:
             self._bus.publish(session_id, "error", {"message": "输出审核命中内部信息，已脱敏后下发"})
         return cleaned
 

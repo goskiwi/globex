@@ -24,7 +24,7 @@ def test_public_event_projection_does_not_replace_internal_evidence():
     bus=TradeEventBus();queue=bus.subscribe('s');marker='sk-'+'x'*24
     raw={'tool':'product_search_tool','hits':[{'product_id':'P1003','title':marker}]}
     public={**raw,'hits':audit_output(raw['hits'])[1]}
-    bus.publish('s','tool.result',raw,public_payload=public)
+    bus.publish('s','tool.result',raw)
     event=queue.get_nowait()
     assert event.payload==raw and event.to_dict()['payload']==public
     assert marker not in json.dumps(event.to_dict())
@@ -42,6 +42,7 @@ async def test_component_and_lifecycle_cannot_bypass_configured_output_policy(tm
     catalog=c.orchestrator._sessions._main_factory._search_factory._catalog_search
     catalog._embedder=catalog._vector_index=catalog._reranker=None
     target,frames=adapter()
+    target.projection=c.bus.projection
     try:
         with observe_run_events(target.on_trade_event):
             result=await c.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY','推荐一款背包，不下单',run_id='audit-output'))

@@ -1,33 +1,22 @@
 """面试用例的隔离运行夹具；复用生产 API、主子图和交易账本，不是第二套 Agent。"""
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from app.infrastructure.context_usage import evaluation_evidence_sink
-from app.infrastructure.eventbus import observe_run_events
 from app.infrastructure.persistence.sql.repositories import bootstrap_schema
 
 
-class LocalCollector:
-    """订阅与 WebSocket 同源的业务事件，并额外记录隔离评测的模型/工具证据。"""
-    def __init__(self, session_id, buyer_id, token=None, *, events=None):
-        self.events = events if events is not None else []
-        self.session_id = session_id
-
-    async def __aenter__(self):
-        def event(item):
-            if item.shopping_session_id == self.session_id:
-                self.events.append(item.to_dict())
-        self.observer = observe_run_events(event)
-        self.observer.__enter__()
-        self.token = evaluation_evidence_sink.set(lambda item: self.events.append({
-            "type": "eval." + item["kind"], "call_kind":item.get("call_kind"), "payload": item["payload"]}))
-        return self
-
-    async def __aexit__(self, *args):
-        evaluation_evidence_sink.reset(self.token)
-        self.observer.__exit__(*args)
+@contextmanager
+def capture_evaluation(events):
+    """隔离评测记录模型测量；业务事件仍统一消费公开持久 SSE。"""
+    token=evaluation_evidence_sink.set(lambda item: events.append({
+        'type':'eval.'+item['kind'],'call_kind':item.get('call_kind'),'payload':item['payload']}))
+    try:
+        yield
+    finally:
+        evaluation_evidence_sink.reset(token)
 
 
 @asynccontextmanager

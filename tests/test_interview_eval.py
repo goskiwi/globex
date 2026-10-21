@@ -117,7 +117,7 @@ async def test_isolated_production_api_fixture(tmp_path):
     from dataclasses import replace
     from tests.test_retrieval import _settings
     from tests.test_langgraph_runtime import ScriptedModel
-    from scripts.eval.interview_runtime import isolated_runtime, LocalCollector
+    from scripts.eval.interview_runtime import isolated_runtime, capture_evaluation
     from scripts import eval_regression as runner
     from unittest.mock import patch
     import httpx
@@ -126,8 +126,9 @@ async def test_isolated_production_api_fixture(tmp_path):
     settings = replace(_settings(tmp_path), llm_api_key="test-key", embedding_api_key="test-key")
     async with isolated_runtime(tmp_path/"runtime", settings, model_factory=lambda *a,**kw:model) as (app,container):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as client:
-            with patch.object(runner,"SessionEventCollector",LocalCollector):
-                result=await runner.run_case(client,case,"",identity_policy=app.state.identity_policy)
+            events=[]
+            with capture_evaluation(events):
+                result=await runner.run_case(client,case,"",identity_policy=app.state.identity_policy,evidence_events=events)
         assert result["verdict"] == "PASS"
         from app.application.runtime.execution import graph_step_limit
         for session in container.orchestrator._sessions._agents.values():

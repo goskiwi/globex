@@ -94,16 +94,15 @@ async def test_runner_only_resolves_when_fixture_declares_http_action(confirmati
     async def record(request: Request, call_next):
         calls.append(request.url.path)
         return await call_next(request)
-    @app.post("/commerce/intents")
+    @app.post("/commerce/ag-ui/run")
     async def chat(request: Request):
         data = await request.json()
-        await env.service.prepare_order(data["buyer_id"], data["shopping_session_id"], [OrderItemInput("P1001", "P1001-S1", 1)], address())
-        return {"final_text": "已准备确认单，请在页面明确确认；尚未支付。"}
-    class Collector:
-        def __init__(self, *_): self.events = []
-        async def __aenter__(self): return self
-        async def __aexit__(self, *_): return None
-    monkeypatch.setattr(runner, "SessionEventCollector", Collector)
+        await env.service.prepare_order(data["forwardedProps"]["buyerId"], data["threadId"], [OrderItemInput("P1001", "P1001-S1", 1)], address())
+        from fastapi.responses import Response
+        frames=[{'type':'RUN_STARTED','threadId':data['threadId'],'runId':data['runId']},
+            {'type':'MESSAGES_SNAPSHOT','messages':[*data['messages'],{'id':'final','role':'assistant','content':'已准备确认单，请在页面明确确认；尚未支付。'}]},
+            {'type':'RUN_FINISHED','threadId':data['threadId'],'runId':data['runId']}]
+        return Response(''.join('data: '+__import__('json').dumps(f,ensure_ascii=False)+'\n\n' for f in frames),media_type='text/event-stream')
     monkeypatch.setattr(runner, "BASE_URL", "http://test")
     case = {"id": "action-vs-chat", "description": "真实HTTP决议边界", "queries": ["给我确认信息", "我同意，直接下单"],
             "rubric": {"p0": ["点击前无订单"], "p1": [], "p2": []},
@@ -161,13 +160,14 @@ async def test_memory_action_uses_explicit_page_approval_and_verifies_persisted_
         if request.url.path=='/commerce/ag-ui/run':
             body=json.loads(request.content);state['body']=body;state['decided']=True
             assert body['resume']==[{'interruptId':'bound-memory-id','status':'resolved','payload':{'approved':approved}}]
-            return httpx.Response(200,text='data: {"type":"RUN_FINISHED"}\n\n')
+            return httpx.Response(200,text='data: {"type":"CUSTOM","name":"usage.summary","value":{"model_calls":1}}\n\ndata: {"type":"RUN_FINISHED"}\n\n')
         return httpx.Response(200,json={'state':{'toolApprovals':[] if state['decided'] else [
             {'id':'bound-memory-id','tool':'remember_preference_tool','arguments':json.dumps(action['expected_payload'])}]},
             'run':{'runId':state['body']['runId'] if state['decided'] else 'original','result':{'text':'已处理'}}})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         text=await execute_tool_approval_action(BuyerAPIClient(client,'http://test','test-buyer-token'),'http://test','buyer','session',action,events)
     assert text=='已处理' and state['decided']
+    assert {'type':'usage.summary','payload':{'model_calls':1}} in events
     assert events[-1]['payload']=={'approved':approved,'persisted':approved}
 
 

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""四期模块三：Redis Stream 队列与跨进程事件背板
+"""四期模块三：Redis Stream 队列与进程内事件
 
-用内存替身模拟 Redis Stream / Pub-Sub 的关键语义，重点验证三件容易出事的事：
+用内存替身模拟 Redis Stream 的关键语义，重点验证三件容易出事的事：
     1. 处理失败不 ack，消息留在 pending 等重投（at-least-once）；
     2. 重投超限进死信，坏消息不能无限重放阻塞队列；
-    3. 事件总线接上背板后能跨进程送达，且远端事件不回环广播。
+    3. 内部事件不经第二套跨进程广播，公开重放由持久运行覆盖。
 """
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from app.infrastructure.eventbus import TradeEvent, TradeEventBus
 from app.infrastructure.queue.redis_stream_queue import (
     _STREAM,
     _ENQUEUE_SCRIPT, _STATUS_SCRIPT, _ACK_SCRIPT, _RELEASE_SCRIPT, _DEAD_SCRIPT, _RENEW_SCRIPT,
-    RedisEventBackplane,
     RedisStreamTaskQueue,
 )
 
@@ -36,7 +35,6 @@ class FakeStreamClient:
         self.dead: list[dict] = []
         self.kv: dict[str, str] = {}
         self._seq = 0
-        self.published: list[tuple[str, str]] = []
 
     async def xgroup_create(self, *_args, **_kwargs):
         return True
@@ -139,9 +137,6 @@ class FakeStreamClient:
             await self.xack(keys[0], args[8], args[3])
             return 1
         raise AssertionError("测试替身不认识该 Redis Lua 命令")
-
-    async def publish(self, channel, data):
-        self.published.append((channel, data))
 
     def redeliver(self, message_id: str) -> None:
         """模拟 Redis 把未 ack 的消息重新投递给消费者。"""
@@ -256,74 +251,15 @@ class TestConsumeSemantics:
         await queue.consume("c1", handler, should_stop, block_ms=0)
 
 
-class TestEventBackplane:
-    async def test_publish_broadcasts_to_channel(self):
-        client = FakeStreamClient()
-        bus = TradeEventBus()
-        bus.attach_backplane(RedisEventBackplane(client))
-
-        bus.publish("s1", "tool.invoke", {"tool": "product_search_tool"})
-        await asyncio.sleep(0)  # 让 fire-and-forget 广播任务跑一轮
-        await asyncio.sleep(0)
-
-        assert client.published, "接了背板后事件必须广播出去，否则 worker 的事件到不了 API 进程"
-        channel, data = client.published[0]
-        assert channel == "globex:events:s1"
-        envelope = json.loads(data)
-        assert envelope["event"]["type"] == "tool.invoke"
-        assert envelope["origin"], "必须带发送方标识，否则无法过滤自己发的消息"
-
-    async def test_own_broadcast_is_filtered_out(self):
-        """Pub/Sub 不排除发布者：API 进程既发又订，不过滤会把自己的事件再投一次。
-
-        实测踩过这个坑：前端收到两条 task.queued。
-        """
-        client = FakeStreamClient()
-        backplane = RedisEventBackplane(client, origin="api-1")
-        event = TradeEvent(
-            shopping_session_id="s1", type="task.queued", payload={"task_id": "t1"},
-            occurred_at="2026-01-01T00:00:00Z",
-        )
-        await backplane.publish(event)
-
-        _channel, data = client.published[0]
-        envelope = json.loads(data)
-        assert envelope["origin"] == "api-1"
-
-        # 同一个 origin 的背板收到自己的消息应跳过；其他 origin 则放行
-        other = RedisEventBackplane(client, origin="worker-1")
-        assert envelope["origin"] != other.origin
-
-    async def test_local_subscriber_still_receives(self):
-        """广播不能影响本进程投递。"""
-        bus = TradeEventBus()
-        bus.attach_backplane(RedisEventBackplane(FakeStreamClient()))
-        queue = bus.subscribe("s1")
-        bus.publish("s1", "final.result", {"text": "ok"})
-        assert queue.get_nowait().type == "final.result"
-
-    async def test_deliver_local_does_not_rebroadcast(self):
-        """背板收到远端事件后走 deliver_local，不能再广播出去（否则无限回环）。"""
-        client = FakeStreamClient()
-        bus = TradeEventBus()
-        bus.attach_backplane(RedisEventBackplane(client))
-        queue = bus.subscribe("s1")
-
-        bus.deliver_local(
-            TradeEvent(shopping_session_id="s1", type="final.result", payload={"text": "合成答复"},
-                       occurred_at="2026-01-01T00:00:00Z"),
-        )
-        await asyncio.sleep(0)
-
-        assert queue.get_nowait().payload == {"text": "合成答复"}
-        assert client.published == [], "远端事件不应再次广播"
-
-    async def test_works_without_backplane(self):
-        """没有 Redis 时事件总线退回纯进程内模式，不能报错。"""
-        bus = TradeEventBus()
-        queue = bus.subscribe("s1")
-        bus.publish("s1", "error", {"message": "x"})
-        assert queue.get_nowait().type == "error"
+class TestLocalEventBus:
+    async def test_local_subscriber_receives_internal_facts(self):
+        bus=TradeEventBus();queue=bus.subscribe('s1')
+        bus.publish('s1','final.result',{'text':'ok'})
+        assert queue.get_nowait().payload=={'text':'ok'}
+        bus.unsubscribe('s1',queue)
+        bus.publish('s1','final.result',{'text':'next'})
+        assert queue.empty()
+        assert not hasattr(bus,'attach_backplane')
 
 
 class TestEventSerialization:

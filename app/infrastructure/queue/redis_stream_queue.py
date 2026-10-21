@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Redis Stream 可靠消费与跨进程事件背板。
+"""Redis Stream 可靠消费与执行租约。
 
 处理任务前同时持有消息、task 与会话租约；只有租约有效且结果成功才确认。
 重投语义为 at-least-once，业务写入仍须使用独立的确认及幂等约束。
@@ -19,10 +19,9 @@ from app.infrastructure.operational_metrics import observe_queue
 import os
 import time
 import uuid
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from app.domain.queue.ports.task_queue import IntentTask, QueueDelivery, TaskQueue, TaskStatus
-from app.infrastructure.eventbus import TradeEvent
 
 logger = logging.getLogger(__name__)
 _STREAM = "globex:intents"
@@ -31,7 +30,6 @@ _DEAD_STREAM = "globex:intents:dead"
 _GROUP = "globex-workers"
 _STATUS_PREFIX = "globex:task:"
 _STATUS_TTL = 3600
-_EVENT_CHANNEL_PREFIX = "globex:events:"
 _LEASE_PREFIX = "globex:lease:"
 
 _ENQUEUE_SCRIPT = """
@@ -533,47 +531,3 @@ class RedisStreamTaskQueue(TaskQueue):
             if token is not None:
                 _execution_lease.reset(token)
             await self._release(lease)
-
-
-class RedisEventBackplane:
-    """跨进程事件广播：worker 发布 → API 进程订阅 → 转发给本地 WS。
-
-    必须带发送方标识并跳过自己发的消息：Pub/Sub 不会排除发布者，
-    API 进程既发布又订阅同一频道，不过滤就会把自己的事件再投递一次
-    （实测现象：前端收到两条 task.queued）。
-    """
-
-    def __init__(self, client: Any, origin: Optional[str] = None) -> None:
-        self._client = client
-        self._origin = origin or f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
-
-    @property
-    def origin(self) -> str:
-        return self._origin
-
-    async def publish(self, event: TradeEvent) -> None:
-        channel = f"{_EVENT_CHANNEL_PREFIX}{event.shopping_session_id}"
-        envelope = {"origin": self._origin, "event": event.to_dict()}
-        try:
-            await self._client.publish(channel, json.dumps(envelope, ensure_ascii=False))
-        except Exception as err:  # noqa: BLE001 —— 广播失败不影响本进程投递
-            logger.warning("事件广播失败：%s（%s）", channel, err)
-
-    async def listen(self) -> AsyncIterator[TradeEvent]:
-        """订阅所有会话频道，逐条产出**其他进程**的事件。"""
-        pubsub = self._client.pubsub()
-        await pubsub.psubscribe(f"{_EVENT_CHANNEL_PREFIX}*")
-        try:
-            async for message in pubsub.listen():
-                if message.get("type") != "pmessage":
-                    continue
-                try:
-                    envelope = json.loads(message["data"])
-                    if envelope.get("origin") == self._origin:
-                        continue  # 自己发的，本地已投递过
-                    yield TradeEvent.from_dict(envelope["event"])
-                except Exception as err:  # noqa: BLE001
-                    logger.warning("远端事件解析失败，跳过：%s", err)
-        finally:
-            await pubsub.punsubscribe()
-            await pubsub.aclose()

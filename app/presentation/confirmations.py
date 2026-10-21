@@ -44,17 +44,19 @@ def confirmation_error(err: ValueError) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": str(err)})
 
 
-def register_confirmation_routes(api: FastAPI, service: Callable[[], ConfirmationService]) -> None:
+def register_confirmation_routes(api: FastAPI, service: Callable[[], ConfirmationService], *, projection=None) -> None:
+    from app.infrastructure.security.public_projection import PublicProjection
+    public = projection or (lambda: PublicProjection())
     @api.post("/commerce/confirmations/orders")
     async def prepare_order(request: Request, body: PrepareOrderRequest) -> dict:
         body.buyer_id = await require_buyer(request, body.buyer_id)
         await require_session(request, body.buyer_id, body.session_id, create=True)
         try:
-            return await service().prepare_order(
+            return public().business(await service().prepare_order(
                 body.buyer_id, body.session_id,
                 [OrderItemInput(**item.model_dump()) for item in body.items],
                 Address(**body.shipping_address.model_dump()), body.currency,
-            )
+            ))
         except ValueError as err:
             raise confirmation_error(err) from err
 
@@ -63,7 +65,7 @@ def register_confirmation_routes(api: FastAPI, service: Callable[[], Confirmatio
         buyer_id = await require_buyer(request, buyer_id)
         await require_session(request, buyer_id, session_id)
         try:
-            return await service().restore(buyer_id, session_id)
+            return public().business(await service().restore(buyer_id, session_id))
         except ValueError as err:
             raise confirmation_error(err) from err
 
@@ -72,7 +74,7 @@ def register_confirmation_routes(api: FastAPI, service: Callable[[], Confirmatio
         buyer_id = await require_buyer(request, buyer_id)
         await require_session(request, buyer_id, session_id)
         try:
-            return await service().get(confirmation_id, buyer_id, session_id)
+            return public().business(await service().get(confirmation_id, buyer_id, session_id))
         except ValueError as err:
             raise confirmation_error(err) from err
 
@@ -81,6 +83,6 @@ def register_confirmation_routes(api: FastAPI, service: Callable[[], Confirmatio
         body.buyer_id = await require_buyer(request, body.buyer_id)
         await require_session(request, body.buyer_id, body.session_id)
         try:
-            return await service().resolve(confirmation_id, **body.model_dump())
+            return public().business(await service().resolve(confirmation_id, **body.model_dump()))
         except ValueError as err:
             raise confirmation_error(err) from err

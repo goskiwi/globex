@@ -413,7 +413,6 @@ async def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--min-mrr", type=float, default=0.65)
     parser.add_argument("--min-ndcg", type=float, default=0.70)
     parser.add_argument("--min-empty-accuracy", type=float, default=None)
-    parser.add_argument("--formal-gates", action="store_true", help="兼容旧命令，等同 --profile online-main")
     parser.add_argument("--profile", choices=("online-main", "offline-fallback", "hybrid-experimental"), default=None)
     parser.add_argument("--baseline-file", type=Path, default=None, help="批准基线 JSON；任一指标下降超过 2 个百分点即阻断")
     parser.add_argument("--report-dir", default="eval")
@@ -428,10 +427,6 @@ async def main(argv: list[str] | None = None) -> None:
     print(f"标注集 {args.dataset}：split={args.split}，{len(cases)} 条，K={args.top_k}")
 
     profile = args.profile
-    if args.formal_gates:
-        if profile and profile != "online-main":
-            parser.error("--formal-gates 只能与 --profile online-main 一起使用")
-        profile = "online-main"
     if profile == "online-main":
         if args.compare_strategies or args.strategy != "embedding_rerank":
             parser.error("online-main 只评 embedding_rerank；关键词降级请使用 --profile offline-fallback")

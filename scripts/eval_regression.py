@@ -5,7 +5,7 @@
     uv run uvicorn app.presentation.server:app --port 8000
     uv run python scripts/eval_regression.py [--cases eval/cases.yaml] [--only case_id]
 
-流程：逐 case 顺序打 POST /commerce/intents（同 case 多轮复用会话）→
+流程：逐 case 顺序打 POST /commerce/ag-ui/run（同 case 多轮复用会话）→
 LLM judge 按 Rubric（P0 数字事实 / P1 行为命中 / P2 表达）逐条打分 →
 输出 eval/report-{时间戳}.md。
 
@@ -231,11 +231,7 @@ def apply_trace_evidence(
 ) -> dict:
     """用可观测工具/状态事件覆盖同名 Judge 条目，保留非程序化表达评估。"""
     judge_rubric = build_judge_rubric(rubric, assertions_by_level)
-    try:
-        # 兼容旧调用方传入包含确定性条目的完整 Judge 输出。
-        normalized = validate_judge_output(judged, rubric)
-    except JudgeOutputError:
-        normalized = validate_judge_output(judged, judge_rubric)
+    normalized = validate_judge_output(judged, judge_rubric)
     for level, assertions in (assertions_by_level or {}).items():
         if level not in {"p0", "p1", "p2"} or not isinstance(assertions, list):
             raise JudgeOutputError("deterministic 只能包含 p0/p1/p2 断言列表")
@@ -299,52 +295,6 @@ def exit_code_for_results(results: list[dict]) -> int:
     return 0 if results and all(result.get("verdict") == "PASS" for result in results) else 1
 
 
-class SessionEventCollector:
-    """订阅与请求同一个会话的 WebSocket 事件，供回归评测保留行为证据。"""
-
-    def __init__(self, session_id: str, buyer_id: str, token: str | None = None) -> None:
-        self._session_id = session_id
-        self._buyer_id = buyer_id
-        self._token = token
-        self.events: list[dict] = []
-        self._websocket = None
-        self._receiver: asyncio.Task | None = None
-
-    async def __aenter__(self) -> "SessionEventCollector":
-        import websockets
-
-        event_url = f"{BASE_URL.replace('http://', 'ws://', 1).replace('https://', 'wss://', 1)}/commerce/events"
-        protocols = ["globex-events"]
-        if self._token:
-            protocols.append(f"globex-auth.{self._token}")
-        self._websocket = await websockets.connect(event_url, open_timeout=10, subprotocols=protocols)
-        await self._websocket.send(json.dumps({"shopping_session_id": self._session_id, "buyer_id": self._buyer_id}))
-
-        async def receive() -> None:
-            try:
-                async for message in self._websocket:
-                    self.events.append(json.loads(message))
-            except asyncio.CancelledError:
-                raise
-
-        self._receiver = asyncio.create_task(receive())
-        # 服务端先完成订阅再开始请求，避免首个 tool.invoke 因连接竞态丢失。
-        await asyncio.sleep(0.05)
-        return self
-
-    async def __aexit__(self, exc_type, exc, traceback) -> None:
-        # /commerce/intents 返回前已完成工具调用；留出一个调度周期接收队列尾部事件。
-        await asyncio.sleep(0.05)
-        if self._receiver:
-            self._receiver.cancel()
-            try:
-                await self._receiver
-            except asyncio.CancelledError:
-                pass
-        if self._websocket:
-            await self._websocket.close()
-
-
 class CaseExecutionError(RuntimeError):
     def __init__(self, error: Exception, transcript: str, events: list[dict]) -> None:
         super().__init__(f"{type(error).__name__}: {error}")
@@ -352,7 +302,7 @@ class CaseExecutionError(RuntimeError):
         self.trace_events = list(events)
 
 
-async def run_case(client: httpx.AsyncClient, case: dict, ground_truth: str, *, identity_policy=None) -> dict:
+async def run_case(client: httpx.AsyncClient, case: dict, ground_truth: str, *, identity_policy=None, evidence_events=None) -> dict:
     actions = validate_http_actions(case)
     session_id = f"eval-{case['id']}-{uuid.uuid4().hex[:6]}"
     buyer_id = f"{case.get('buyer_id') or 'eval-buyer-' + case['id']}-{_RUN_NAMESPACE}"
@@ -362,7 +312,8 @@ async def run_case(client: httpx.AsyncClient, case: dict, ground_truth: str, *, 
     token = identity_policy.issue(buyer_id, ttl_seconds=3600)
     api_client = BuyerAPIClient(client, BASE_URL, token)
     transcript_lines: list[str] = []
-    collector = SessionEventCollector(session_id, buyer_id, token)
+    from types import SimpleNamespace
+    collector = SimpleNamespace(events=evidence_events if evidence_events is not None else [])
     try:
         return await _run_case_with_events(api_client, client, case, ground_truth, session_id, buyer_id, transcript_lines, collector, actions)
     except Exception as err:
@@ -374,51 +325,40 @@ async def _run_case_with_events(client, judge_client, case, ground_truth, sessio
                                                 for assertions in (case.get("deterministic") or {}).values() for assertion in assertions)
     last_order_id = None
     case_started = perf_counter()
-    async with collector:
-        for turn_index, query in enumerate(case["queries"], start=1):
-            if "{{confirmed_order_id}}" in query:
-                if last_order_id is None:
-                    raise ValueError("后续查询需要已真实确认的订单号，不能由模型猜测")
-                query = query.replace("{{confirmed_order_id}}", last_order_id)
-            response = await client.post(
-                f"{BASE_URL}/commerce/intents",
-                json={
-                    "shopping_session_id": session_id,
-                    "buyer_id": buyer_id,
-                    "locale": "zh-CN",
-                    "currency": "CNY",
-                    "raw_query": query,
-                },
-                timeout=600,
-            )
-            response.raise_for_status()
-            final_text = response.json()["final_text"]
-            transcript_lines.append(f"[买家] {query}\n[Agent] {final_text}")
-            # 将真实事件按对话轮次切开，才能程序证明“确认前”没有调用下单工具。
-            await asyncio.sleep(0.05)
-            collector.events.append({"type": "eval.turn.complete", "payload": {"turn_index": turn_index,
-                "request_id": response.headers.get("x-request-id"), "trace_id": response.headers.get("x-trace-id")}})
-            if case.get("compact_after_turn") == turn_index:
-                from scripts.eval.http_actions import compact_context
-                await compact_context(client, BASE_URL, buyer_id, session_id, collector.events)
-            if inspect_confirmations:
-                confirmations = await capture_confirmations(client, BASE_URL, buyer_id, session_id, collector.events, turn_index)
-                for action in actions:
-                    if action['type'] != 'resolve_confirmation' or action["after_turn"] != turn_index:
-                        continue
-                    if action["expected_payload"].get("order_id") == "{{confirmed_order_id}}":
-                        if last_order_id is None:
-                            raise ValueError("取消确认必须绑定先前真实 HTTP 确认返回的订单号")
-                        action = {**action, "expected_payload": {**action["expected_payload"], "order_id": last_order_id}}
-                    resolved = await execute_confirmation_action(client, BASE_URL, buyer_id, session_id, action, confirmations, collector.events)
-                    if resolved.get("order"):
-                        last_order_id = resolved["order"]["order_id"]
-                    transcript_lines.append(f"[评测模拟用户页面点击] action={action['action']}，approved={action['approved']}；服务端决议={resolved['confirmation']['status']}，意向单状态={(resolved.get('order') or {}).get('status', '未创建')}。")
-                    confirmations = await capture_confirmations(client, BASE_URL, buyer_id, session_id, collector.events, turn_index)
+    for turn_index, query in enumerate(case["queries"], start=1):
+        if "{{confirmed_order_id}}" in query:
+            if last_order_id is None:
+                raise ValueError("后续查询需要已真实确认的订单号，不能由模型猜测")
+            query = query.replace("{{confirmed_order_id}}", last_order_id)
+        from scripts.run_stream import submit_stream
+        result,events,response = await submit_stream(client,BASE_URL,session_id,buyer_id,query)
+        collector.events.extend(events)
+        final_text=result['final_text']
+        transcript_lines.append(f"[买家] {query}\n[Agent] {final_text}")
+        # 将真实事件按对话轮次切开，才能程序证明“确认前”没有调用下单工具。
+        collector.events.append({"type": "eval.turn.complete", "payload": {"turn_index": turn_index,
+            "request_id": response.headers.get("x-request-id"), "trace_id": response.headers.get("x-trace-id")}})
+        if case.get("compact_after_turn") == turn_index:
+            from scripts.eval.http_actions import compact_context
+            await compact_context(client, BASE_URL, buyer_id, session_id, collector.events)
+        if inspect_confirmations:
+            confirmations = await capture_confirmations(client, BASE_URL, buyer_id, session_id, collector.events, turn_index)
             for action in actions:
-                if action['type'] == 'resolve_tool_approval' and action['after_turn'] == turn_index:
-                    text = await execute_tool_approval_action(client, BASE_URL, buyer_id, session_id, action, collector.events)
-                    transcript_lines.append(f"[评测模拟用户页面点击] {action['action']}，approved={action['approved']}。\n[Agent] {text}")
+                if action['type'] != 'resolve_confirmation' or action["after_turn"] != turn_index:
+                    continue
+                if action["expected_payload"].get("order_id") == "{{confirmed_order_id}}":
+                    if last_order_id is None:
+                        raise ValueError("取消确认必须绑定先前真实 HTTP 确认返回的订单号")
+                    action = {**action, "expected_payload": {**action["expected_payload"], "order_id": last_order_id}}
+                resolved = await execute_confirmation_action(client, BASE_URL, buyer_id, session_id, action, confirmations, collector.events)
+                if resolved.get("order"):
+                    last_order_id = resolved["order"]["order_id"]
+                transcript_lines.append(f"[评测模拟用户页面点击] action={action['action']}，approved={action['approved']}；服务端决议={resolved['confirmation']['status']}，意向单状态={(resolved.get('order') or {}).get('status', '未创建')}。")
+                confirmations = await capture_confirmations(client, BASE_URL, buyer_id, session_id, collector.events, turn_index)
+        for action in actions:
+            if action['type'] == 'resolve_tool_approval' and action['after_turn'] == turn_index:
+                text = await execute_tool_approval_action(client, BASE_URL, buyer_id, session_id, action, collector.events)
+                transcript_lines.append(f"[评测模拟用户页面点击] {action['action']}，approved={action['approved']}。\n[Agent] {text}")
 
     case_metrics = collect_case_metrics(collector.events, expected_turns=len(case["queries"])+sum(a['type']=='resolve_tool_approval' for a in actions), elapsed_ms=(perf_counter() - case_started) * 1000)
     transcript = "\n\n".join(transcript_lines)

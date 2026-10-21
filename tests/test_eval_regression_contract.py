@@ -38,7 +38,7 @@ def test_score_case_rejects_missing_p0_instead_of_treating_it_as_full_score():
 def test_trace_evidence_overrides_same_criterion_instead_of_letting_judge_guess():
     rubric = {"p0": ["下单前不得创建订单"], "p1": [], "p2": []}
     judged = {
-        "p0": [{"criterion": "下单前不得创建订单", "reason": "模型猜测。结论：通过", "pass": True}],
+        "p0": [],
         "p1": [], "p2": [],
     }
     result = apply_trace_evidence(
@@ -83,7 +83,6 @@ def test_failed_deterministic_p1_assertion_blocks_case_even_when_score_is_above_
     judged = {
         "p0": [{"criterion": "事实正确", "reason": "正确。结论：通过", "pass": True}],
         "p1": [
-            {"criterion": "状态闭环", "reason": "模型误判。结论：通过", "pass": True},
             {"criterion": "表达动作", "reason": "已表达。结论：通过", "pass": True},
         ],
         "p2": [{"criterion": "清晰", "reason": "清晰。结论：通过", "pass": True}],

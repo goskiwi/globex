@@ -182,7 +182,7 @@ class RunService:
 
     async def _produce(self, body, intent, entry, *, started=False):
         queue = asyncio.Queue()
-        adapter = AGUIRunAdapter(body, queue.put_nowait, authoritative_state=body.state)
+        adapter = AGUIRunAdapter(body, queue.put_nowait, authoritative_state=body.state, projection=self.journal.projection)
 
         async def write_events():
             while True:
@@ -239,7 +239,7 @@ class RunService:
         try:
             if self.confirmations is not None:
                 saved = await self.confirmations.restore(intent.buyer_id, intent.shopping_session_id)
-                adapter.state["confirmations"] = saved["confirmations"]
+                adapter.state["confirmations"] = self.journal.projection.business(saved["confirmations"])
                 adapter.snapshot()
             with observe_run_events(adapter.on_trade_event):
                 options={'event_observer':adapter.on_agent_event,'persistence_guard':entry.is_valid}

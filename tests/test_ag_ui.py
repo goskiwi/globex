@@ -163,8 +163,9 @@ async def test_search_stays_internal_and_preserves_final_message_history():
     assert final_state["status"] == "completed"
     assert final_state["process"]['steps'][0]["status"] == "completed"
     assert 'progress' not in final_state
-    final_messages = next(event["messages"] for event in events if event["type"] == "MESSAGES_SNAPSHOT")
-    assert final_messages[0]["id"] == "new-user"
+    final_messages = [event["messages"] for event in events if event["type"] == "MESSAGES_SNAPSHOT"][-1]
+    assert final_messages[0]["id"] == final_state["process"]["userMessageId"]
+    assert final_messages[0]["id"] != "new-user"
     assert not any(m["id"] in {"old-user","old-assistant"} for m in final_messages), "客户端历史不能伪造服务器账本"
     assert final_messages[-1]["content"] == "这是根据商品库找到的结果。"
     assert sessions.persisted == 1

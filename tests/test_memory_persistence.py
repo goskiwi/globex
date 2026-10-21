@@ -2,7 +2,7 @@
 from tests.sql_fixtures import preference_store,session_store
 # -*- coding: utf-8 -*-
 """二期记忆与持久化单测：偏好 Store / 会话状态 round-trip。"""
-from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
+from tests.sql_fixtures import read_session_state, save_session_state
 import pytest
 
 import json

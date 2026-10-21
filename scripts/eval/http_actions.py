@@ -119,6 +119,9 @@ async def execute_tool_approval_action(client, base_url, buyer_id, session_id, a
     events.append({'type': 'eval.tool_approval.invoke', 'payload': request})
     response = await client.post(base_url + '/commerce/ag-ui/run', json=request, timeout=120)
     response.raise_for_status()
+    from scripts.run_stream import read_stream
+    _, business_events, _ = read_stream(response.text)
+    events.extend(business_events)
     after = await read('/commerce/ag-ui/sessions/' + session_id)
     if after['run']['runId'] != request['runId'] or after['state'].get('toolApprovals'):
         raise ValueError('批准请求未完成或记忆操作仍待确认')

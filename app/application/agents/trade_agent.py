@@ -88,7 +88,7 @@ class TradeAgentFactory:
                 self._settings, self._throttle, self._circuit_registry, self._bus,
                 self._loop_detector,
             ),*([skills] if skills is not None else []),
-                HandoffMiddleware(TradeSubmission, self._bus, output_guard_enabled=self._settings.output_guard_enabled), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
+                HandoffMiddleware(TradeSubmission, self._bus), GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, budget_lite_model=self._settings.llm_fallback_model,
                                     delivery_tools=("SubagentResult",)),
                 context, ],

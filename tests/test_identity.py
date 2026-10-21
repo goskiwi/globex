@@ -1,4 +1,4 @@
-"""本机签名身份、跨入口归属与 WebSocket 订阅；只访问临时 SQLite。"""
+"""本机签名身份、跨入口归属与持久 SSE 访问；只访问临时 SQLite。"""
 from __future__ import annotations
 
 from tests.sql_fixtures import session_store
@@ -11,15 +11,13 @@ from unittest.mock import AsyncMock
 import httpx
 import jwt
 import pytest
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from app.domain.session.ports.session_store import SessionNotFound, SessionOwnerMismatch
 from app.infrastructure.eventbus import TradeEvent, TradeEventBus
 from app.infrastructure.identity import IdentityError, IdentityPolicy
 from app.infrastructure.persistence.sql.repositories import SqlSessionStore
-from app.presentation.connection import ConnectionManager
 from tests.test_confirmation_routes import order_request, decision
 from tests.trade_test_helpers import confirmation_env  # noqa: F401
 
@@ -167,53 +165,9 @@ async def test_task_access_is_durable_and_bound_to_buyer_and_session(secured):
     assert response.status_code == 403
 
 
-class ReadyEventBus(TradeEventBus):
-    def subscribe(self, session_id):
-        queue = super().subscribe(session_id)
-        queue.put_nowait(TradeEvent(session_id, "test.ready", {"safe": True}, "now"))
-        return queue
-
-
-async def ws_app(tmp_path):
-    api = FastAPI()
-    api.state.identity_policy = POLICY
-    api.state.session_store = await session_store(tmp_path)
-    manager = ConnectionManager(ReadyEventBus())
-    @api.websocket("/events")
-    async def events(websocket: WebSocket):
-        await manager.serve(websocket)
-    return api
-
-
-async def test_websocket_auth_protocol_is_not_echoed_and_owner_is_persistent(tmp_path):
-    api = await ws_app(tmp_path)
-    with TestClient(api) as client:
-        with client.websocket_connect("/events", subprotocols=["globex-events", "globex-auth." + POLICY.issue("buyer-1")]) as ws:
-            assert ws.accepted_subprotocol == "globex-events"
-            ws.send_json({"buyer_id": "buyer-1", "shopping_session_id": "session"})
-            assert ws.receive_json()["payload"] == {"safe": True}
-    # 新 app / 新 store 仍不能换买家读取该会话。
-    with TestClient(await ws_app(tmp_path)) as client:
-        with client.websocket_connect("/events", subprotocols=["globex-events", "globex-auth." + POLICY.issue("buyer-2")]) as ws:
-            ws.send_json({"buyer_id": "buyer-2", "shopping_session_id": "session"})
-            with pytest.raises(WebSocketDisconnect) as error:
-                ws.receive_json()
-            assert error.value.code == 4403
-
-
-@pytest.mark.parametrize("query,protocols,payload,expected", [
-    ("", [], {"buyer_id": "buyer-1", "shopping_session_id": "session"}, 4401),
-    ("?token=ignored", [], {"buyer_id": "buyer-1", "shopping_session_id": "session"}, 4401),
-    ("", ["globex-events", "globex-auth.invalid"], {"buyer_id": "buyer-1", "shopping_session_id": "session"}, 4401),
-    ("", ["globex-events", "globex-auth." + POLICY.issue("buyer-1")], {"shopping_session_id": "session"}, 4400),
-])
-async def test_websocket_invalid_identity_never_subscribes(tmp_path, query, protocols, payload, expected):
-    with TestClient(await ws_app(tmp_path)) as client:
-        with client.websocket_connect("/events" + query, subprotocols=protocols) as ws:
-            ws.send_json(payload)
-            with pytest.raises(WebSocketDisconnect) as error:
-                ws.receive_json()
-            assert error.value.code == expected
+async def test_retired_websocket_route_is_not_registered(secured):
+    app=secured.client._transport.app
+    assert not any(getattr(route,'path',None)=='/commerce/events' for route in app.routes)
 
 
 @pytest.mark.parametrize("path", ["/internal/metrics", "/internal/metrics/summary"])

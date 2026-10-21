@@ -30,9 +30,12 @@ from app.infrastructure.eventbus import TradeEvent
 from app.application.agents.execution_summary import TOOL_LABELS as _TOOL_LABELS, DELIVERY_TOOLS, label, request_summary, result_summary, delivery_summary, step_status
 
 class AGUIRunAdapter:
-    def __init__(self, request: RunAgentInput, emit: Callable[[BaseEvent], None], *, authoritative_state: dict | None = None) -> None:
+    def __init__(self, request: RunAgentInput, emit: Callable[[BaseEvent], None], *, authoritative_state: dict | None = None, projection=None) -> None:
         self.request = request
-        self.emit = emit
+        from app.infrastructure.security.public_projection import PublicProjection
+        self.projection = projection or PublicProjection()
+        self.emit = lambda event: emit(type(event).model_validate(
+            self.projection.event(event.model_dump(mode='json',by_alias=True))))
         self.state: dict[str, Any] = {
             "presentations": [],
             "shoppingForms": [],
@@ -66,6 +69,7 @@ class AGUIRunAdapter:
 
     def start(self) -> None:
         self.emit(RunStartedEvent(thread_id=self.request.thread_id, run_id=self.request.run_id))
+        self.emit(MessagesSnapshotEvent(messages=self.request.messages))
         self.snapshot()
 
     def _progress(self, identifier: str, title: str, status: str, summary: str = '') -> None:
@@ -214,6 +218,8 @@ class AGUIRunAdapter:
             return
         value = event.to_dict()['payload']
         payload = value if isinstance(value, dict) else {}
+        if event.type != "tool.lifecycle":
+            self.emit(CustomEvent(name=event.type, value=payload))
         if event.type == "tool.lifecycle":
             from app.application.runtime.events import ToolEvent
             self.on_agent_event(ToolEvent(**payload))
@@ -258,7 +264,6 @@ class AGUIRunAdapter:
                     if item["confirmation_id"] in active or item["confirmation_id"] in recent]
                 self.snapshot()
         elif event.type in {"agent.dispatch", "cache.hit", "model.fallback", "context.compressed", "error"}:
-            self.emit(CustomEvent(name=event.type, value=payload))
             if event.type == "context.compressed":
                 self.state["contextStatistics"] = payload
                 self.snapshot()
@@ -279,7 +284,7 @@ class AGUIRunAdapter:
         self._completed = True
         self._close_streams()
         self._close_skill_reads("未收到方案读取成功的结果。")
-        # 用审核后的最终回答收口；保留客户端传入的全部历史与本轮用户消息。
+        # 用审核后的最终回答收口；保留接纳层提供的可信历史与本轮用户消息。
         self.emit(MessagesSnapshotEvent(messages=[
             *self.request.messages,
             AssistantMessage(id=self._id("final", "answer"), content=final_text),

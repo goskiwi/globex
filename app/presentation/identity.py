@@ -2,32 +2,27 @@
 from __future__ import annotations
 import secrets
 
-from fastapi import HTTPException, Request, WebSocket
+from fastapi import HTTPException, Request
 
 from app.domain.session.ports.session_store import SessionNotFound, SessionOwnerMismatch, SessionStoreError
 from app.infrastructure.identity import IdentityError, IdentityPolicy, buyer_identity
 
 
-def identity_policy(request: Request | WebSocket) -> IdentityPolicy:
+def identity_policy(request: Request) -> IdentityPolicy:
     return getattr(request.app.state, "identity_policy", None) or IdentityPolicy()
 
 
-def _token(request: Request | WebSocket) -> str:
+def _token(request: Request) -> str:
     authorization = request.headers.get("authorization", "")
     if authorization:
         scheme, separator, value = authorization.partition(" ")
         if separator and scheme.lower() == "bearer" and value and " " not in value:
             return value
         return ""
-    if isinstance(request, WebSocket):
-        protocols = request.headers.get("sec-websocket-protocol", "").split(",")
-        tokens = [item.strip()[len("globex-auth."):] for item in protocols if item.strip().startswith("globex-auth.")]
-        if len(tokens) == 1:
-            return tokens[0]
     return ""
 
 
-async def require_buyer(request: Request | WebSocket, claimed_buyer: str) -> str:
+async def require_buyer(request: Request, claimed_buyer: str) -> str:
     policy = identity_policy(request)
     if policy.mode == "hmac":
         try:
@@ -64,7 +59,7 @@ def session_error(error: SessionStoreError) -> HTTPException:
     return HTTPException(status_code=code, detail={"code": error.code, "message": str(error)})
 
 
-async def require_session(request: Request | WebSocket, buyer_id: str, session_id: str, *, create: bool = False) -> None:
+async def require_session(request: Request, buyer_id: str, session_id: str, *, create: bool = False) -> None:
     store = getattr(request.app.state, "session_store", None)
     if store is None:
         # 独立演示路由可以不配置持久层；严格运行态绝不降级跳过归属检查。

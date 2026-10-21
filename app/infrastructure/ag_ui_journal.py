@@ -35,7 +35,9 @@ def _json(value: Any) -> str:
 
 
 class AGUIJournal:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, projection=None):
+        from app.infrastructure.security.public_projection import PublicProjection
+        self.projection = projection or PublicProjection()
         self.path = Path(path)
         self._initialized = False
         self._init_lock = asyncio.Lock()
@@ -202,6 +204,7 @@ class AGUIJournal:
                 initial = {**trusted_state, "status":"queued", "process": {
                     "runId":run_id, "userMessageId":user["id"], "status":"queued", "steps":[]}}
                 await self._append(db, row, [{"type":"RUN_STARTED", "threadId":session_id, "runId":run_id},
+                                            {"type":"MESSAGES_SNAPSHOT", "messages":messages},
                                             {"type":"STATE_SNAPSHOT", "snapshot":initial}])
             return self._run(await self._one(db, "SELECT * FROM agui_runs WHERE run_id=?", (run_id,))), True
 
@@ -305,7 +308,7 @@ class AGUIJournal:
             if after < 0 or after > row["last_seq"]:
                 raise JournalConflict("事件游标超出该运行范围")
             async with db.execute("SELECT seq,event_json FROM agui_events WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?", (run_id, after, limit)) as cursor:
-                events = [{"seq": item["seq"], "event": json.loads(item["event_json"])} for item in await cursor.fetchall()]
+                events = [{"seq": item["seq"], "event": self.projection.event(json.loads(item["event_json"]))} for item in await cursor.fetchall()]
             return events, row["status"], row["last_seq"]
 
     async def request_stop(self, run_id, buyer_id):
@@ -410,6 +413,6 @@ class AGUIJournal:
             ) as cursor:
                 events = [{"id": f"{item['run_id']}:{item['seq']}", "type": item["type"],
                            "timestamp": item["timestamp"]} for item in await cursor.fetchall()]
-            return {"id": session_id, "title": row["title"], "messages": list(messages.values()),
+            return self.projection.session({"id": session_id, "title": row["title"], "messages": list(messages.values()),
                     "presentations":list(presentations.values()), "processes": processes, "events": events[::-1],
-                    "state": json.loads(row["state_json"]), "run": run, "updatedAt": int(row["updated_at"] * 1000)}
+                    "state": json.loads(row["state_json"]), "run": run, "updatedAt": int(row["updated_at"] * 1000)})

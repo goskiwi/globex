@@ -143,7 +143,7 @@ def register_ag_ui_routes(
         try:
             run = await runtime().journal.run(run_id, buyer_id)
             await require_session(request, buyer_id, run["threadId"], create=False)
-            return run
+            return runtime().journal.projection.run(run)
         except (JournalConflict, JournalForbidden, JournalNotFound) as err:
             raise translate(err) from err
 
@@ -153,7 +153,7 @@ def register_ag_ui_routes(
         try:
             run = await runtime().journal.run(run_id, buyer_id)
             await require_session(request, buyer_id, run["threadId"], create=False)
-            return await runtime().cancel(run_id, buyer_id)
+            return runtime().journal.projection.run(await runtime().cancel(run_id, buyer_id))
         except (JournalConflict, JournalForbidden, JournalNotFound) as err:
             raise translate(err) from err
 

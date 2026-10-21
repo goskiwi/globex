@@ -5,7 +5,7 @@
     uv run uvicorn app.presentation.server:app --port 8000
     uv run python scripts/smoke_e2e.py [--query "..."]
 
-流程：WS 订阅会话事件 → POST /commerce/intents → 实时打印事件 → 打印最终回复。
+流程：POST 持久 AG-UI 运行 → 读取公开 SSE 与最终回复。
 """
 from __future__ import annotations
 
@@ -16,14 +16,15 @@ import os
 import uuid
 
 import httpx
-import websockets
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.run_stream import submit_stream
 
 BASE_URL = "http://127.0.0.1:8000"
-WS_URL = "ws://127.0.0.1:8000/commerce/events"
 BUYER_ID = os.getenv("GLOBEX_BUYER_ID", "buyer-001")
 API_TOKEN = os.getenv("GLOBEX_API_TOKEN", "")
 AUTH_HEADERS = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
-WS_PROTOCOLS = ["globex-events", f"globex-auth.{API_TOKEN}"] if API_TOKEN else ["globex-events"]
 
 
 def validate_smoke_result(body: dict, events: list[dict]) -> None:
@@ -34,21 +35,6 @@ def validate_smoke_result(body: dict, events: list[dict]) -> None:
     for required in ("tool.invoke", "tool.result", "final.result"):
         if required not in event_types:
             raise AssertionError(f"冒烟失败：事件流缺少 {required}")
-
-
-async def listen_events(session_id: str, stop: asyncio.Event) -> list[dict]:
-    events: list[dict] = []
-    async with websockets.connect(WS_URL, subprotocols=WS_PROTOCOLS) as ws:
-        await ws.send(json.dumps({"shopping_session_id": session_id, "buyer_id": BUYER_ID}))
-        while not stop.is_set():
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=1)
-            except asyncio.TimeoutError:
-                continue
-            event = json.loads(raw)
-            events.append(event)
-            print(f"\n[{event['type']}] {json.dumps(event['payload'], ensure_ascii=False)[:300]}")
-    return events
 
 
 async def main() -> None:
@@ -63,27 +49,10 @@ async def main() -> None:
     session_id = args.session or f"smoke-{uuid.uuid4().hex[:8]}"
     print(f"== 会话：{session_id}\n== 意图：{args.query}\n")
 
-    stop = asyncio.Event()
-    listener = asyncio.create_task(listen_events(session_id, stop))
-    await asyncio.sleep(0.5)  # 等 WS 订阅建立
-
     async with httpx.AsyncClient(timeout=600, headers=AUTH_HEADERS) as client:
-        response = await client.post(
-            f"{BASE_URL}/commerce/intents",
-            json={
-                "shopping_session_id": session_id,
-                "buyer_id": BUYER_ID,
-                "locale": "zh-CN",
-                "currency": "CNY",
-                "raw_query": args.query,
-            },
-        )
-        response.raise_for_status()
-        body = response.json()
-
-    await asyncio.sleep(1)  # 等尾部事件送达
-    stop.set()
-    events = await listener
+        body,events,_ = await submit_stream(client,BASE_URL,session_id,BUYER_ID,args.query)
+        for event in events:
+            print(f"[{event['type']}] {json.dumps(event['payload'],ensure_ascii=False)[:300]}")
     validate_smoke_result(body, events)
 
     print("\n\n===== 最终回复 =====")
