@@ -1,5 +1,6 @@
 """真实检索组件不得被评测关闭，执行降级不能被记为rerank通过。"""
 from dataclasses import replace
+from tests.native_trace_helpers import tool_frames
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,18 +11,19 @@ from tests.test_retrieval import _settings
 
 
 def search(strategy, applied):
-    return {'type': 'tool.result', 'payload': {'tool': 'product_search_tool',
-        'recall_strategy': strategy, 'rerank_applied': applied, 'hits': [], 'query_conditions': {}}}
+    return tool_frames('product_search_tool', {'recall_strategy':strategy,'rerank_applied':applied,
+        'hits':[],'query_conditions':{}})
+
 
 
 @pytest.mark.parametrize('events,expected', [
-    ([search('embedding_rerank', True)], True),
-    ([search('hybrid_rerank', True), search('exact_id_lookup', False)], True),
-    ([search('embedding_only', False)], False),
-    ([search('keyword_2gram', False)], False),
-    ([search('bm25_rerank', True)], False),
-    ([search('embedding_rerank', True), search('keyword_2gram', False)], False),
-    ([search('exact_id_lookup', False)], False),
+    ([ *search('embedding_rerank', True)], True),
+    ([ *search('hybrid_rerank', True), *search('exact_id_lookup', False)], True),
+    ([ *search('embedding_only', False)], False),
+    ([ *search('keyword_2gram', False)], False),
+    ([ *search('bm25_rerank', True)], False),
+    ([ *search('embedding_rerank', True), *search('keyword_2gram', False)], False),
+    ([ *search('exact_id_lookup', False)], False),
     ([], False),
 ])
 def test_assertion_requires_actual_vector_and_rerank(events, expected):
