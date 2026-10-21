@@ -96,3 +96,30 @@ async def test_pending_memory_rejection_after_restart_has_one_unexecuted_receipt
         session=await c.runs.journal.session('facts-session','buyer')
         assert len(session['processes'])==2
     finally:await c.shutdown()
+
+async def test_previous_search_projection_is_never_a_new_round_call(tmp_path,monkeypatch):
+    from tests.trade_test_helpers import test_address as address
+    from dataclasses import asdict
+    class ReusedProviderIDs(ScriptedModel):
+        def _generate(self,*args,**kwargs):
+            result=super()._generate(*args,**kwargs)
+            for call_item in result.generations[0].message.tool_calls:
+                call_item['id']=call_item['id'].rsplit('-round-',1)[0]
+            return result
+    model=ReusedProviderIDs(responses=[call('product_search_tool',{'product_id':'P1003','conditions':{'filters':{'ship_to':'CN'}}}),
+        AIMessage(content='已查到这款背包。'),call('create_order_tool',{'items':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1}],
+            'shipping_address':asdict(address())},turn_action='finish')])
+    c=await _container(tmp_path,monkeypatch,model)
+    catalog=c.orchestrator._sessions._main_factory._search_factory._catalog_search
+    catalog._embedder=catalog._vector_index=catalog._reranker=None
+    try:
+        await c.runs.startup()
+        for run,expected in [('search-round','product_search_tool'),('prepare-round','create_order_tool')]:
+            await c.runs.start(request(run),'buyer')
+            saved=await c.runs.wait(run,'buyer',10)
+            assert saved['status']=='completed'
+            rows,_,_=await c.runs.journal.events(run,'buyer')
+            receipts=tool_observations([r['event'] for r in rows])
+            assert [r['name'] for r in receipts]==[expected]
+        assert model.cursor==3
+    finally:await c.shutdown()

@@ -25,6 +25,7 @@ class ExecutionFacts:
         self.observer = observer
         self.calls = {}
         self.scopes = {}
+        self.message_calls = {}
         self.started = set()
         self.results = set()
         self.begun = set()
@@ -55,7 +56,7 @@ class ExecutionFacts:
                 self.announce(identifier)
 
     def announce(self, identifier):
-        if identifier in self.started:
+        if identifier in self.started or identifier in self.results:
             return
         self.started.add(identifier)
         call = self.calls[identifier]
@@ -87,9 +88,13 @@ class ExecutionFacts:
         for message in messages:
             if isinstance(message, AIMessage):
                 self.register(message, scope, announce=not seed)
-            elif isinstance(message, ToolMessage) and not seed:
-                identifier = (message.artifact or {}).get('execution_id') or self.scopes.get(scope, {}).get(message.tool_call_id)
-                if identifier is not None:
+            elif isinstance(message, ToolMessage):
+                identifier = self.message_calls.get(message.id) or self.scopes.get(scope, {}).get(message.tool_call_id)
+                if identifier is not None and message.id is not None:
+                    self.message_calls[message.id] = identifier
+                if identifier is not None and seed:
+                    self.results.add(identifier)
+                elif identifier is not None:
                     data = (message.artifact or {}).get('event_data', (message.artifact or {}).get('data', message_data(message)))
                     self.result(identifier, message, data)
 
