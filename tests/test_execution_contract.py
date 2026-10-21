@@ -135,12 +135,12 @@ def test_shopping_schema_rejects_model_supplied_source_quote():
 
 async def test_timeout_retains_collected_diagnostic_events():
     import asyncio
-    from scripts.eval.interview_runtime import LocalCollector
+    from scripts.eval.interview_runtime import capture_evaluation
     from app.infrastructure.context_usage import record_evaluation_evidence
     events=[]
     with pytest.raises(TimeoutError):
         async with asyncio.timeout(0):
-            async with LocalCollector('s','buyer',events=events):
+            with capture_evaluation(events):
                 record_evaluation_evidence('model_argument_error', {'synthetic':True})
                 await asyncio.sleep(0)
     assert events[0]['type']=='eval.model_argument_error'
