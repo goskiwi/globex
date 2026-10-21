@@ -51,12 +51,13 @@ def build_product_view_tool(catalog, evidence_store, bus):
                 targets_by_product.setdefault(target.product_id, [])
                 if target.sku_id:
                     targets_by_product[target.product_id].append(target.sku_id)
+            products = {p.product_id: p for p in await catalog.pricing.product_repo.find_by_ids(list(targets_by_product))}
             cards = []
             for identifier, requested_skus in targets_by_product.items():
                 spec = ProductSearchSpec(product_id=identifier, **parameters,
                     excluded_product_ids=tuple(effective.get("excluded_products", [])),
                     excluded_sku_ids=tuple(effective.get("excluded_skus", [])))
-                result = await catalog.product_details(identifier, spec,
+                result = catalog.product_details_observed(products.get(identifier), identifier, spec,
                     sku_id=requested_skus[0] if requested_skus else None, landed_budget_major=budget)
                 if not result["hits"]:
                     raise ValueError(f"目录不存在该商品，不能展示：{identifier}")

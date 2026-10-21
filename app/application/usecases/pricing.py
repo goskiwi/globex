@@ -56,13 +56,19 @@ class PricingService:
                    ("subtotal_minor", "freight_minor", "tariff_minor", "total_amount_minor")}}
 
     async def quote(self, items: list[QuoteItem], ship_to: str, currency: str):
+        products = {p.product_id: p for p in await self.product_repo.find_by_ids(
+            list(dict.fromkeys(item.product_id for item in items)))}
+        return self.quote_observed(items, products, ship_to, currency)
+
+    def quote_observed(self, items: list[QuoteItem], products: dict, ship_to: str, currency: str):
+        """仅计算调用方已读取的观察；不执行仓储或库存 I/O。"""
         quantities = {}
         for item in items:
             key = (item.product_id, item.sku_id)
             quantities[key] = quantities.get(key, 0) + item.quantity
         lines = []
         for (product_id, sku_id), quantity in sorted(quantities.items()):
-            product = await self.product_repo.find_by_id(product_id)
+            product = products.get(product_id)
             sku = product.find_sku(sku_id) if product else None
             if sku is None:
                 raise ValueError(f"商品或规格不存在：{product_id}/{sku_id}")

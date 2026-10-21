@@ -89,7 +89,7 @@ async def _recommend(catalog, evidence_store, request, *, bundle):
     if context is None:
         return _fail("缺少买家会话")
     try:
-        cards, quotes, budget, ship_to, currency, unverified = await _assemble_choices(catalog, evidence_store, context, request.picks)
+        cards, quotes, budget, ship_to, currency, unverified = await _assemble_choices(catalog, evidence_store, context, request.picks, bundle=bundle)
         for card in cards:
             if any(issue != "over_landed_budget" for issue in card["constraint_issues"]):
                 raise ValueError(f"推荐不满足当前条件：{card['default_sku_id']} {card['constraint_issues']}")
@@ -98,7 +98,6 @@ async def _recommend(catalog, evidence_store, request, *, bundle):
         if budget is not None and ship_to and any(q["total_amount_minor"] > round(budget * 100) for q in checked):
             return _fail("推荐到手总额超过当前预算，请调整选项或明确交回预算缺口。报价：" + str(checked))
         mode = 'bundle' if bundle else 'individual'
-        await _check_task_bundle_budgets(catalog, context, request.picks, mode)
         result = {"guidance":request.guidance, "mode":mode, "hits":cards, "quote":combined,
                   "unverified_requirements":unverified}
         _attach_plan_outcome(result, context, request.picks)
@@ -156,7 +155,7 @@ def build_comparison_tool(catalog, evidence_store, bus):
     return compare_products
 
 
-async def _assemble_choices(catalog, evidence_store, context, picks, *, require_qualified=True):
+async def _assemble_choices(catalog, evidence_store, context, picks, *, require_qualified=True, bundle=False):
     """推荐与比较共享证据、目录和报价装配；条件缺口由调用方决定如何交付。"""
     if len({p.sku_id for p in picks}) != len(picks):
         raise ValueError("同一结果中的 SKU 不得重复，请合并数量")
@@ -168,12 +167,14 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
     currency = params.get("target_currency") or context.currency
     params["target_currency"] = currency
     ship_to = params.get("ship_to")
+    products = {p.product_id: p for p in await catalog.pricing.product_repo.find_by_ids(
+        list(dict.fromkeys(p.product_id for p in picks)))}
     cards, quotes = [], []
     for pick in picks:
         from app.application.runtime.research_plan import resolve_candidate_scope
         task_policy = resolve_candidate_scope(context.task_plan, pick, context.source_run_id or context.source_message_id,
                                               require_qualified=require_qualified)
-        product = await catalog.pricing.product_repo.find_by_id(pick.product_id)
+        product = products.get(pick.product_id)
         sku = product.find_sku(pick.sku_id) if product else None
         if sku is None or sku.stock < pick.quantity:
             raise ValueError(f"推荐规格不存在或库存不足：{pick.sku_id}")
@@ -191,8 +192,8 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
             if task_budget is not None:
                 if not task_spec.ship_to:
                     raise ValueError('子任务到手预算缺少目的地，不能报告已核验')
-                task_quote = await catalog.pricing.quote([QuoteItem(pick.product_id, pick.sku_id, pick.quantity)],
-                                                        task_spec.ship_to, task_spec.target_currency)
+                task_quote = catalog.pricing.quote_observed([QuoteItem(pick.product_id, pick.sku_id, pick.quantity)],
+                                                        products, task_spec.ship_to, task_spec.target_currency)
                 if task_quote['total_amount_minor'] > round(task_budget * 100):
                     task_issues.append('over_landed_budget')
             if task_issues and require_qualified:
@@ -202,7 +203,7 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
         card = catalog.product_card(0, product, spec, primary=sku, skus=[sku]).to_dict()
         card.update(recommendation_reason=pick.reason, tradeoffs=pick.tradeoffs, quantity=pick.quantity)
         if ship_to:
-            quote = await catalog.pricing.quote([QuoteItem(pick.product_id, pick.sku_id, pick.quantity)], ship_to, currency)
+            quote = catalog.pricing.quote_observed([QuoteItem(pick.product_id, pick.sku_id, pick.quantity)], products, ship_to, currency)
             card["landed_price"] = quote
             quotes.append(quote)
         card["constraint_issues"] = issues
@@ -210,6 +211,8 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
             card["constraint_issues"].append("over_landed_budget")
         cards.append(card)
 
+    if bundle:
+        _check_task_bundle_budgets(catalog.pricing, products, context, picks)
     unverified = list(policy.get("unverified_requirements", []))
     if budget is not None and not ship_to:
         unverified.append("到手预算尚未核验，当前展示商品价")
@@ -224,16 +227,14 @@ def _attach_plan_outcome(result, context, picks):
         result['guidance'] += f"\n还有{len(outcome['unmet_goals'])}项关联任务尚未完成，本次仅交付已有结果。"
 
 
-async def _check_task_bundle_budgets(catalog, context, picks, mode):
-    if mode != 'bundle':
-        return
+def _check_task_bundle_budgets(pricing, products, context, picks):
     from app.application.runtime.research_plan import resolve_candidate_scope
     for task_id in {p.task_id for p in picks if p.task_id is not None}:
         group = [p for p in picks if p.task_id == task_id]
         params = resolve_candidate_scope(context.task_plan, group[0], context.source_run_id or context.source_message_id)['parameters']
         budget = params.get('landed_budget_major')
         if budget is not None:
-            quote = await catalog.pricing.quote([QuoteItem(p.product_id, p.sku_id, p.quantity) for p in group],
-                                                params['ship_to'], params['target_currency'])
+            quote = pricing.quote_observed([QuoteItem(p.product_id, p.sku_id, p.quantity) for p in group],
+                                                products, params['ship_to'], params['target_currency'])
             if quote['total_amount_minor'] > round(budget * 100):
                 raise ValueError('组合超过所属子任务的到手总预算')

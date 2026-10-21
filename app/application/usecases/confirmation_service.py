@@ -86,21 +86,10 @@ class ConfirmationService:
             key = (_required_text(item.product_id, "商品标识"), _required_text(item.sku_id, "规格标识"))
             quantities[key] = quantities.get(key, 0) + item.quantity
 
-        inventory = await self._trade_store.get_inventory([sku_id for _, sku_id in quantities])
-        for (product_id, sku_id), quantity in quantities.items():
-            product = await self._product_repo.find_by_id(product_id)
-            if product is None:
-                raise ValueError(f"商品不存在：{product_id}")
-            sku = product.find_sku(sku_id)
-            if sku is None:
-                raise ValueError(f"Sku 不存在：{product_id}/{sku_id}")
-            if address["country"] not in product.ships_to:
-                raise ValueError(f"商品暂不支持配送至 {address['country']}：{product.title}")
-            if inventory.get(sku_id, 0) < quantity:
-                raise ValueError(f"库存不足：{sku_id}，剩余 {inventory.get(sku_id, 0)}，需要 {quantity}")
-
-
-        pricing = await self._pricing.quote([QuoteItem(p, s, q) for (p, s), q in quantities.items()], address["country"], currency)
+        products = {p.product_id: p for p in await self._product_repo.find_by_ids(
+            list(dict.fromkeys(p for p, _ in quantities)))}
+        pricing = self._pricing.quote_observed(
+            [QuoteItem(p, s, q) for (p, s), q in quantities.items()], products, address["country"], currency)
         confirmation = await self._trade_store.prepare_confirmation(
             operation_id=f"operation-{uuid.uuid4().hex}", buyer_id=buyer_id, session_id=session_id,
             action="create", payload={**pricing, "shipping_address": address},
@@ -113,7 +102,6 @@ class ConfirmationService:
         self._identity(buyer_id, session_id)
         _required_text(order_id, "订单号")
         _required_text(reason, "取消原因")
-        await self._trade_store.get_order(order_id, buyer_id=buyer_id)
         confirmation = await self._trade_store.prepare_confirmation(
             operation_id=f"operation-{uuid.uuid4().hex}", buyer_id=buyer_id, session_id=session_id,
             action="cancel", payload={"order_id": order_id, "reason": reason.strip(),

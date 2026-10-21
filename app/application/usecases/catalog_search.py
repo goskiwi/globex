@@ -292,6 +292,10 @@ class CatalogSearchUseCase:
     async def product_details(self, product_id: str, spec: ProductSearchSpec, *, sku_id=None, landed_budget_major=None) -> dict:
         """指定对象读取不筛掉商品；当前条件只用于解释，不能改变读取权限或购物状态。"""
         product = await self._product_repo.find_by_id(product_id)
+        return self.product_details_observed(product, product_id, spec, sku_id=sku_id, landed_budget_major=landed_budget_major)
+
+    def product_details_observed(self, product, product_id: str, spec: ProductSearchSpec, *, sku_id=None, landed_budget_major=None) -> dict:
+        """同一详情操作共享目标集合的观察，装配不再读取目录。"""
         if product is None:
             return {"hits": [], "missing_identifiers": [product_id], "existence_checked": True}
         primary = product.find_sku(sku_id) if sku_id else product.primary_available_sku()
