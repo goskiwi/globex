@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langgraph.graph import END
 from langgraph.errors import GraphRecursionError
 
-from app.application.runtime.events import ReplyStart
+from app.application.runtime.events import ModelStarted, ModelFinished
 from app.application.runtime.errors import ContextCapacityError, ExecutionStopped
 from app.application.runtime.handoff import TaskEvidence
 from app.application.runtime.execution import ExecutionResult
@@ -31,13 +31,19 @@ class _GraphStreamObserver(AsyncCallbackHandler):
 
     async def on_chat_model_start(self, serialized, messages, *, run_id, **kwargs):
         if self.observer:
-            self.observer(ReplyStart())
+            self.observer(ModelStarted(str(run_id)))
 
     async def on_llm_end(self, response, *, run_id, **kwargs):
+        if self.observer:
+            self.observer(ModelFinished(str(run_id)))
         self.interrupted = self.interrupted or any(
             (generation.generation_info or {}).get("finish_reason") == "interrupted"
             for group in response.generations for generation in group
         )
+
+    async def on_llm_error(self, error, *, run_id, **kwargs):
+        if self.observer:
+            self.observer(ModelFinished(str(run_id)))
 
 
 async def execute_graph(session_id: str, session, graph_input, event_observer=None) -> ExecutionResult:

@@ -42,7 +42,7 @@ class PublicProjection:
 
     def trade(self, event_type, payload):
         result=self.business(payload)
-        if event_type=='tool.lifecycle' and payload.get('type') in {'TOOL_CALL_DELTA','TOOL_RESULT_TEXT_DELTA'}:
+        if event_type=='tool.lifecycle' and payload.get('type') == 'TOOL_CALL_DELTA':
             result['delta']=self.encoded_business(payload.get('delta',''))
         return result
 

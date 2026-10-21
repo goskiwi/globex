@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """运行时验收脚本必须把缺失证据和失败状态反映到退出码。"""
 from __future__ import annotations
+from tests.native_trace_helpers import tool_frames, final_frames
 
 import subprocess
 import sys
@@ -18,14 +19,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def test_smoke_result_requires_final_text_and_complete_tool_trace():
     body = {"final_text": "推荐结果"}
     events = [
-        {"type": "tool.invoke", "payload": {"tool": "product_search_tool"}},
-        {"type": "tool.result", "payload": {"tool": "product_search_tool"}},
-        {"type": "final.result", "payload": {}},
+        {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'product_search_tool'},
+        *tool_frames('product_search_tool', {}, status='success'),
+        *final_frames(),
     ]
 
     validate_smoke_result(body, events)
 
-    with pytest.raises(AssertionError, match="tool.result"):
+    with pytest.raises(AssertionError, match="TOOL_CALL_RESULT"):
         validate_smoke_result(body, [events[0], events[2]])
 
 
@@ -37,16 +38,8 @@ def test_parallel_verdict_requires_multiple_dispatches_with_overlap():
 
 def test_parallel_interval_parser_ignores_incomplete_auxiliary_events():
     events = [
-        {"type": "tool.result", "payload": {"tool": "task_dispatch", "error": "辅助错误"}},
-        {
-            "type": "tool.result",
-            "payload": {
-                "tool": "task_dispatch",
-                "agent": "search_agent",
-                "started_at": "2026-08-30T00:00:00+00:00",
-                "finished_at": "2026-08-30T00:00:01+00:00",
-            },
-        },
+        *tool_frames('task_dispatch', {'error': '辅助错误'}, status='error'),
+        *tool_frames('task_dispatch', {'agent': 'search_agent', 'started_at': '2026-08-30T00:00:00+00:00', 'finished_at': '2026-08-30T00:00:01+00:00'}, status='success'),
     ]
 
     assert _dispatch_intervals(events) == [

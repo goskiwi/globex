@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """评测事件证据的确定性断言。"""
+from tests.native_trace_helpers import tool_frames, final_frames
 
 import pytest
 
@@ -7,27 +8,10 @@ from scripts.eval.evidence import AssertionDefinitionError, evaluate_trace_asser
 
 
 EVENTS = [
-    {
-        "type": "tool.invoke",
-        "payload": {"tool": "product_search_tool", "args": {"price_max_major": 300}},
-    },
-    {
-        "type": "tool.result",
-        "payload": {
-            "tool": "product_search_tool",
-            "hits": [
-                {"product_id": "P1008", "price_major": 89, "stock": 18, "material_tags": ["金属"]},
-            ],
-        },
-    },
-    {
-        "type": "tool.invoke",
-        "payload": {"tool": "create_order_tool", "args": {}},
-    },
-    {
-        "type": "tool.result",
-        "payload": {"tool": "create_order_tool", "order": {"status": "CONFIRMED"}},
-    },
+    {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'product_search_tool'},
+    *tool_frames('product_search_tool', {'hits': [{'product_id': 'P1008', 'price_major': 89, 'skus': [{'sku_id':'P1008-S1','stock':18}], 'material_tags': ['金属']}]}, status='success'),
+    {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'create_order_tool'},
+    *tool_frames('create_order_tool', {'order': {'status': 'CONFIRMED'}}, status='success'),
 ]
 
 
@@ -56,11 +40,8 @@ def test_product_constraint_leak_is_deterministically_captured():
     )
     assert results[0]["pass"] is True
 
-    bad_events = [*EVENTS]
-    bad_events[1] = {
-        "type": "tool.result",
-        "payload": {"tool": "product_search_tool", "hits": [{"product_id": "P-bad", "price_major": 101, "stock": 0, "material_tags": ["合成聚合物"]}]},
-    }
+    bad_events=tool_frames('product_search_tool',{'hits':[{'product_id':'P-bad','price_major':101,
+        'skus':[{'sku_id':'P-bad-S1','stock':0}],'material_tags':['合成聚合物']}]})
     bad = evaluate_trace_assertions(
         [{"criterion": "预算库存材质均不得泄漏", "kind": "product_hits", "price_max_major": 100,
           "require_in_stock": True, "excluded_material_tags": ["合成聚合物"]}],
@@ -72,16 +53,7 @@ def test_product_constraint_leak_is_deterministically_captured():
 
 def test_product_constraint_reads_stock_from_real_product_card_skus():
     """线上商品卡没有顶层 stock，评测必须从 SKU 判断有货。"""
-    events = [{
-        "type": "tool.result",
-        "payload": {
-            "tool": "product_search_tool",
-            "hits": [{
-                "product_id": "P-card", "price_major": 99, "material_tags": ["金属"],
-                "skus": [{"sku_id": "P-card-S1", "stock": 3}],
-            }],
-        },
-    }]
+    events = [*tool_frames('product_search_tool', {'hits': [{'product_id': 'P-card', 'price_major': 99, 'material_tags': ['金属'], 'skus': [{'sku_id': 'P-card-S1', 'stock': 3}]}]}, status='success')]
 
     result = evaluate_trace_assertions(
         [{"criterion": "SKU 有货", "kind": "product_hits", "require_in_stock": True}],
@@ -92,10 +64,7 @@ def test_product_constraint_reads_stock_from_real_product_card_skus():
 
 
 def test_empty_but_successful_search_has_no_constraint_leak():
-    events = [{
-        "type": "tool.result",
-        "payload": {"tool": "product_search_tool", "hits": []},
-    }]
+    events = [*tool_frames('product_search_tool', {'hits': []}, status='success')]
 
     result = evaluate_trace_assertions(
         [{"criterion": "不得泄漏禁用材质", "kind": "product_hits", "excluded_material_tags": ["合成聚合物"]}],
@@ -123,12 +92,12 @@ def test_forbidden_tool_before_turn_checks_only_the_pre_confirmation_trace():
         "tools": ["create_order_tool"], "before_turn": 1,
     }]
     safe_then_confirmed = [
-        {"type": "tool.invoke", "payload": {"tool": "product_search_tool"}},
+        {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'product_search_tool'},
         {"type": "eval.turn.complete", "payload": {"turn_index": 1}},
-        {"type": "tool.invoke", "payload": {"tool": "create_order_tool"}},
+        {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'create_order_tool'},
     ]
     premature_order = [
-        {"type": "tool.invoke", "payload": {"tool": "create_order_tool"}},
+        {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'create_order_tool'},
         {"type": "eval.turn.complete", "payload": {"turn_index": 1}},
     ]
 
@@ -141,53 +110,21 @@ def test_tool_error_assertion_requires_the_expected_reproducible_failure():
         "criterion": "不支持目的国要如实报错", "kind": "tool_error",
         "tools": ["product_search_tool", "quote_products"], "contains": "不支持",
     }]
-    events = [{
-        "type": "tool.result",
-        "payload": {"tool": "product_search_tool", "error": "暂不支持的目的国：BR"},
-    }]
+    events = [*tool_frames('product_search_tool', {'error': '暂不支持的目的国：BR'}, status='error')]
 
     assert evaluate_trace_assertions(assertion, events)[0]["pass"] is True
-    quote = [{"type":"tool.result","payload":{"tool":"quote_products","error":"商品不支持配送至 BR：P2079"}}]
+    quote = [*tool_frames('quote_products', {'error': '商品不支持配送至 BR：P2079'}, status='error')]
     assert evaluate_trace_assertions(assertion, quote)[0]["pass"] is True
-    assert not evaluate_trace_assertions(assertion, [{"type":"tool.result","payload":{"tool":"quote_products","error":"网络超时"}}])[0]["pass"]
-    assert not evaluate_trace_assertions(assertion, [{"type":"tool.result","payload":{"tool":"other","error":"不支持"}}])[0]["pass"]
-    assert not evaluate_trace_assertions(assertion, [{"type":"final.result","payload":{"text":"不支持配送至 BR"}}])[0]["pass"]
+    assert not evaluate_trace_assertions(assertion, [*tool_frames('quote_products', {'error': '网络超时'}, status='error')])[0]["pass"]
+    assert not evaluate_trace_assertions(assertion, [*tool_frames('other', {'error': '不支持'}, status='error')])[0]["pass"]
+    assert not evaluate_trace_assertions(assertion, [*final_frames(text='不支持配送至 BR')])[0]["pass"]
 
 
 def test_landed_price_consistency_is_checked_from_tool_facts():
     assertion = [{"criterion": "到手价恒等式", "kind": "landed_price_consistency"}]
-    good = [{
-        "type": "tool.result",
-        "payload": {
-            "tool": "product_search_tool",
-            "hits": [{
-                "product_id": "P1",
-                "landed_price": {
-                    "subtotal_minor": 21900,
-                    "freight_minor": 915,
-                    "tariff_minor": 0,
-                    "total_amount_minor": 22815,
-                    "currency": "USD",
-                },
-            }],
-        },
-    }]
-    bad = [{
-        **good[0],
-        "payload": {
-            **good[0]["payload"],
-            "hits": [{
-                "product_id": "P1",
-                "landed_price": {
-                    "subtotal_minor": 21900,
-                    "freight_minor": 915,
-                    "tariff_minor": 0,
-                    "total_amount_minor": 23000,
-                    "currency": "USD",
-                },
-            }],
-        },
-    }]
+    good = [*tool_frames('product_search_tool', {'hits': [{'product_id': 'P1', 'landed_price': {'subtotal_minor': 21900, 'freight_minor': 915, 'tariff_minor': 0, 'total_amount_minor': 22815, 'currency': 'USD'}}]}, status='success')]
+    bad=tool_frames('product_search_tool',{'hits':[{'product_id':'P1','landed_price':{
+        'subtotal_minor':21900,'freight_minor':915,'tariff_minor':0,'total_amount_minor':23000,'currency':'USD'}}]})
 
     assert evaluate_trace_assertions(assertion, good)[0]["pass"] is True
     assert evaluate_trace_assertions(assertion, bad)[0]["pass"] is False

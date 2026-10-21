@@ -46,11 +46,12 @@ SERIAL_QUERY = (
 def _dispatch_intervals(events: list[dict]) -> list[tuple[str, str, str]]:
     """从事件流提取 (agent, started_at, finished_at) 三元组。"""
     intervals = []
-    for event in events:
-        if event["type"] == "tool.result" and event["payload"].get("tool") == "task_dispatch":
-            payload = event["payload"]
-            if all(payload.get(field) for field in ("agent", "started_at", "finished_at")):
-                intervals.append((payload["agent"], payload["started_at"], payload["finished_at"]))
+    from scripts.eval.trace import tool_observations
+    for result in tool_observations(events):
+        payload = result['data']
+        if result['name'] == 'task_dispatch' and result['status'] == 'success' and isinstance(payload, dict):
+            if all(payload.get(field) for field in ('agent', 'started_at', 'finished_at')):
+                intervals.append((payload['agent'], payload['started_at'], payload['finished_at']))
     return intervals
 
 
@@ -78,7 +79,9 @@ async def run_round(label: str, query: str) -> dict:
     session_id = f"parallel-{label}-{uuid.uuid4().hex[:6]}"
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=900, headers=AUTH_HEADERS) as client:
-        _,events,_ = await submit_stream(client,BASE_URL,session_id,BUYER_ID,query,timeout=900)
+        stream,_ = await submit_stream(client,BASE_URL,session_id,BUYER_ID,query,timeout=900)
+        stream.require_success()
+        events=stream.frames
     wall_seconds = time.monotonic() - started
 
     intervals = _dispatch_intervals(events)

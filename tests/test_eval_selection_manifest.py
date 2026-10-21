@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """验证选择发生在外部调用之前，正式指标与证据不会混入 dev。"""
 from __future__ import annotations
+from tests.native_trace_helpers import tool_frames, final_frames
 
 import json
 from pathlib import Path
@@ -206,7 +207,7 @@ async def test_agent_release_dispatch_and_report_are_restricted_to_release(tmp_p
     async def health(*args, **kwargs): return {"model": "reported-model"}
     async def run_case(client, case, truth):
         calls.append(case["id"])
-        return {"id": case["id"], "description": "test", "score": 1, "p0_pass": True, "verdict": "PASS", "judged": {}, "transcript": "test", "trace_events": [{"type": "tool.result", "payload": {"recall_strategy": "embedding_only"}}]}
+        return {"id": case["id"], "description": "test", "score": 1, "p0_pass": True, "verdict": "PASS", "judged": {}, "transcript": "test", "trace_events": [*tool_frames('product_search_tool', {'recall_strategy': 'embedding_only'}, status='success')]}
     monkeypatch.setattr(agent, "read_server_health", health)
     monkeypatch.setattr(agent, "run_case", run_case)
     monkeypatch.setattr(agent, "build_ground_truth", lambda: "test facts")

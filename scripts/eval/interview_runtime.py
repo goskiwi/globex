@@ -63,9 +63,10 @@ async def isolated_runtime(folder: Path, settings, *, model_factory=None,isolate
 def retrieval_evidence(events):
     """读取真实工具执行回执；不从配置或模型文字推测rerank已经成功。"""
     searches = []
-    for event in events:
-        payload = event.get('payload') or {}
-        if event.get('type') == 'tool.result' and payload.get('tool') == 'product_search_tool' and 'recall_strategy' in payload:
+    from scripts.eval.trace import tool_observations
+    for result in tool_observations(events):
+        payload = result['data']
+        if result['name'] == 'product_search_tool' and result['status'] == 'success' and isinstance(payload, dict) and 'recall_strategy' in payload:
             searches.append({
                 'recall_strategy': payload['recall_strategy'],
                 'rerank_applied': payload.get('rerank_applied') is True,

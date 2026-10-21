@@ -32,7 +32,7 @@ def validate_smoke_result(body: dict, events: list[dict]) -> None:
     if not str(body.get("final_text", "")).strip():
         raise AssertionError("冒烟失败：响应缺少非空 final_text")
     event_types = {event.get("type") for event in events}
-    for required in ("tool.invoke", "tool.result", "final.result"):
+    for required in ("TOOL_CALL_START", "TOOL_CALL_RESULT", "RUN_FINISHED"):
         if required not in event_types:
             raise AssertionError(f"冒烟失败：事件流缺少 {required}")
 
@@ -50,9 +50,11 @@ async def main() -> None:
     print(f"== 会话：{session_id}\n== 意图：{args.query}\n")
 
     async with httpx.AsyncClient(timeout=600, headers=AUTH_HEADERS) as client:
-        body,events,_ = await submit_stream(client,BASE_URL,session_id,BUYER_ID,args.query)
+        stream,_ = await submit_stream(client,BASE_URL,session_id,BUYER_ID,args.query)
+        stream.require_success()
+        body,events = {"final_text":stream.final_text},stream.frames
         for event in events:
-            print(f"[{event['type']}] {json.dumps(event['payload'],ensure_ascii=False)[:300]}")
+            print(f"[{event['type']}] {json.dumps(event,ensure_ascii=False)[:300]}")
     validate_smoke_result(body, events)
 
     print("\n\n===== 最终回复 =====")

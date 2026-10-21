@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """端到端回归不得用缺失 P0 的 Judge 输出算满分。"""
 from __future__ import annotations
+from tests.native_trace_helpers import tool_frames, final_frames
 
 import pytest
 import json
@@ -22,7 +23,7 @@ from app.application.prompts.loader import load_prompts
 def test_retrieval_strategy_measurement_distinguishes_algorithm_from_exact_id_reads():
     from scripts.eval_regression import actual_trace_strategies
     def rows(*strategies):
-        return [{'id':'case','trace_events':[{'type':'tool.result','payload':{'recall_strategy':s}} for s in strategies]}]
+        return [{'id':'case','trace_events':[_frame for s in strategies for _frame in tool_frames('product_search_tool', {'recall_strategy': s}, status='success')]}]
     assert actual_trace_strategies(rows('exact_id_lookup','hybrid_rerank')) == actual_trace_strategies(rows('hybrid_rerank'))
     assert actual_trace_strategies(rows('embedding_rerank')) != actual_trace_strategies(rows('hybrid_rerank'))
     assert actual_trace_strategies(rows('hybrid_rerank','keyword_fallback')) != actual_trace_strategies(rows('hybrid_rerank'))
@@ -45,7 +46,7 @@ def test_trace_evidence_overrides_same_criterion_instead_of_letting_judge_guess(
         judged,
         rubric,
         {"p0": [{"criterion": "下单前不得创建订单", "kind": "forbidden_tools", "tools": ["create_order_tool"]}]},
-        [{"type": "tool.invoke", "payload": {"tool": "create_order_tool"}}],
+        [{'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'create_order_tool'}],
     )
 
     assert result["p0"][0]["pass"] is False
@@ -90,7 +91,7 @@ def test_failed_deterministic_p1_assertion_blocks_case_even_when_score_is_above_
     deterministic = {
         "p1": [{"criterion": "状态闭环", "kind": "order_statuses", "expected": ["CANCELLED"]}],
     }
-    events = [{"type": "tool.result", "payload": {"tool": "create_order_tool", "order": {"status": "CONFIRMED"}}}]
+    events = [*tool_frames('create_order_tool', {'order': {'status': 'CONFIRMED'}}, status='success')]
 
     score, p0_pass, verdict = verify_fixed_trace_stability(judged, rubric, deterministic, events)
 
@@ -121,14 +122,8 @@ def test_judge_ground_truth_includes_product_attributes_exposed_by_search_cards(
 
 def test_judge_receives_authoritative_tool_result_facts_for_derived_prices():
     evidence = build_tool_fact_evidence([
-        {"type": "tool.invoke", "payload": {"tool": "product_search_tool"}},
-        {
-            "type": "tool.result",
-            "payload": {
-                "tool": "product_search_tool",
-                "hits": [{"product_id": "P1", "landed_price": {"total": {"amount": 114, "currency": "CNY"}}}],
-            },
-        },
+        {'type': 'TOOL_CALL_START', 'toolCallId': 'pending-test-call', 'toolCallName': 'product_search_tool'},
+        *tool_frames('product_search_tool', {'hits': [{'product_id': 'P1', 'landed_price': {'total': {'amount': 114, 'currency': 'CNY'}}}]}, status='success'),
     ])
 
     assert "product_search_tool" in evidence

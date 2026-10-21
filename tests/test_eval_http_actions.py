@@ -167,7 +167,7 @@ async def test_memory_action_uses_explicit_page_approval_and_verifies_persisted_
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         text=await execute_tool_approval_action(BuyerAPIClient(client,'http://test','test-buyer-token'),'http://test','buyer','session',action,events)
     assert text=='已处理' and state['decided']
-    assert {'type':'usage.summary','payload':{'model_calls':1}} in events
+    assert {'type':'CUSTOM','name':'usage.summary','value':{'model_calls':1}} in events
     assert events[-1]['payload']=={'approved':approved,'persisted':approved}
 
 

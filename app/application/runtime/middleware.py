@@ -137,7 +137,6 @@ class BusinessToolMiddleware(AgentMiddleware):
                             'confirmation_id':operation['confirmation_id'], 'action':operation['action'], 'status':'pending'},notices=notices)
                         processed[-1]=receipt
                     self.bus.publish(session,"tool.result",{"tool":name,"tool_call_id":event_id,**body})
-                    emit("TOOL_RESULT_TEXT_DELTA",receipt.text)
                     emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))
                 observe_tool_result(failed=failed)
                 normalized=replace_receipts(output,processed)
@@ -151,7 +150,6 @@ class BusinessToolMiddleware(AgentMiddleware):
             except BaseException as error:
                 observe_tool_result(failed=True)
                 span.set_attribute("error.type",type(error).__name__);span.set_status(Status(StatusCode.ERROR))
-                emit("TOOL_RESULT_TEXT_DELTA","未取得完整回执；涉及写入请先核查状态。","error")
                 emit("TOOL_RESULT_END",state="error",failure={'code':'interrupted' if isinstance(error,asyncio.CancelledError) else 'internal'})
                 raise
 

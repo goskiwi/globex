@@ -155,9 +155,9 @@ async def test_search_stays_internal_and_preserves_final_message_history():
     assert types[0] == "RUN_STARTED" and types[-1] == "RUN_FINISHED"
     assert types.index("TOOL_CALL_END") < types.index("TOOL_CALL_RESULT")
     result = next(event for event in events if event["type"] == "TOOL_CALL_RESULT")
-    search = json.loads(result["content"])
+    search = json.loads(result["content"])["data"]
     final_state = [event["snapshot"] for event in events if event["type"] == "STATE_SNAPSHOT"][-1]
-    assert search["hits"] and "image_url" not in search["hits"][0]
+    assert search["hits"] and "image_url" in search["hits"][0]  # 公开原生回执保留完整事实，模型投影独立裁减
     assert "products" not in final_state and "searchCompleted" not in final_state
     assert final_state["presentations"] == []
     assert final_state["status"] == "completed"
@@ -189,14 +189,6 @@ async def test_both_entrypoints_execute_graph_instead_of_text_only_cache():
     assert result.final_text and agent.calls == 2
 
 
-@pytest.mark.parametrize("reason", ["completed","interrupted","error","exceed_max_iters"])
-def test_native_finished_reason_enum_is_recognized(reason):
-    adapter = AGUIRunAdapter(RunAgentInput.model_validate(request_data()), lambda event: None)
-    adapter.on_agent_event(SimpleNamespace(type="REPLY_END", finished_reason=reason))
-    expected_error = str(reason).lower() in {"error", "interrupted", "exceed_max_iters"}
-    assert (adapter.error is not None) == expected_error
-
-
 @pytest.mark.parametrize("state", list(ToolResultState))
 def test_native_tool_result_state_enum_is_recognized(state):
     adapter = AGUIRunAdapter(RunAgentInput.model_validate(request_data()), lambda event: None)
@@ -224,10 +216,9 @@ def test_parallel_same_named_tools_keep_distinct_results():
         adapter.on_agent_event(ToolEvent("TOOL_CALL_END", tool_call_id=identifier))
         adapter.on_agent_event(ToolEvent("TOOL_RESULT_START", tool_call_id=identifier, tool_call_name="product_search_tool"))
     for identifier in ["call-b", "call-a"]:
-        adapter.on_agent_event(ToolEvent("TOOL_RESULT_TEXT_DELTA", tool_call_id=identifier, delta=identifier))
-        adapter.on_agent_event(ToolEvent("TOOL_RESULT_END", tool_call_id=identifier, state=ToolResultState.SUCCESS))
+        adapter.on_agent_event(ToolEvent("TOOL_RESULT_END", tool_call_id=identifier, state=ToolResultState.SUCCESS, data=identifier))
     results = [event for event in events if event.type == "TOOL_CALL_RESULT"]
-    assert [(event.tool_call_id, event.content) for event in results] == [
+    assert [(event.tool_call_id, json.loads(event.content)["data"]) for event in results] == [
         ("run-test:tool:call-b", "call-b"), ("run-test:tool:call-a", "call-a"),
     ]
 

@@ -40,7 +40,8 @@ def _pick_query(i: int) -> str:
 async def _one_intent(client: httpx.AsyncClient, i: int) -> tuple[bool, float]:
     started = time.monotonic()
     try:
-        await submit_stream(client,'',f'load-{uuid.uuid4().hex}',os.environ['GLOBEX_BUYER_ID'],_pick_query(i),timeout=120)
+        stream,_ = await submit_stream(client,'',f'load-{uuid.uuid4().hex}',os.environ['GLOBEX_BUYER_ID'],_pick_query(i),timeout=120)
+        stream.require_success()
         ok = True
     except (httpx.HTTPError, asyncio.TimeoutError, ValueError):
         ok = False

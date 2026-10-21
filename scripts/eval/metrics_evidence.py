@@ -2,6 +2,7 @@
 """只从服务端已观察的业务回合 usage 汇总；缺失字段不能推成零成本。"""
 from __future__ import annotations
 import math
+from scripts.eval.trace import usage_summaries
 
 
 def _numeric(value):
@@ -9,7 +10,7 @@ def _numeric(value):
 
 
 def collect_case_metrics(events: list[dict], *, expected_turns: int, elapsed_ms: float) -> dict:
-    summaries = [event.get('payload', {}) for event in events if event.get('type') == 'usage.summary']
+    summaries = usage_summaries(events)
     complete = len(summaries) == expected_turns and all(row.get('usage_complete') is True and
         all(type(row.get(key)) is int and row[key] >= 0 for key in ('input_tokens', 'output_tokens')) for row in summaries)
     cost_complete = len(summaries) == expected_turns and all(_numeric(row.get('cost_usd')) for row in summaries)

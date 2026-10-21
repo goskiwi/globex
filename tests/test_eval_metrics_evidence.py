@@ -11,7 +11,7 @@ def test_no_service_usage_does_not_become_zero_cost_or_publishable_metrics():
 
 
 def test_every_dialogue_turn_requires_real_complete_usage():
-    event = {'type': 'usage.summary', 'payload': {'usage_complete': True, 'input_tokens': 10, 'output_tokens': 4, 'cost_usd': None}}
+    event = {'type': 'CUSTOM', 'name':'usage.summary', 'value': {'usage_complete': True, 'input_tokens': 10, 'output_tokens': 4, 'cost_usd': None}}
     assert collect_case_metrics([event], expected_turns=2, elapsed_ms=100)['input_tokens'] is None
     metrics = collect_case_metrics([event, event], expected_turns=2, elapsed_ms=100)
     assert metrics['input_tokens'] == 20 and metrics['cost_usd'] is None

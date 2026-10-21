@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import pytest
 import yaml
+from tests.native_trace_helpers import tool_frames, final_frames, presentation_frame
+from scripts.eval.trace import tool_observations
 from tests.trade_test_helpers import confirmation_env
 from scripts.eval.evidence import evaluate_trace_assertions
 from scripts.eval_regression import build_judge_rubric
@@ -14,8 +16,8 @@ def evaluate(kind, events, **fields):
 
 
 def presentation(total=41800):
-    return {"type":"presentation.result","payload":{"kind":"recommendation","payload":{"hits":[{"default_sku_id":"P1001-S1","quantity":2,
-        "currency":"CNY","landed_price":{"total_amount_minor":total}}]}}}
+    return presentation_frame('recommendation', {'hits':[{'default_sku_id':'P1001-S1','quantity':2,
+        'currency':'CNY','landed_price':{'total_amount_minor':total}}]})
 
 
 def test_eight_cases_use_existing_scoring_without_judge():
@@ -34,7 +36,7 @@ def test_wrong_amount_and_absent_presentation_fail():
 
 
 def test_terminal_needs_model_evidence_and_rejects_extra_summary():
-    request={"type":"eval.model_request","payload":{}}
+    request={'type':'STEP_STARTED','stepName':'model:sample'}
     assert evaluate("presentation_terminal",[request,presentation()],presentation_kind="recommendation")
     assert not evaluate("presentation_terminal",[presentation()],presentation_kind="recommendation")
     assert not evaluate("presentation_terminal",[request,presentation(),request],presentation_kind="recommendation")
@@ -49,14 +51,14 @@ def test_turn_filter_cannot_borrow_prior_success():
 
 
 def test_recovery_requires_failure_then_success():
-    def tool(status): return {"type":"eval.tool_result","payload":{"tool":"search","state":status}}
+    def tool(status): return tool_frames('search',status=status)
     rule={"failure_tools":["search"],"presentation_kind":"recommendation"}
-    assert evaluate("business_recovered",[tool("error"),presentation()],**rule)
-    assert not evaluate("business_recovered",[presentation(),tool("error")],**rule)
+    assert evaluate("business_recovered",[*tool("error"),presentation()],**rule)
+    assert not evaluate("business_recovered",[presentation(),*tool("error")],**rule)
 
 
 def test_required_tool_counts_observed_native_execution():
-    events=[{"type":"eval.tool_result","payload":{"tool":"conversation_fact_lookup","state":"success"}}]
+    events=tool_frames('conversation_fact_lookup')
     assert evaluate("required_tools",events,tools=["conversation_fact_lookup"])
     assert not evaluate("forbidden_tools",events,tools=["conversation_fact_lookup"])
 
@@ -70,9 +72,9 @@ def test_pending_case_needs_real_confirmation_not_just_no_order():
 
 
 def test_completed_delegates_do_not_make_an_empty_main_reply_pass():
-    events=[{"type":"final.result","payload":{"text":"", "status":"completed", "stop_reason":None}}, {"type":"eval.turn.complete","payload":{"turn_index":1}}]
+    events=[*final_frames(),{'type':'eval.turn.complete','payload':{'turn_index':1}}]
     assert not evaluate("answer_present",events)
-    events[0]["payload"]["text"]="结果已交付"
+    events[0]['messages'][0]['content']='结果已交付'
     assert evaluate("answer_present",events)
 
 
@@ -84,9 +86,9 @@ def research_events(candidates):
     events=[]
     for index,candidate in enumerate(candidates):
         task_id='task-'+str(index)
-        events.append({'type':'tool.result','payload':{'tool':'task_dispatch','status':'completed','candidates':[candidate],'evidence_refs':['ctx_actual'],'scope':{'task_id':task_id}}})
+        events.extend(tool_frames('task_dispatch',{'status':'completed','candidates':[candidate],'evidence_refs':['ctx_actual'],'scope':{'task_id':task_id}}))
     reports=[{'task_id':'task-'+str(i),'items':[c]} for i,c in enumerate(candidates)]
-    events.append({'type':'presentation.result','payload':{'kind':'research','payload':{'task_ids':[r['task_id'] for r in reports],'reports':reports}}})
+    events.append(presentation_frame('research',{'task_ids':[r['task_id'] for r in reports],'reports':reports}))
     return events
 
 
@@ -101,13 +103,15 @@ def test_two_deliveries_of_same_category_do_not_cover_two_requested_categories()
 def test_original_research_requires_actual_report_with_verified_skus(failure):
     from copy import deepcopy
     events=research_events([research_candidate('bag','旅行装备'),research_candidate('ear','数码配件')])
-    if failure=='missing_sku':events[0]['payload']['candidates'][0].pop('sku_id')
-    elif failure=='mismatched_sku':events[0]['payload']['candidates'][0]['facts']['sku']['sku_id']='another-sku'
-    elif failure=='missing_provenance':events[0]['payload']['evidence_refs']=[]
+    receipt=json.loads(events[3]['content'])
+    if failure=='missing_sku':receipt['data']['candidates'][0].pop('sku_id')
+    elif failure=='mismatched_sku':receipt['data']['candidates'][0]['facts']['sku']['sku_id']='another-sku'
+    elif failure=='missing_provenance':receipt['data']['evidence_refs']=[]
     elif failure=='no_report':events.pop()
     else:
         events=deepcopy(events)
-        events[-1]['payload']['payload']['reports'][0]['items']=[research_candidate('invented','旅行装备')]
+        events[-1]['snapshot']['presentations'][0]['payload']['reports'][0]['items']=[research_candidate('invented','旅行装备')]
+    events[3]['content']=json.dumps(receipt)
     assert not evaluate('delegation_delivered',events,minimum=2,categories=['旅行装备','数码配件'])
 
 
@@ -133,7 +137,7 @@ async def test_isolated_production_api_fixture(tmp_path):
         from app.application.runtime.execution import graph_step_limit
         for session in container.orchestrator._sessions._agents.values():
             assert session.config['recursion_limit'] == graph_step_limit(session.graph, settings.agent_max_model_rounds)
-        assert any(e["type"] == "tool.result" for e in result["trace_events"])
+        assert any(e['type']=='TOOL_CALL_RESULT' for e in result['trace_events'])
         assert container.settings.data_dir == tmp_path/"runtime"
 
 

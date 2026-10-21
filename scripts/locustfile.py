@@ -16,5 +16,5 @@ class CommerceRunUser(HttpUser):
             timeout=120,name='POST /commerce/ag-ui/run',catch_response=True) as response:
             if response.status_code!=200:
                 response.failure(f'运行请求失败：{response.status_code}');return
-            try:read_stream(response.text)
+            try:read_stream(response.text).require_success()
             except ValueError as error:response.failure(str(error))

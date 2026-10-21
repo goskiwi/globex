@@ -7,27 +7,15 @@ from typing import Any
 
 
 @dataclass(frozen=True)
-class ReplyStart:
-    type: str = "REPLY_START"
+class ModelStarted:
+    model_id: str
+    type: str = "MODEL_STARTED"
 
 
 @dataclass(frozen=True)
-class TextStart:
-    block_id: str
-    type: str = "TEXT_BLOCK_START"
-
-
-@dataclass(frozen=True)
-class TextDelta:
-    block_id: str
-    delta: str
-    type: str = "TEXT_BLOCK_DELTA"
-
-
-@dataclass(frozen=True)
-class TextEnd:
-    block_id: str
-    type: str = "TEXT_BLOCK_END"
+class ModelFinished:
+    model_id: str
+    type: str = "MODEL_FINISHED"
 
 
 @dataclass(frozen=True)

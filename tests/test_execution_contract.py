@@ -1,3 +1,4 @@
+from tests.native_trace_helpers import tool_frames, final_frames
 import json
 import httpx
 import pytest
@@ -92,7 +93,7 @@ async def test_main_final_round_disables_tools(tmp_path, token_budget):
 
 def test_stop_receipt_is_not_successful_delivery():
     from scripts.eval.interview_assertions import check
-    events=[{'type':'final.result','payload':{'text':'已停止','status':'partial','stop_reason':'step_limit'}},
+    events=[*final_frames(text='已停止', status='partial', stop_reason='step_limit'),
             {'type':'eval.turn.complete','payload':{}}]
     assert not check({'kind':'answer_present'},events)[0]
     assert not check({'kind':'no_execution_error'},events)[0]

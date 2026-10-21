@@ -17,9 +17,8 @@ from ag_ui.core import (
     RunFinishedEvent,
     RunStartedEvent,
     StateSnapshotEvent,
-    TextMessageContentEvent,
-    TextMessageEndEvent,
-    TextMessageStartEvent,
+    StepStartedEvent,
+    StepFinishedEvent,
     ToolCallArgsEvent,
     ToolCallEndEvent,
     ToolCallResultEvent,
@@ -34,8 +33,8 @@ class AGUIRunAdapter:
         self.request = request
         from app.infrastructure.security.public_projection import PublicProjection
         self.projection = projection or PublicProjection()
-        self.emit = lambda event: emit(type(event).model_validate(
-            self.projection.event(event.model_dump(mode='json',by_alias=True))))
+        self._send = emit
+        self._last_snapshot = None
         self.state: dict[str, Any] = {
             "presentations": [],
             "shoppingForms": [],
@@ -51,17 +50,23 @@ class AGUIRunAdapter:
         if authoritative_state:
             self.state.update({k:copy.deepcopy(authoritative_state[k]) for k in ("skillUsages","shoppingFilters") if k in authoritative_state})
             self.state['presentations']=[copy.deepcopy(p) for p in authoritative_state.get('presentations',[]) if p['runId']==request.run_id]
-        self.error: str | None = None
-        self._text_open: set[str] = set()
         self._tool_open: set[str] = set()
+        self._model_steps: set[str] = set()
         self._tool_names: dict[str, str] = {}
-        self._tool_output: dict[str, list[str]] = {}
         self._skill_arguments: dict[str, dict] = {}
         self._tool_arguments: dict[str, dict] = {}
         self._completed = False
 
     def _id(self, kind: str, original: str) -> str:
         return f"{self.request.run_id}:{kind}:{original}"
+
+    def emit(self, event: BaseEvent) -> None:
+        value = self.projection.event(event.model_dump(mode='json', by_alias=True))
+        if value['type'] == 'STATE_SNAPSHOT':
+            if value['snapshot'] == self._last_snapshot:
+                return
+            self._last_snapshot = copy.deepcopy(value['snapshot'])
+        self._send(type(event).model_validate(value))
 
     def snapshot(self) -> None:
         # 队列消费者稍后才序列化，必须隔离后续原地状态修改。
@@ -83,23 +88,18 @@ class AGUIRunAdapter:
     def on_agent_event(self, event: Any) -> None:
         """保留框架原始的开始/增量/结束边界，不从工具名称推测调用关联。"""
         kind = getattr(event, "type", None)
-        if kind == "REPLY_START":
+        if kind == "MODEL_STARTED":
+            step = "model:" + event.model_id
+            self._model_steps.add(step)
+            self.emit(StepStartedEvent(step_name=step))
             self.state["status"] = "running"
             self.state["process"]["status"] = "running"
             self.snapshot()
-        elif kind == "TEXT_BLOCK_START":
-            message_id = self._id("text", event.block_id)
-            self._text_open.add(message_id)
-            self.emit(TextMessageStartEvent(message_id=message_id, role="assistant"))
-        elif kind == "TEXT_BLOCK_DELTA":
-            if event.delta:
-                self.emit(TextMessageContentEvent(
-                    message_id=self._id("text", event.block_id), delta=event.delta,
-                ))
-        elif kind == "TEXT_BLOCK_END":
-            message_id = self._id("text", event.block_id)
-            self._text_open.discard(message_id)
-            self.emit(TextMessageEndEvent(message_id=message_id))
+        elif kind == "MODEL_FINISHED":
+            step = "model:" + event.model_id
+            if step in self._model_steps:
+                self.emit(StepFinishedEvent(step_name=step))
+                self._model_steps.remove(step)
         elif kind == "TOOL_CALL_START":
             call_id = self._id("tool", event.tool_call_id)
             self._tool_names[event.tool_call_id] = event.tool_call_name
@@ -121,31 +121,23 @@ class AGUIRunAdapter:
         elif kind == "TOOL_RESULT_START":
             name = event.tool_call_name
             self._tool_names[event.tool_call_id] = name
-            self._tool_output[event.tool_call_id] = []
             if name == "load_agent_skill_tool":
                 self._skill_reading(event.tool_call_id)
             arguments=self._tool_arguments.get(event.tool_call_id,{})
             self._progress(self._id("tool", event.tool_call_id), label(name,arguments), "running",request_summary(name,arguments))
             self.snapshot()
-        elif kind == "TOOL_RESULT_TEXT_DELTA":
-            self._tool_output.setdefault(event.tool_call_id, []).append(event.delta)
-        elif kind == "TOOL_RESULT_DATA_DELTA":
-            # 媒体结果保留其真实元数据，不在通用日志里重复传播大块 base64。
-            self._tool_output.setdefault(event.tool_call_id, []).append(json.dumps({
-                "media_type": event.media_type, "url": event.url,
-            }, ensure_ascii=False))
         elif kind == "TOOL_RESULT_END":
             call_id = self._id("tool", event.tool_call_id)
             name = self._tool_names.get(event.tool_call_id, "工具")
             success = str(getattr(event.state, "value", event.state)).lower() == "success"
-            content = "".join(self._tool_output.pop(event.tool_call_id, []))
             if name == "load_agent_skill_tool":
                 self._skill_result(event.tool_call_id, event.data, success)
                 success = success and next(item for item in self.state['skillUsages'] if item['toolCallId']==call_id)['status']=='used'
             self.emit(ToolCallResultEvent(
                 message_id=self._id("result", event.tool_call_id),
                 tool_call_id=call_id,
-                content=content,
+                content=json.dumps({"status": "success" if success else "error",
+                                    "data": event.data, "failure": event.failure}, ensure_ascii=False),
                 role="tool",
             ))
             arguments = self._tool_arguments.pop(event.tool_call_id,{})
@@ -159,10 +151,6 @@ class AGUIRunAdapter:
                 summary=delivery_summary(name,accepted['payload'] if accepted else event.data,delivered=bool(accepted))
             self._progress(call_id,label(name,arguments,event.data),status,summary)
             self.snapshot()
-        elif kind == "REPLY_END":
-            reason = str(event.finished_reason).lower()
-            if reason in {"error", "interrupted", "exceed_max_iters"}:
-                self.error = "本轮执行未正常完成，请重试或缩小问题范围。"
         elif kind == "REQUIRE_USER_CONFIRM":
             self.state["status"]="awaiting_confirmation"
             self.state['process']['status']='waiting_confirmation'
@@ -171,9 +159,6 @@ class AGUIRunAdapter:
                 if not any(p["id"]==item["id"] for p in self.state["toolApprovals"]):self.state["toolApprovals"].append(item)
                 self._progress(self._id('approval',item['id']),item['label'],'waiting_confirmation','等待用户确认，尚未执行')
             self.snapshot()
-        elif kind == "REQUIRE_EXTERNAL_EXECUTION":
-            # 首版不接受 resume，遇到暂停必须如实结束，不能把未执行动作展示成成功。
-            self.error = "本次操作需要人工确认或外部执行，当前流式入口尚未接入此续接流程。"
 
     def _skill_reading(self, original_id: str) -> None:
         call_id = self._id("tool", original_id)
@@ -218,8 +203,6 @@ class AGUIRunAdapter:
             return
         value = event.to_dict()['payload']
         payload = value if isinstance(value, dict) else {}
-        if event.type != "tool.lifecycle":
-            self.emit(CustomEvent(name=event.type, value=payload))
         if event.type == "tool.lifecycle":
             from app.application.runtime.events import ToolEvent
             self.on_agent_event(ToolEvent(**payload))
@@ -263,16 +246,17 @@ class AGUIRunAdapter:
                 self.state["confirmations"] = [item for item in entries
                     if item["confirmation_id"] in active or item["confirmation_id"] in recent]
                 self.snapshot()
-        elif event.type in {"agent.dispatch", "cache.hit", "model.fallback", "context.compressed", "error"}:
-            if event.type == "context.compressed":
-                self.state["contextStatistics"] = payload
-                self.snapshot()
+        elif event.type == "usage.summary":
+            self.emit(CustomEvent(name="usage.summary", value=payload))
+        elif event.type == "context.compressed":
+            self.state["contextStatistics"] = payload
+            self.snapshot()
 
     def _close_streams(self) -> None:
-        # 中断/错误时关闭已打开的消息和参数流，客户端不会残留永久 loading。
-        for message_id in sorted(self._text_open):
-            self.emit(TextMessageEndEvent(message_id=message_id))
-        self._text_open.clear()
+        # 结束边界不代表模型/工具成功；失败由RUN_ERROR或回执状态表达。
+        for step in sorted(self._model_steps):
+            self.emit(StepFinishedEvent(step_name=step))
+        self._model_steps.clear()
         for call_id in sorted(self._tool_open):
             self.emit(ToolCallEndEvent(tool_call_id=call_id))
         self._tool_open.clear()

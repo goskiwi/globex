@@ -235,7 +235,8 @@ class RunService:
 
         writer = asyncio.create_task(write_events())
         lease_task = asyncio.create_task(heartbeat())
-        adapter.snapshot() if started else adapter.start()
+        if not started:
+            adapter.start()
         try:
             if self.confirmations is not None:
                 saved = await self.confirmations.restore(intent.buyer_id, intent.shopping_session_id)
@@ -248,8 +249,8 @@ class RunService:
                 result=await self.orchestrator.handle_intent(intent,**options)
             if not entry.is_valid():
                 raise asyncio.CancelledError()
-            if result.error or adapter.error:
-                adapter.fail(result.error if getattr(result,"error_code",None) in {"SESSION_VERSION_CHANGED","CONTEXT_CAPACITY_EXCEEDED","PERSISTENCE_FAILED"} else adapter.error or "本轮服务暂时未能完成请求，请重试。", code=getattr(result,"error_code",None))
+            if result.error:
+                adapter.fail(result.error if getattr(result,"error_code",None) in {"SESSION_VERSION_CHANGED","CONTEXT_CAPACITY_EXCEEDED","PERSISTENCE_FAILED"} else "本轮服务暂时未能完成请求，请重试。", code=getattr(result,"error_code",None))
             else:
                 adapter.finish(result.final_text, result.status, result.stop_reason)
         except asyncio.CancelledError:

@@ -94,7 +94,6 @@ def begin_read(adapter, call="skill-call"):
 
 def end_read(adapter, data, success=True, call="skill-call"):
     text = data if isinstance(data,str) else json.dumps(data,ensure_ascii=False)
-    adapter.on_agent_event(ToolEvent(type="TOOL_RESULT_TEXT_DELTA", tool_call_id=call, delta=text))
     adapter.on_agent_event(ToolEvent(type="TOOL_RESULT_END", tool_call_id=call,
         state=ToolResultState.SUCCESS if success else ToolResultState.ERROR,
         failure=None if success else {"code":"business_rejected"},data=data))

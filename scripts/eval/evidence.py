@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 from typing import Any
+from scripts.eval.trace import tool_observations, tool_names
 
 
 class AssertionDefinitionError(ValueError):
     """用例里的确定性断言缺字段或使用了未知类型。"""
 
 
-def _tool_names(events: list[dict[str, Any]], event_type: str = "tool.invoke") -> set[str]:
-    return {
-        str(event.get("payload", {}).get("tool"))
-        for event in events
-        if (event.get("type") == event_type or event_type == "tool.invoke" and event.get("type") == "eval.tool_result")
-        and event.get("payload", {}).get("tool")
-    }
+def _tool_names(events):
+    return tool_names(events)
 
 
 def _events_before_turn(events: list[dict[str, Any]], turn_index: int) -> list[dict[str, Any]] | None:
@@ -25,37 +21,22 @@ def _events_before_turn(events: list[dict[str, Any]], turn_index: int) -> list[d
     return None
 
 
-def _product_hits(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    hits: list[dict[str, Any]] = []
-    for event in events:
-        if event.get("type") != "tool.result":
-            continue
-        payload = event.get("payload") or {}
-        if payload.get("tool") == "product_search_tool":
-            hits.extend(payload.get("hits") or [])
-    return hits
+def _product_hits(events):
+    return [hit for result in tool_observations(events) if result['name'] == 'product_search_tool'
+            and result['status'] == 'success' for hit in result['data'].get('hits', [])]
 
 
-def _has_successful_product_result(events: list[dict[str, Any]]) -> bool:
-    return any(
-        event.get("type") == "tool.result"
-        and (event.get("payload") or {}).get("tool") == "product_search_tool"
-        and isinstance((event.get("payload") or {}).get("hits"), list)
-        for event in events
-    )
+def _has_successful_product_result(events):
+    return any(r['name'] == 'product_search_tool' and r['status'] == 'success'
+               and isinstance(r['data'], dict) and isinstance(r['data'].get('hits'), list)
+               for r in tool_observations(events))
 
 
-def _order_statuses(events: list[dict[str, Any]]) -> list[str]:
-    statuses = [
-        str((event.get("payload") or {}).get("order", {}).get("status"))
-        for event in events
-        if event.get("type") == "tool.result"
-        and (event.get("payload") or {}).get("tool") in {"create_order_tool", "cancel_order_tool", "query_order_tool"}
-        and (event.get("payload") or {}).get("order", {}).get("status")
-    ]
-    statuses.extend(str((event.get("payload") or {}).get("order", {}).get("status"))
-                    for event in events if event.get("type") == "eval.order.snapshot"
-                    and (event.get("payload") or {}).get("order", {}).get("status"))
+def _order_statuses(events):
+    statuses = [r['data']['order']['status'] for r in tool_observations(events)
+                if isinstance(r['data'], dict) and isinstance(r['data'].get('order'), dict) and r['data']['order'].get('status')]
+    statuses.extend(e['payload']['order']['status'] for e in events if e.get('type') == 'eval.order.snapshot'
+                    and e.get('payload', {}).get('order', {}).get('status'))
     return statuses
 
 
@@ -124,6 +105,7 @@ def evaluate_trace_assertions(assertions: list[dict[str, Any]], events: list[dic
                     break
                 before.append(event)
             observed = [order for event in before for order in _written_orders(event)]
+            observed.extend(order for r in tool_observations(before) if isinstance(r["data"], dict) for order in _written_orders({"payload": r["data"]}))
             snapshots = [event for event in before if event.get("type") == "eval.confirmations.snapshot"]
             passed = bool(snapshots) and not observed
             results.append(_passed(criterion, passed, f"点击前持久确认快照 {len(snapshots)} 次；已执行订单 {len(observed)} 笔"))
@@ -199,12 +181,8 @@ def evaluate_trace_assertions(assertions: list[dict[str, Any]], events: list[dic
                 if price_max is not None and float(hit.get("price_major", float("inf"))) > float(price_max):
                     violations.append(f"{product_id}: 超预算")
                 if require_in_stock:
-                    # ProductCard 的库存事实在 SKU 层；保留顶层 stock 兼容历史 trace。
-                    skus = hit.get("skus") or []
-                    has_stock = (
-                        any(int(sku.get("stock", 0)) > 0 for sku in skus if isinstance(sku, dict))
-                        if skus else int(hit.get("stock", 0)) > 0
-                    )
+                    skus = hit.get('skus') or []
+                    has_stock = any(int(sku.get('stock', 0)) > 0 for sku in skus if isinstance(sku, dict))
                     if not has_stock:
                         violations.append(f"{product_id}: 无库存")
                 matched_materials = forbidden_materials & set(hit.get("material_tags") or [])
@@ -218,13 +196,8 @@ def evaluate_trace_assertions(assertions: list[dict[str, Any]], events: list[dic
             contains = assertion.get("contains")
             if not isinstance(tools, list) or not tools or not all(isinstance(t, str) and t for t in tools) or not isinstance(contains, str) or not contains:
                 raise AssertionDefinitionError("tool_error 必须提供非空 tools 与 contains")
-            errors = [
-                str((event.get("payload") or {}).get("error"))
-                for event in events
-                if event.get("type") == "tool.result"
-                and (event.get("payload") or {}).get("tool") in tools
-                and (event.get("payload") or {}).get("error")
-            ]
+            errors = [str(r['data']) + ' ' + str((r['failure'] or {}).get('reason', ''))
+                      for r in tool_observations(events) if r['name'] in tools and r['status'] == 'error']
             passed = any(contains in error for error in errors)
             results.append(_passed(
                 criterion,

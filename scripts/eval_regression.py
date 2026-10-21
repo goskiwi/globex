@@ -114,11 +114,9 @@ def build_ground_truth() -> str:
 
 def build_tool_fact_evidence(events: list[dict]) -> str:
     """只提取真实工具结果，供 Judge 对账运行时价格、库存与订单状态。"""
-    results = [
-        event.get("payload") or {}
-        for event in events
-        if event.get("type") in {"tool.result", "eval.http_action.result", "eval.order.snapshot"}
-    ]
+    from scripts.eval.trace import tool_observations
+    results = [{'name':r['name'],'status':r['status'],'data':r['data']} for r in tool_observations(events)]
+    results.extend(e.get('payload') for e in events if e.get('type') in {'eval.http_action.result', 'eval.order.snapshot'})
     return json.dumps(results, ensure_ascii=False, sort_keys=True)
 
 
@@ -331,10 +329,11 @@ async def _run_case_with_events(client, judge_client, case, ground_truth, sessio
                 raise ValueError("后续查询需要已真实确认的订单号，不能由模型猜测")
             query = query.replace("{{confirmed_order_id}}", last_order_id)
         from scripts.run_stream import submit_stream
-        result,events,response = await submit_stream(client,BASE_URL,session_id,buyer_id,query)
-        collector.events.extend(events)
-        final_text=result['final_text']
-        transcript_lines.append(f"[买家] {query}\n[Agent] {final_text}")
+        stream,response = await submit_stream(client,BASE_URL,session_id,buyer_id,query)
+        collector.events.extend(stream.frames)
+        final_text=stream.final_text
+        transcript_lines.append(f'[买家] {query}\n[Agent] {final_text}')
+        stream.require_success()
         # 将真实事件按对话轮次切开，才能程序证明“确认前”没有调用下单工具。
         collector.events.append({"type": "eval.turn.complete", "payload": {"turn_index": turn_index,
             "request_id": response.headers.get("x-request-id"), "trace_id": response.headers.get("x-trace-id")}})
@@ -420,11 +419,8 @@ def render_report(results: list[dict]) -> str:
         lines.append(r["transcript"])
         lines.append("\n</details>\n")
         if r.get("trace_events"):
-            invoked = [
-                event.get("payload", {}).get("tool")
-                for event in r["trace_events"]
-                if event.get("type") == "tool.invoke"
-            ]
+            from scripts.eval.trace import tool_names
+            invoked = sorted(tool_names(r['trace_events']))
             lines.append(f"工具证据：{', '.join(tool for tool in invoked if tool) or '无'}\n")
     return "\n".join(lines)
 
@@ -468,15 +464,9 @@ def compare_runtime_identity(local_app_hash: str, health: dict) -> dict:
 
 def actual_trace_strategies(results: list[dict]) -> dict[str, list[str]]:
     """记录实际检索算法；精确ID读取不排序，不属于检索算法切换，原事件仍完整保留。"""
-    return {
-        result["id"]: sorted({
-            str((event.get("payload") or {})["recall_strategy"])
-            for event in result.get("trace_events", [])
-            if event.get("type") == "tool.result" and (event.get("payload") or {}).get("recall_strategy")
-            and event['payload']['recall_strategy'] != 'exact_id_lookup'
-        })
-        for result in results
-    }
+    from scripts.eval.trace import tool_observations
+    return {r['id']: sorted({o['data']['recall_strategy'] for o in tool_observations(r.get('trace_events', []))
+            if isinstance(o['data'], dict) and o['data'].get('recall_strategy') not in {None, 'exact_id_lookup'}}) for r in results}
 
 
 async def main(argv: list[str] | None = None) -> None:

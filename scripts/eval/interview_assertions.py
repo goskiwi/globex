@@ -1,17 +1,18 @@
 """端到端用例的业务断言，复用现有事件，不解析模型 Markdown 金额。"""
 
 
+from scripts.eval.trace import tool_observations, presentations, final_results, model_starts
+
 KINDS = {"answer_present", "confirmation_prepared", "presentation_matches", "presentation_terminal", "business_recovered", "delegation_delivered",
          "skill_loaded", "no_skill_load", "context_compacted", "no_execution_error", "vector_rerank_executed"}
 
 
 def tool_results(events, name):
-    return [e["payload"] for e in events if e.get("type") == "eval.tool_result" and e.get("payload", {}).get("tool") == name]
+    return [r for r in tool_observations(events) if r['name'] == name]
 
 
-def deliveries(events,assertion):
-    return [(i,e['payload']['payload']) for i,e in enumerate(events)
-            if e.get('type')=='presentation.result' and e['payload'].get('kind')==assertion['presentation_kind']]
+def deliveries(events, assertion):
+    return presentations(events, assertion['presentation_kind'])
 
 
 def candidate_identity(candidate):
@@ -33,8 +34,9 @@ def check(assertion, events):
         return data['external_pipeline_verified'], f"语义查询{data['semantic_searches']}次；向量+rerank成功{data['vector_rerank_searches']}次；降级{data['degraded_searches']}次（精确ID查询不要求rerank）"
     if kind == "answer_present":
         turns=sum(e.get("type") == "eval.turn.complete" for e in events)
-        answers=[e.get("payload",{}).get("text") for e in events if e.get("type") == "final.result"]
-        return turns > 0 and len(answers) == turns and all(isinstance(a,str) and a.strip() for a in answers) and all(e["payload"].get("status") == "completed" and e["payload"].get("stop_reason") is None for e in events if e.get("type") == "final.result"), f"完成轮次 {turns}，交付记录 {len(answers)}，非空回复 {sum(bool(isinstance(a,str) and a.strip()) for a in answers)}"
+        rows = final_results(events)
+        valid = [r for r in rows if r['text'].strip() and r['status'] == 'completed' and r['stop_reason'] is None]
+        return turns > 0 and len(rows) == len(valid) == turns, f"完成轮次 {turns}，有效交付 {len(valid)}"
     if kind == "confirmation_prepared":
         from scripts.eval.http_actions import matches_expected
         rows = [r for e in events if e.get("type") == "eval.confirmations.snapshot"
@@ -43,14 +45,14 @@ def check(assertion, events):
                  and r.get("result") is None and matches_expected(r.get("payload"), assertion["expected_payload"])]
         return bool(valid), f"核验到匹配的待确认单 {len(valid)} 张"
     if kind == "no_execution_error":
-        errors = [e for e in events if e.get("type") == "error" or (e.get("type") == "final.result" and (e["payload"].get("status") == "failed" or e["payload"].get("stop_reason")))]
-        return not errors, f"运行错误事件 {len(errors)} 个"
+        errors = [r for r in final_results(events) if r['status'] == 'failed' or r['stop_reason']]
+        return not errors, f"运行错误 {len(errors)} 个"
     if kind in {"skill_loaded", "no_skill_load"}:
         loads = tool_results(events, "load_agent_skill_tool")
-        return (any(r["state"] == "success" for r in loads) if kind == "skill_loaded" else not loads), f"Skill 调用 {len(loads)} 次"
+        return (any(r["status"] == "success" for r in loads) if kind == "skill_loaded" else not loads), f"Skill 调用 {len(loads)} 次"
     if kind == "business_recovered":
-        failures = [i for i,e in enumerate(events) if e.get("type") == "eval.tool_result"
-                    and e["payload"].get("tool") in assertion["failure_tools"] and e["payload"].get("state") == "error"]
+        failures = [r['index'] for r in tool_observations(events)
+                    if r['name'] in assertion['failure_tools'] and r['status'] == 'error']
         completed = [i for i,payload in deliveries(events,assertion) if payload.get("hits")]
         return any(a < b for a in failures for b in completed), f"实际失败位置 {failures}；后续业务交付位置 {completed}"
     if kind == "context_compacted":
@@ -58,9 +60,7 @@ def check(assertion, events):
         return any(r.get("status") == "completed" for r in rows), f"整理状态 {[r.get('status') for r in rows]}"
     if kind == "delegation_delivered":
         # 核对完整业务结果，不把供模型阅读的截断投影当成唯一证据。
-        rows = [event['payload'] for event in events if event.get('type')=='tool.result'
-                and event.get('payload',{}).get('tool')=='task_dispatch'
-                and not event['payload'].get('error')]
+        rows = [r['data'] for r in tool_results(events, 'task_dispatch') if r['status'] == 'success']
         sources = {r['scope']['task_id']:r for r in rows
                    if r.get('status') in ('completed','partial') and r.get('candidates') and r.get('evidence_refs')
                    and (r.get('scope') or {}).get('task_id')
@@ -87,8 +87,8 @@ def check(assertion, events):
         for e in events[index+1:]:
             if e.get("type") == "eval.turn.complete": break
             after.append(e)
-        observed_requests = any(e.get("type") == "eval.model_request" for e in events[:index])
-        calls = sum(e.get("type") == "eval.model_request" for e in after)
+        observed_requests = bool(model_starts(events[:index]))
+        calls = len(model_starts(after))
         return observed_requests and calls == 0, f"观察到模型请求={observed_requests}；交付后额外模型调用 {calls} 次"
     if kind == "presentation_matches":
         from scripts.eval.http_actions import matches_expected
