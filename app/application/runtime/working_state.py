@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from app.application.agents.shopping_state import ShoppingWork, Filters, Choice, compile_search
 from app.application.runtime.request_scope import ShoppingContext
+from app.application.runtime.results import rejected_call
 from app.application.agents.shopping_changes import apply_shopping_change
 
 
@@ -115,9 +116,8 @@ class WorkingStateMiddleware(AgentMiddleware):
         last_ai = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
         calls = last_ai.tool_calls if last_ai else []
         if request.tool_call['id'] in conflicting_shopping_calls(calls):
-            return ToolMessage(content="本批含相互依赖的购物状态操作，请分别提交；查询条件和确认所需选项可直接随业务操作提交。",
-                               name=request.tool_call['name'], tool_call_id=request.tool_call["id"], status="error",
-                               artifact={'executed':False,'error_code':'invalid_input'})
+            return rejected_call(request.tool_call,
+                "本批含相互依赖的购物状态操作，请分别提交；查询条件和确认所需选项可直接随业务操作提交。")
         context_token = None
         try:
             buyers = [m for m in messages if isinstance(m,HumanMessage) and m.name==context.buyer_id]

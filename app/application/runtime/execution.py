@@ -8,6 +8,7 @@ from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware, ExtendedModelResponse, hook_config
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from app.application.runtime.errors import ExecutionStopped
+from app.application.runtime.results import rejected_call
 from app.infrastructure.context_usage import record_evaluation_evidence
 from app.infrastructure.budget import get_budget, estimate_input_tokens, resolve_model, MINIMAL_MODE_HINT
 from app.application.runtime.errors import raise_if_tool_stopped
@@ -45,9 +46,8 @@ class ExecutionMiddleware(AgentMiddleware):
     async def awrap_tool_call(self, request, handler):
         # 工具声明限制与执行检查共用角色配置；模型越过收尾工具集也不能新增研究或写入。
         if request.state.get("execution_stop") and request.tool_call["name"] not in self.delivery_tools:
-            return ToolMessage(name=request.tool_call["name"], tool_call_id=request.tool_call["id"],
-                status="error", content="研究阶段已结束，本调用未执行；请仅交付已有成果和缺口。",
-                artifact={"executed": False, "stop_reason": request.state["execution_stop"]})
+            return rejected_call(request.tool_call, "研究阶段已结束，本调用未执行；请仅交付已有成果和缺口。",
+                                 stop_reason=request.state['execution_stop'])
         return await handler(request)
 
     async def awrap_model_call(self, request, handler):
@@ -140,9 +140,7 @@ class ExecutionMiddleware(AgentMiddleware):
                 detail = ("工具参数不是有效 JSON 对象，请重新生成完整参数。"
                           if call["id"] in invalid_ids else
                           "同批存在非法参数，本调用尚未执行；请按需重新提交。")
-                receipts.append(ToolMessage(tool_call_id=call["id"], name=call["name"],
-                    status="error", content=detail,
-                    artifact={"error_code": "invalid_arguments", "executed": False}))
+                receipts.append(rejected_call(call, detail, code='invalid_arguments'))
                 record_evaluation_evidence("tool_result", {"tool":call["name"],
                     "state":"error", "result":[detail], "executed":False})
             update.update(messages=receipts, jump_to="model")

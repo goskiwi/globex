@@ -80,10 +80,8 @@ def receipt_failure(message):
     artifact = message.artifact or {}
     if isinstance(artifact.get('failure'), dict):
         return artifact['failure']
-    if artifact.get('stop_reason'):
-        return {'code': 'stopped', 'reason': artifact['stop_reason']}
     code = artifact.get('error_code')
-    result = {'code': code or 'unknown'}
+    result = {'code': 'stopped', 'reason': artifact['stop_reason']} if artifact.get('stop_reason') else {'code': code or 'unknown'}
     if type(artifact.get('executed')) is bool:
         result['executed'] = artifact['executed']
     if artifact.get('error_reason'):
@@ -124,3 +122,12 @@ def replace_receipts(output, receipts):
                   for m in output.update.get('messages',[])]
         return replace(output,update={**output.update,'messages':messages})
     return output
+
+
+def rejected_call(call, reason, *, code='invalid_input', stop_reason=None):
+    """所有执行前拒绝共用原生结果与显式原因，不从反馈文案反推错误类型。"""
+    from langchain_core.messages import ToolMessage
+    artifact = {'error_code': code, 'error_reason': reason, 'executed': False}
+    if stop_reason is not None:
+        artifact['stop_reason'] = stop_reason
+    return ToolMessage(tool_call_id=call['id'], name=call['name'], status='error', content=reason, artifact=artifact)

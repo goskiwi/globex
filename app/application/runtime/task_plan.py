@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from app.application.agents.shopping_state import ShoppingWork, compile_search
 from app.domain.buyer.preference import BuyerPreference
 from app.application.runtime.request_scope import ShoppingContext
+from app.application.runtime.results import rejected_call
 
 from app.application.runtime.research_plan import (
     ResearchPlan, project_plan, dependent_steps, record_research, apply_delivery,
@@ -80,13 +81,9 @@ class TaskPlanMiddleware(AgentMiddleware):
             if downstream:
                 conflicts.update({key, *downstream})
         if step_id is not None and step_id in conflicts:
-            return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
-                               content='当前研究与同批步骤存在前后依赖；这些相关调用未执行，请顺序提交。',
-                               artifact={'executed':False,'error_code':'invalid_input'})
+            return rejected_call(request.tool_call, '当前研究与同批步骤存在前后依赖；这些相关调用未执行，请顺序提交。')
         if step_id is not None and step_ids.count(step_id)>1:
-            return ToolMessage(name=request.tool_call['name'], tool_call_id=request.tool_call['id'], status='error',
-                               content='同一批次不能重复执行一个计划步骤；这些重复调用未执行。',
-                               artifact={'executed':False,'error_code':'invalid_input'})
+            return rejected_call(request.tool_call, '同一批次不能重复执行一个计划步骤；这些重复调用未执行。')
         token = ShoppingContext.set(replace(context, task_plan=plan))
         try:
             return await handler(request)

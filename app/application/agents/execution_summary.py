@@ -180,8 +180,8 @@ def failure_summary(failure):
     if code == 'internal':
         return reason or '工具执行异常，执行结果尚未确认'
     if code in {'interrupted','stopped'}:
-        return '执行已停止，未取得完整结果'
-    return '未取得明确的失败回执，执行结果尚未确认'
+        return (reason or '执行已停止，未取得完整结果') + ('；本次未执行' if failure.get('executed') is False else '')
+    return (reason or '未取得明确的错误类别，执行结果尚未确认') + ('；本次未执行' if failure.get('executed') is False else '')
 
 
 def result_summary(name, arguments, data, success, *, failure=None):

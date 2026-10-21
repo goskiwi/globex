@@ -41,6 +41,8 @@ async def test_all_rejection_origins_share_native_receipts(tmp_path,monkeypatch,
         if kind in {'invalid_json','mixed_invalid'}:
             assert next(r for r in receipts if r['name']=='product_search_tool' and isinstance(r['arguments'],str))['arguments']==invalid['args']
         assert len(run['state']['process']['steps'])==len(receipts)
+        if kind!='unknown_tool':
+            assert all('本次未执行' in step['summary'] for step in run['state']['process']['steps'])
         assert not any(f.get('name')=='tool.lifecycle' for f in frames)
         replay,_,_=await c.runs.journal.events(kind,'buyer')
         assert replay==rows and model.cursor==2
@@ -60,7 +62,7 @@ async def test_nested_graph_rejection_is_recorded_before_subtask_failure(tmp_pat
         rows,_,_=await c.runs.journal.events('nested-failure','buyer')
         receipts=tool_observations([r['event'] for r in rows])
         child_receipt=next(r for r in receipts if r['name']=='product_search_tool')
-        assert child_receipt['failure']=={'code':'invalid_arguments','executed':False}
+        assert child_receipt['failure']['code']=='invalid_arguments' and child_receipt['failure']['executed'] is False
         assert child_receipt['index']<next(r['index'] for r in receipts if r['name']=='task_dispatch')
         assert len({r['call_id'] for r in receipts})==len(receipts)==2
         assert child.cursor==1 and parent.cursor==2
@@ -88,7 +90,8 @@ async def test_pending_memory_rejection_after_restart_has_one_unexecuted_receipt
         rejected=await c.runs.wait('reject-memory','buyer',10)
         rows,_,_=await c.runs.journal.events('reject-memory','buyer')
         receipts=tool_observations([r['event'] for r in rows])
-        assert len(receipts)==1 and receipts[0]['failure']=={'code':'user_rejected','executed':False}
+        assert len(receipts)==1 and receipts[0]['failure']['code']=='user_rejected'
+        assert receipts[0]['failure']['executed'] is False and '拒绝' in receipts[0]['failure']['reason']
         assert not store.items and not rejected['state']['toolApprovals']
         session=await c.runs.journal.session('facts-session','buyer')
         assert len(session['processes'])==2

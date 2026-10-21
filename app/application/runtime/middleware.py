@@ -22,6 +22,7 @@ from app.application.harness.assertions import check_schema
 from app.infrastructure.security.content_filter import sanitize_tool_output
 from app.infrastructure.context_usage import record_evaluation_evidence
 from app.application.runtime.errors import ExecutionStopped
+from app.application.runtime.results import rejected_call
 from app.infrastructure.operational_metrics import observe_tool_result
 
 
@@ -170,10 +171,8 @@ class MemoryApprovalMiddleware(AgentMiddleware):
             return None
         names = {call["name"] for call in message.tool_calls}
         if names & MEMORY_WRITE_TOOLS and names - MEMORY_WRITE_TOOLS:
-            return {"messages": [ToolMessage(
-                content="记忆变更必须与业务工具分批调用；本批均未执行。变更完成后重新决策。",
-                name=call["name"], tool_call_id=call["id"], status="error",
-                artifact={"executed": False, "error_code": "invalid_input"})
+            return {"messages": [rejected_call(call,
+                "记忆变更必须与业务工具分批调用；本批均未执行。变更完成后重新决策。")
                 for call in message.tool_calls]}
         rejected = []
         for call in message.tool_calls:
@@ -191,10 +190,8 @@ class MemoryApprovalMiddleware(AgentMiddleware):
                 if not any(fact.memory_id == args.get("memory_id")
                            and fact.version == args.get("expected_version")
                            and fact.statement == expected_text for fact in facts):
-                    rejected.append(ToolMessage(content="目标记忆或版本已变化，未执行；请按最新 ID、版本与原文重新申请：\n"
-                        + render_preference_lines(facts), tool_call_id=call["id"],
-                        name=call["name"], status="error",
-                        artifact={"executed": False, "error_code": "stale_memory"}))
+                    rejected.append(rejected_call(call, "目标记忆或版本已变化，未执行；请按最新 ID、版本与原文重新申请：\n"
+                        + render_preference_lines(facts), code='stale_memory'))
                     continue
             response = interrupt({"action_id": call["id"], "action_requests": [{
                 "name": call["name"], "args": call["args"],
@@ -207,11 +204,8 @@ class MemoryApprovalMiddleware(AgentMiddleware):
                     or decisions[0].get("type") not in {"approve", "reject"}):
                 raise ValueError("记忆审批只接受单项批准或拒绝")
             if decisions[0]["type"] == "reject":
-                rejected.append(ToolMessage(
-                    content="买家已拒绝本次操作，未执行；未经新的明确请求不得重试。",
-                    tool_call_id=call["id"], name=call["name"], status="error",
-                    artifact={"executed": False, "error_code": "user_rejected"},
-                ))
+                rejected.append(rejected_call(call,
+                    "买家已拒绝本次操作，未执行；未经新的明确请求不得重试。", code='user_rejected'))
         return {"messages": rejected} if rejected else None
 
 
