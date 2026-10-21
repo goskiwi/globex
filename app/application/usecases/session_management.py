@@ -1,8 +1,9 @@
 """对话管理：复用执行租约与归属，清理内容，不触碰独立业务资产。"""
 class SessionManagement:
-    def __init__(self, orchestrator, journal, session_store, conversations, evidence, forms, checkpointer):
+    def __init__(self, orchestrator, journal, session_store, evidence, forms, checkpointer, historical_cleanup):
         self.orchestrator,self.journal,self.session_store=orchestrator,journal,session_store
-        self.conversations,self.evidence,self.forms,self.checkpointer=conversations,evidence,forms,checkpointer
+        self.evidence,self.forms,self.checkpointer=evidence,forms,checkpointer
+        self.historical_cleanup=historical_cleanup
 
     async def rename(self,buyer_id,session_id,title):
         await self.session_store.assert_owner(session_id,buyer_id,create=False)
@@ -19,5 +20,5 @@ class SessionManagement:
                 await self.checkpointer.adelete_thread(session_id)
                 await self.evidence.delete_session(buyer_id,session_id)
                 await self.forms.delete_session(buyer_id,session_id)
-                await self.conversations.delete_conversation(session_id,buyer_id)
+                await self.historical_cleanup(session_id,buyer_id)
             return await self.journal.delete_session(session_id,buyer_id,cleanup)

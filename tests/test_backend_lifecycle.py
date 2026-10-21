@@ -15,19 +15,15 @@ from tests.trade_test_helpers import confirmation_env  # noqa: F401
 @pytest.mark.parametrize("evidence_failure", [False, True])
 async def test_final_event_keeps_version_and_is_audited_after_required_saves(tmp_path, evidence_failure):
     from dataclasses import replace
-    from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import async_sessionmaker
     from app.application.runtime.execution import ExecutionResult
     from app.application.runtime.request_scope import ShoppingContext
-    from app.application.usecases.intents import SubmitIntentInput
     from app.infrastructure.eventbus import observe_run_events
-    from app.infrastructure.persistence.sql.repositories import create_engine, bootstrap_schema, SqlConversationStore
-    from app.infrastructure.persistence.sql.tables import ConversationEventRow
-
-    engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'audit.db'}")
-    await bootstrap_schema(engine)
+    from app.application.runtime.runs import RunService
+    from app.infrastructure.ag_ui_journal import AGUIJournal
+    from ag_ui.core import RunAgentInput
     orchestrator, _, _ = make_orchestrator()
-    orchestrator._conversation_store = SqlConversationStore(engine)
+    journal=AGUIJournal(tmp_path/'journal.db')
+    runtime=RunService(journal,orchestrator)
     if evidence_failure:
         orchestrator._evidence_store = SimpleNamespace(search=AsyncMock(return_value=[]),
             save=AsyncMock(side_effect=OSError("synthetic evidence failure")))
@@ -38,20 +34,27 @@ async def test_final_event_keeps_version_and_is_audited_after_required_saves(tmp
     orchestrator._reply = reply
     events = []
     try:
+        body=RunAgentInput.model_validate({'threadId':'s','runId':'run','state':{},'tools':[],'context':[],
+            'messages':[{'id':'u','role':'user','content':'synthetic request'}],'forwardedProps':{'buyerId':'buyer'}})
         with observe_run_events(events.append):
-            result = await orchestrator.handle_intent(SubmitIntentInput("s", "buyer", "zh-CN", "CNY", "synthetic request"))
+            await runtime.start(body,'buyer')
+            run=await runtime.wait('run','buyer',10)
+        result=run['result']
         final = next(e for e in events if e.type == "final.result")
         assert final.correlation["prompt_version"] == "synthetic-version"
         assert final.correlation["capability_digest"] == "synthetic-capability"
-        assert result.status == ("failed" if evidence_failure else "completed")
-        async with async_sessionmaker(engine)() as db:
-            rows = list(await db.scalars(select(ConversationEventRow).where(ConversationEventRow.type == "final.result")))
-            assert len(rows) == 1
-            assert rows[0].payload["status"] == result.status
-            assert rows[0].payload["text"] == result.final_text
+        assert result["status"] == ("failed" if evidence_failure else "completed")
+        frames,_,_=await journal.events('run','buyer')
+        assert frames[-1]['event']['type']==('RUN_ERROR' if evidence_failure else 'RUN_FINISHED')
+        if evidence_failure:
+            assert run['state']['executionError']==result['text'] and run['status']=='error'
+        else:
+            assert run['state']['executionStatus']==result['status']
+            assert run['messages'][-1]['content']==result['text']
+        assert any(e['event'].get('name')=='usage.summary' for e in frames)
         assert ShoppingContext.current() is None
     finally:
-        await engine.dispose()
+        await runtime.shutdown()
 
 
 async def test_persistence_failure_reaches_agui_without_success_terminal():

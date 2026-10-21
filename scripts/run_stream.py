@@ -4,6 +4,10 @@ from dataclasses import dataclass
 import json
 import uuid
 import httpx
+from ag_ui.core import Event
+from pydantic import TypeAdapter
+
+_EVENT = TypeAdapter(Event)
 from scripts.eval.trace import final_results
 
 
@@ -34,7 +38,9 @@ def read_stream(text):
             data.append(line[5:].lstrip())
         elif not line and data:
             try:
-                frames.append(json.loads('\n'.join(data)))
+                frame = json.loads('\n'.join(data))
+                _EVENT.validate_python(frame)
+                frames.append(frame)
             except (ValueError, TypeError):
                 error = '事件流包含不完整或无效JSON'
                 break

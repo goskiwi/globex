@@ -112,15 +112,10 @@ async def test_fresh_session_invalidates_before_loading():
 async def test_known_lost_lease_never_persists_agent_or_conversation():
     orchestrator, _, sessions = make_orchestrator()
     sessions.invalidate = AsyncMock()
-    conversation = SimpleNamespace(touch_session=AsyncMock(), append_turn=AsyncMock(), append_events=AsyncMock())
-    orchestrator._conversation_store = conversation
     body = RunAgentInput.model_validate(request_data())
     await orchestrator.handle_intent(parse_intent(body), persistence_guard=lambda: False)
     assert sessions.persisted == 0
     sessions.invalidate.assert_awaited_once_with("session-test")
-    conversation.touch_session.assert_not_awaited()
-    conversation.append_turn.assert_not_awaited()
-    conversation.append_events.assert_not_awaited()
 
 
 async def test_session_lease_automatically_reloads_and_combines_caller_guard():
@@ -178,15 +173,6 @@ async def test_finalization_failure_is_explicit_and_never_publishes_success(stag
     finals = [event.payload for event in observed if event.type == "final.result"]
     assert len(finals) == 1 and finals[0]["status"] == "failed"
     assert orchestrator.session_coordinator.active_sessions == 0
-
-
-async def test_optional_conversation_record_failure_does_not_replay_successful_execution():
-    orchestrator, agent, _ = make_orchestrator()
-    orchestrator._conversation_store = SimpleNamespace(touch_session=AsyncMock(side_effect=OSError("synthetic audit failure")))
-    body = RunAgentInput.model_validate(request_data())
-    result = await orchestrator.handle_intent(parse_intent(body))
-    assert result.error is None and result.status == "completed"
-    assert agent.calls == 1
 
 
 async def test_live_confirmation_events_keep_old_active_card_beyond_history_limit(confirmation_env):

@@ -1,5 +1,5 @@
 """签名登录、对话改名和完整删除；临时SQLite，无真实买家数据。"""
-from tests.sql_fixtures import read_session_state
+from tests.sql_fixtures import read_session_state, seed_historical_conversation
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -12,12 +12,11 @@ from langgraph.graph import StateGraph,MessagesState,START,END
 
 from app.infrastructure.identity import IdentityPolicy
 from app.infrastructure.ag_ui_journal import AGUIJournal,JournalNotFound,JournalConflict
-from app.infrastructure.persistence.sql.repositories import create_engine,bootstrap_schema,SqlSessionStore,SqlConversationStore
+from app.infrastructure.persistence.sql.repositories import create_engine,bootstrap_schema,SqlSessionStore
 from app.infrastructure.persistence.graph_checkpointer import FencedSqliteSaver
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
 from app.infrastructure.shopping_forms import ShoppingFormStore
 from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
-from app.domain.session.ports.conversation_store import ConversationTurn
 from app.domain.session.ports.session_store import SessionNotFound,StaleSessionWrite
 from app.application.agents.orchestrator import MainAgentOrchestrator
 from app.application.usecases.session_management import SessionManagement
@@ -31,7 +30,7 @@ POLICY=IdentityPolicy(mode='hmac',secret='isolated-test-key-never-used-by-runnin
 async def environment(tmp_path):
     engine=create_engine(f'sqlite+aiosqlite:///{tmp_path/"main.db"}')
     await bootstrap_schema(engine)
-    store=SqlSessionStore(engine);conversations=SqlConversationStore(engine)
+    store=SqlSessionStore(engine)
     journal=AGUIJournal(tmp_path/'journal.db');evidence=ContextEvidenceStore(tmp_path/'evidence.db')
     forms=ShoppingFormStore(tmp_path/'forms.db')
     async with FencedSqliteSaver.from_conn_string(str(tmp_path/'graph.db')) as saver:
@@ -42,7 +41,9 @@ async def environment(tmp_path):
         from app.application.runtime.sessions import SessionCoordinator
         runner.session_coordinator=SessionCoordinator();runner._session_lease_factory=None
         runner._sessions=SimpleNamespace(invalidate=AsyncMock())
-        service=SessionManagement(runner,journal,store,conversations,evidence,forms,saver)
+        from functools import partial
+        from app.infrastructure.persistence.sql.historical_conversations import delete_historical_conversation
+        service=SessionManagement(runner,journal,store,evidence,forms,saver,partial(delete_historical_conversation,engine))
         api=FastAPI();api.state.identity_policy=POLICY
         register_auth_routes(api,lambda:SimpleNamespace(demo_login_password='123'))
         register_session_management_routes(api,lambda:service)
@@ -52,8 +53,7 @@ async def environment(tmp_path):
             try:
                 await compiled.ainvoke({'messages':[HumanMessage(content='合成对话正文')]},{'configurable':{'thread_id':sid}})
                 await store.save_claim(claim,'{"runtime":"langgraph"}')
-                await conversations.touch_session(sid,buyer,'zh-CN','CNY')
-                await conversations.append_turn(ConversationTurn(sid,buyer,'buyer','合成对话正文'))
+                await seed_historical_conversation(engine,sid,buyer)
                 ref=await evidence.save(buyer,sid,'products',{'hits':[{'product_id':'P1003'}]})
                 await forms.create_clarification(buyer,sid,'合成问题',[{'id':'purpose','type':'text','label':'用途'}])
                 body={'threadId':sid,'runId':'run-'+sid,'messages':[{'id':'u','role':'user','content':'原始标题'}],
@@ -65,7 +65,7 @@ async def environment(tmp_path):
             finally:ShoppingContext.reset(scope)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api),base_url='http://test') as client:
             yield SimpleNamespace(client=client,seed=seed,store=store,journal=journal,evidence=evidence,
-                forms=forms,saver=saver,compiled=compiled,service=service,conversations=conversations)
+                forms=forms,saver=saver,compiled=compiled,service=service,engine=engine)
     await engine.dispose()
 
 
@@ -100,7 +100,11 @@ async def test_rename_and_delete_are_owned_and_remove_all_dialogue_stores(enviro
     assert await e.saver.aget_tuple({'configurable':{'thread_id':'dialogue-a'}}) is None
     assert await e.evidence.get('kkqq','dialogue-a',ref) is None
     assert await e.forms.latest('kkqq','dialogue-a') is None
-    assert await e.conversations.list_turns('dialogue-a')==[]
+    from sqlalchemy import select,func
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from app.infrastructure.persistence.sql.tables import ConversationMessageRow
+    async with async_sessionmaker(e.engine)() as db:
+        assert await db.scalar(select(func.count()).select_from(ConversationMessageRow).where(ConversationMessageRow.session_id=='dialogue-a'))==0
     assert await read_session_state(e.store, 'dialogue-a') is None
     await e.store.assert_owner('dialogue-a','kkqq',create=False) # 独立订单仍能校验归属。
     with pytest.raises(SessionNotFound):await e.store.claim('dialogue-a',buyer_id='kkqq')

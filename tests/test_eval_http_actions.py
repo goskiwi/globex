@@ -160,7 +160,7 @@ async def test_memory_action_uses_explicit_page_approval_and_verifies_persisted_
         if request.url.path=='/commerce/ag-ui/run':
             body=json.loads(request.content);state['body']=body;state['decided']=True
             assert body['resume']==[{'interruptId':'bound-memory-id','status':'resolved','payload':{'approved':approved}}]
-            return httpx.Response(200,text='data: {"type":"CUSTOM","name":"usage.summary","value":{"model_calls":1}}\n\ndata: {"type":"RUN_FINISHED"}\n\n')
+            return httpx.Response(200,text='data: '+json.dumps({'type':'CUSTOM','name':'usage.summary','value':{'model_calls':1}})+'\n\ndata: '+json.dumps({'type':'RUN_FINISHED','threadId':body['threadId'],'runId':body['runId']})+'\n\n')
         return httpx.Response(200,json={'state':{'toolApprovals':[] if state['decided'] else [
             {'id':'bound-memory-id','tool':'remember_preference_tool','arguments':json.dumps(action['expected_payload'])}]},
             'run':{'runId':state['body']['runId'] if state['decided'] else 'original','result':{'text':'已处理'}}})

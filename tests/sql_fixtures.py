@@ -27,3 +27,12 @@ async def seed_historical_state(store, session_id, state_json, owner=None):
         db.add(AgentSessionStateRow(session_id=session_id, state_json=state_json))
         if owner:
             db.add(ConversationSessionRow(session_id=session_id, buyer_id=owner))
+
+async def seed_historical_conversation(engine, session_id, buyer_id, content='合成历史正文'):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from app.infrastructure.persistence.sql.tables import ConversationSessionRow, ConversationMessageRow, ConversationEventRow
+    async with async_sessionmaker(engine)() as db:
+        db.add(ConversationSessionRow(session_id=session_id,buyer_id=buyer_id))
+        db.add(ConversationMessageRow(session_id=session_id,turn_index=1,buyer_id=buyer_id,role='buyer',content=content))
+        db.add(ConversationEventRow(session_id=session_id,type='historical',payload={'synthetic':True},occurred_at='2026-01-01T00:00:00Z'))
+        await db.commit()

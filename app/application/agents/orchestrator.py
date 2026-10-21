@@ -6,7 +6,6 @@ import asyncio
 import json
 import uuid
 import logging
-import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Optional
@@ -15,7 +14,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage, Sy
 from langgraph.types import Command
 
 from app.application.runtime.events import approval_event
-from app.domain.session.ports.conversation_store import ConversationStore
 from app.infrastructure.budget import init_budget
 from app.infrastructure.capability_registry import CapabilityVersionChanged
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
@@ -38,7 +36,6 @@ class MainAgentOrchestrator:
         sessions,
         bus: TradeEventBus,
         *,
-        conversation_store: Optional[ConversationStore] = None,
         loop_detector: Any = None,
         token_budget_total: int = 0,
         session_lease_factory: Callable[..., Any] | None = None,
@@ -49,7 +46,6 @@ class MainAgentOrchestrator:
         self._sessions = sessions
         self.buyer_workspace = buyer_workspace
         self._bus = bus
-        self._conversation_store = conversation_store
         self._loop_detector = loop_detector
         self._token_budget_total = token_budget_total
         self._session_lease_factory = session_lease_factory
@@ -131,9 +127,7 @@ class MainAgentOrchestrator:
             source_message_id=intent.message_id, source_run_id=intent.run_id or uuid.uuid4().hex,
         ))
         init_budget(self._token_budget_total)
-        started_at = time.monotonic()
-        trace = self._bus.subscribe(session_id) if self._conversation_store else None
-        finalizer = RunFinalizer(self._sessions, self._bus, self._conversation_store, self._evidence_store)
+        finalizer = RunFinalizer(self._sessions, self._evidence_store)
         accepted=[]
         def collect(event):
             if event.shopping_session_id==session_id and event.type=='presentation.result':
@@ -144,29 +138,20 @@ class MainAgentOrchestrator:
                     result = await self._execute_intent(intent)
             except asyncio.CancelledError:
                 text = "[cancelled] 本轮执行已中断"
-                saved = await finalizer.finish(intent, text, accepted, persistence_guard, cancelled=True)
-                if saved:
-                    await finalizer.record_conversation(intent, text,
-                        int((time.monotonic() - started_at) * 1000), trace, cancelled=True)
+                await finalizer.finish(intent, text, accepted, persistence_guard, cancelled=True)
                 raise
             try:
-                saved = await finalizer.finish(intent, result.final_text, accepted, persistence_guard)
+                await finalizer.finish(intent, result.final_text, accepted, persistence_guard)
             except RunPersistenceError as error:
                 logger.exception("执行收尾失败，不自动重放业务操作")
-                saved = error.session_saved
                 message = "本轮操作可能已生效，但执行记录保存未完成；请先核查订单、确认单和会话状态，不要直接重复操作。"
                 result = SubmitIntentOutput(session_id, message, message,
                     "PERSISTENCE_FAILED", status="failed", stop_reason="persistence_error")
             # 必要保存完成后发布终态，但执行身份和审计订阅仍然有效。
             self._bus.publish(session_id, "final.result", {
                 "text": result.final_text, "status": result.status, "stop_reason": result.stop_reason})
-            if saved:
-                await finalizer.record_conversation(intent, result.final_text,
-                    int((time.monotonic() - started_at) * 1000), trace)
             return result
         finally:
-            if trace is not None:
-                self._bus.unsubscribe(session_id, trace)
             ShoppingContext.reset(context_token)
 
     async def _execute_intent(self, intent) -> SubmitIntentOutput:

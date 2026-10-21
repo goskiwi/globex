@@ -36,8 +36,8 @@ async def test_scripts_consume_persisted_public_run_without_side_subscription(tm
     finally:await c.shutdown()
 
 @pytest.mark.parametrize('frames',[
-    [{'type':'RUN_STARTED'}],
-    [{'type':'RUN_STARTED'},{'type':'RUN_ERROR','message':'服务中断'}],
+    [{'type':'RUN_STARTED','threadId':'s','runId':'r'}],
+    [{'type':'RUN_STARTED','threadId':'s','runId':'r'},{'type':'RUN_ERROR','message':'服务中断'}],
 ])
 def test_script_never_calls_incomplete_or_failed_stream_success(frames):
     stream=read_stream(''.join('data: '+json.dumps(f)+'\n\n' for f in frames))

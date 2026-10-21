@@ -17,12 +17,7 @@ from app.domain.catalog.money import Money
 from app.domain.order.address import Address
 from app.domain.order.order import Order, OrderStatus
 from app.domain.order.order_line import OrderLine
-from app.domain.session.ports.conversation_store import (
-    ConversationEventRecord,
-    ConversationTurn,
-)
 from app.infrastructure.persistence.sql.repositories import (
-    SqlConversationStore,
     SqlOrderRepository,
     SqlPreferenceStore,
     SqlSessionStore,
@@ -114,56 +109,6 @@ class TestSessionStore:
     async def test_missing_returns_none(self, engine):
         assert await read_session_state(SqlSessionStore(engine), "nope") is None
 
-
-class TestConversationStore:
-    async def test_turns_ordered_by_turn_index(self, engine):
-        store = SqlConversationStore(engine)
-        await store.touch_session("s1", "buyer-001", "zh-CN", "CNY")
-        for index in range(3):
-            await store.append_turn(
-                ConversationTurn(
-                    session_id="s1", buyer_id="buyer-001", role="buyer", content=f"第{index}问",
-                ),
-            )
-        turns = await store.list_turns("s1")
-        assert [turn.content for turn in turns] == ["第0问", "第1问", "第2问"]
-
-    async def test_turn_index_isolated_per_session(self, engine):
-        """turn_index 按会话独立自增，不能被其他会话的行数带偏。"""
-        store = SqlConversationStore(engine)
-        await store.append_turn(
-            ConversationTurn(session_id="s1", buyer_id="b", role="buyer", content="a"),
-        )
-        await store.append_turn(
-            ConversationTurn(session_id="s1", buyer_id="b", role="agent", content="b"),
-        )
-        await store.append_turn(
-            ConversationTurn(session_id="s2", buyer_id="b", role="buyer", content="c"),
-        )
-        assert len(await store.list_turns("s1")) == 2
-        assert len(await store.list_turns("s2")) == 1
-
-    async def test_events_persisted_with_payload(self, engine):
-        store = SqlConversationStore(engine)
-        await store.append_events(
-            [
-                ConversationEventRecord(
-                    session_id="s1", type="tool.result", payload={"tool": "product_search_tool"},
-                ),
-            ],
-        )
-        # 事件表没有读接口，直接查会话主记录确认写入未抛错即可
-        assert await store.find_session("s1") is None  # 事件不建会话主记录
-
-    async def test_touch_session_is_idempotent(self, engine):
-        store = SqlConversationStore(engine)
-        await store.touch_session("s1", "buyer-001", "zh-CN", "CNY")
-        await store.touch_session("s1", "buyer-001", "zh-CN", "CNY")
-        session = await store.find_session("s1")
-        assert session is not None and session["buyer_id"] == "buyer-001"
-
-    async def test_empty_events_is_noop(self, engine):
-        await SqlConversationStore(engine).append_events([])
 
 
 class TestOrderRepository:

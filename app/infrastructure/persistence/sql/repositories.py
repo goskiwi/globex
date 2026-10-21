@@ -5,14 +5,12 @@
 要换 MySQL / PostgreSQL：装上对应异步驱动（aiomysql / asyncpg）并把 DATABASE_URL
 改成该驱动即可，仓储代码不需要改；但本仓未验证过那些驱动的特有行为。
 
-实现四个领域端口：SessionStore / ConversationStore / OrderRepository / PreferenceStore。
+实现三个领域端口：SessionStore / OrderRepository / PreferenceStore。
 domain 与 application 不感知本模块的存在，替换存储只改组装根。
 
 并发安全要点：
     - 订单保存用 merge 覆盖写（订单号唯一，状态机由 domain 保证合法迁移）
     - 偏好去重靠唯一约束，重复插入吞掉 IntegrityError（比先查后插更可靠）
-    - turn_index 按会话取当前最大值 +1，同会话并发写有极小概率撞号，
-      撞号只影响展示顺序不影响数据完整性，故不加分布式锁
 
 SQLite 的边界（重要）：单写者模型。模块三的 worker 是独立进程，与 API 进程并发写
 同一个 db 文件时可能碰到 "database is locked"；WAL 模式能缓解，高并发仍应换服务型数据库。
@@ -36,20 +34,12 @@ from app.domain.order.address import Address
 from app.domain.order.order import Order, OrderStatus
 from app.domain.order.order_line import OrderLine
 from app.domain.order.ports.order_repository import OrderRepository
-from app.domain.session.ports.conversation_store import (
-    ConversationEventRecord,
-    ConversationStore,
-    ConversationTurn,
-)
 from app.domain.session.ports.session_store import SessionStore
 from app.infrastructure.persistence.sql.session_store import SqlFencedSessionStore
 from app.infrastructure.persistence.sql.tables import (
     AgentSessionStateRow,
     Base,
     BuyerPreferenceRow,
-    ConversationEventRow,
-    ConversationMessageRow,
-    ConversationSessionRow,
     OrderLineRow,
     OrderRow,
 )
@@ -105,107 +95,6 @@ async def bootstrap_schema(engine: AsyncEngine) -> None:
 
 class SqlSessionStore(SqlFencedSessionStore):
     """保留既有导入路径，快照写入统一由持久 fencing/CAS 实现。"""
-
-
-class SqlConversationStore(ConversationStore):
-    def __init__(self, engine: AsyncEngine) -> None:
-        self._session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def delete_conversation(self, session_id: str, buyer_id: str) -> None:
-        async with self._session_factory() as db:
-            row = await db.get(ConversationSessionRow,session_id)
-            if row is not None and row.buyer_id!=buyer_id:
-                from app.domain.session.ports.session_store import SessionOwnerMismatch
-                raise SessionOwnerMismatch("无权删除其他买家的对话")
-            for model in (ConversationEventRow,ConversationMessageRow,ConversationSessionRow):
-                await db.execute(delete(model).where(model.session_id==session_id))
-            await db.commit()
-
-    async def touch_session(self, session_id: str, buyer_id: str, locale: str, currency: str) -> None:
-        async with self._session_factory() as db:
-            existing = await db.get(ConversationSessionRow, session_id)
-            if existing is None:
-                db.add(
-                    ConversationSessionRow(
-                        session_id=session_id, buyer_id=buyer_id, locale=locale, currency=currency,
-                    ),
-                )
-            else:
-                existing.last_active_at = datetime.now(timezone.utc)
-            await db.commit()
-
-    async def append_turn(self, turn: ConversationTurn) -> None:
-        async with self._session_factory() as db:
-            max_index = await db.scalar(
-                select(func.max(ConversationMessageRow.turn_index)).where(
-                    ConversationMessageRow.session_id == turn.session_id,
-                ),
-            )
-            db.add(
-                ConversationMessageRow(
-                    session_id=turn.session_id,
-                    turn_index=(max_index or 0) + 1,
-                    buyer_id=turn.buyer_id,
-                    role=turn.role,
-                    content=turn.content,
-                    model=turn.model,
-                    latency_ms=turn.latency_ms,
-                ),
-            )
-            await db.commit()
-
-    async def append_events(self, events: list[ConversationEventRecord]) -> None:
-        if not events:
-            return
-        async with self._session_factory() as db:
-            db.add_all(
-                [
-                    ConversationEventRow(
-                        session_id=event.session_id,
-                        type=event.type,
-                        payload=event.payload,
-                        occurred_at=event.occurred_at,
-                    )
-                    for event in events
-                ],
-            )
-            await db.commit()
-
-    async def list_turns(self, session_id: str, limit: int = 50) -> list[ConversationTurn]:
-        async with self._session_factory() as db:
-            rows = (
-                await db.scalars(
-                    select(ConversationMessageRow)
-                    .where(ConversationMessageRow.session_id == session_id)
-                    .order_by(ConversationMessageRow.turn_index)
-                    .limit(limit),
-                )
-            ).all()
-        return [
-            ConversationTurn(
-                session_id=row.session_id,
-                buyer_id=row.buyer_id,
-                role=row.role,
-                content=row.content,
-                model=row.model,
-                latency_ms=row.latency_ms,
-                created_at=row.created_at.isoformat() if row.created_at else "",
-            )
-            for row in rows
-        ]
-
-    async def find_session(self, session_id: str) -> Optional[dict]:
-        async with self._session_factory() as db:
-            row = await db.get(ConversationSessionRow, session_id)
-            if row is None:
-                return None
-            return {
-                "session_id": row.session_id,
-                "buyer_id": row.buyer_id,
-                "locale": row.locale,
-                "currency": row.currency,
-                "last_active_at": row.last_active_at.isoformat() if row.last_active_at else "",
-            }
 
 
 class SqlOrderRepository(OrderRepository):

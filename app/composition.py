@@ -40,8 +40,8 @@ from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.persistence.in_memory_repositories import (
     InMemoryProductRepository,
 )
+from app.infrastructure.persistence.sql.historical_conversations import delete_historical_conversation
 from app.infrastructure.persistence.sql.repositories import (
-    SqlConversationStore,
     SqlSessionStore,
     bootstrap_schema,
     create_engine,
@@ -190,7 +190,6 @@ async def build_container() -> Container:
 
     db_engine = create_engine(settings.database_url)
     session_store = SqlSessionStore(db_engine)
-    conversation_store = SqlConversationStore(db_engine)
     graph_checkpointer.session_store = session_store
     logger.info("持久化形态：%s", db_engine.url.get_backend_name())
     trade_db_engine = db_engine
@@ -276,7 +275,7 @@ async def build_container() -> Container:
         workspace = BuyerWorkspace(main_factory.buyer_skill_store, preference_store, main_factory.capability_registry,
             lambda: {tool.name for tool in [*search_factory.build_tools(), *trade_factory.build_tools()]})
         orchestrator = MainAgentOrchestrator(
-            sessions, bus, conversation_store=conversation_store,
+            sessions, bus,
             loop_detector=loop_detector,
             token_budget_total=settings.token_budget_total,
             session_lease_factory=task_queue.session_lease if task_queue is not None else None,
@@ -310,8 +309,9 @@ async def build_container() -> Container:
             trade_db_engine=trade_db_engine,
             runtime={"app_source_sha256": source_fingerprint},
             runs=RunService(journal, orchestrator, confirmations, shopping_forms=main_factory.shopping_form_store, task_queue=task_queue, session_store=session_store, priority=partial(queue_priority,settings,cache)),
-            session_management=SessionManagement(orchestrator,journal,session_store,conversation_store,
-                search_factory.evidence_store,main_factory.shopping_form_store,graph_checkpointer),
+            session_management=SessionManagement(orchestrator,journal,session_store,
+                search_factory.evidence_store,main_factory.shopping_form_store,graph_checkpointer,
+                partial(delete_historical_conversation, db_engine)),
             session_store=session_store,
             identity_policy=identity_policy,
             prompt_registry=prompt_registry,

@@ -275,8 +275,6 @@ async def test_http_endpoint_contract_and_reject_stale_resume(tmp_path):
 @pytest.mark.parametrize("swallow_cancel", [False, True])
 async def test_http_disconnect_preserves_run_until_explicit_cancel(swallow_cancel, tmp_path):
     orchestrator, agent, sessions = make_orchestrator(block=True, swallow_cancel=swallow_cancel)
-    conversations = SimpleNamespace(touch_session=AsyncMock(), append_turn=AsyncMock(), append_events=AsyncMock())
-    orchestrator._conversation_store = conversations
     app = FastAPI()
     from app.application.runtime.runs import RunService
     from app.infrastructure.ag_ui_journal import AGUIJournal
@@ -314,8 +312,6 @@ async def test_http_disconnect_preserves_run_until_explicit_cancel(swallow_cance
     await runtime.shutdown()
     assert agent.closed.is_set()
     assert agent.in_flight == 0 and sessions.persisted == 0  # 已撤销写入租约，不落无效 checkpoint
-    saved_turns = [call.args[0] for call in conversations.append_turn.await_args_list]
-    assert not saved_turns
     stopped = await runtime.journal.run("run-test", "buyer-test")
     assert stopped["status"] == "stopped"
     assert orchestrator.session_coordinator.active_sessions == 0
