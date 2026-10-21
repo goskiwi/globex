@@ -184,6 +184,8 @@ class AGUIJournal:
             trusted_state = {}
             if body.get('resume') and 'skillUsages' in previous_state:
                 trusted_state['skillUsages'] = previous_state['skillUsages']
+            # 仅新接纳分配身份；重试和 worker 复用已持久化的输入。
+            user = {**user, "id": uuid.uuid4().hex}
             messages = json.loads(session["messages_json"]) if session else []
             # 客户端历史/state 不是事实来源；只接受本轮 user，旧历史由日志恢复。
             messages = [*messages[-99:], {"id": user["id"], "role": "user", "content": user["content"]}]

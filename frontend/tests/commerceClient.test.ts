@@ -287,3 +287,17 @@ it("已保存的表单重复继续使用相同运行和消息 ID，不重复插�
   expect(sent[1].messages.filter(m=>m.id===runId+":user")).toHaveLength(1);
   expect(client.getSnapshot().messages.filter(m=>m.role==="user")).toHaveLength(1);
 });
+
+it('服务端消息替换临时身份，跨轮历史与过程锚点保持一致',async()=>{
+  let round=0;
+  const client=new CommerceClient({url:'/commerce/ag-ui/run',fetch:async(_,init)=>{
+    const body:RequestBody=JSON.parse(String(init.body));round++;
+    const user={...body.messages.at(-1)!,id:`server-user-${round}`};
+    return sse([started(body),{type:'MESSAGES_SNAPSHOT',messages:[...body.messages.slice(0,-1),user]},
+      {type:'STATE_SNAPSHOT',snapshot:{process:{runId:body.runId,userMessageId:user.id,status:'completed',steps:[]}}},finished(body)]);
+  }});
+  await client.submit('预算300元');await client.submit('预算100元');
+  const snapshot=client.getSnapshot();
+  expect(snapshot.messages.filter(m=>m.role==='user').map(m=>m.id)).toEqual(['server-user-1','server-user-2']);
+  expect(snapshot.processes.map(p=>p.userMessageId)).toEqual(['server-user-1','server-user-2']);
+});

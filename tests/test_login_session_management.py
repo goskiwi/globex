@@ -1,4 +1,5 @@
 """签名登录、对话改名和完整删除；临时SQLite，无真实买家数据。"""
+from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -100,7 +101,7 @@ async def test_rename_and_delete_are_owned_and_remove_all_dialogue_stores(enviro
     assert await e.evidence.get('kkqq','dialogue-a',ref) is None
     assert await e.forms.latest('kkqq','dialogue-a') is None
     assert await e.conversations.list_turns('dialogue-a')==[]
-    assert await e.store.load('dialogue-a') is None
+    assert await read_session_state(e.store, 'dialogue-a') is None
     await e.store.assert_owner('dialogue-a','kkqq',create=False) # 独立订单仍能校验归属。
     with pytest.raises(SessionNotFound):await e.store.claim('dialogue-a',buyer_id='kkqq')
     with pytest.raises(SessionNotFound):await e.store.create_context_operation('dialogue-a','kkqq','late-context',old.revision)
@@ -111,7 +112,7 @@ async def test_active_run_is_not_deleted(environment):
     e=environment;_,_,body=await e.seed('kkqq','active')
     await e.journal.reserve({**body,'runId':'still-running','messages':[{'id':'new','role':'user','content':'合成新请求'}]},'kkqq','owner')
     with pytest.raises(JournalConflict):await e.service.delete('kkqq','active')
-    assert await e.store.load('active') is not None
+    assert await read_session_state(e.store, 'active') is not None
 
 
 async def test_failed_secondary_cleanup_can_be_retried_without_revival(environment,monkeypatch):
@@ -141,4 +142,4 @@ async def test_worker_lease_conflict_is_reported_as_409(environment):
     headers=await login(e.client,'kkqq')
     response=await e.client.delete('/commerce/ag-ui/sessions/worker-busy',params={'buyer_id':'kkqq'},headers=headers)
     assert response.status_code==409
-    assert await e.store.load('worker-busy') is not None
+    assert await read_session_state(e.store, 'worker-busy') is not None

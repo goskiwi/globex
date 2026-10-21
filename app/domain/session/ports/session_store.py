@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 
 class SessionStoreError(ValueError):
@@ -51,14 +50,6 @@ class SessionStore(ABC):
     async def retire_conversation(self, session_id: str, buyer_id: str) -> None:
         """删除对话后终止执行权，保留独立交易需要的归属。"""
         raise NotImplementedError
-    @abstractmethod
-    async def save(self, session_id: str, state_json: str) -> None:
-        """保存 AgentState 全量快照（JSON 字符串）。"""
-
-    @abstractmethod
-    async def load(self, session_id: str) -> Optional[str]:
-        """读取快照；不存在返回 None。"""
-
     @abstractmethod
     async def claim(self, session_id: str, *, buyer_id: str, enforce_owner: bool = True) -> SessionClaim:
         """取得新的持久 fencing epoch，同时读取最新快照；旧 epoch 立即失效。"""

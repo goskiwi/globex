@@ -5,6 +5,7 @@
 只需换 DATABASE_URL 与异步驱动，但那些驱动的特有行为本仓未验证。
 """
 from __future__ import annotations
+from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
 
 from datetime import datetime, timezone
 
@@ -100,18 +101,18 @@ class TestEngineSelection:
 class TestSessionStore:
     async def test_state_roundtrip(self, engine):
         store = SqlSessionStore(engine)
-        await store.save("s1", '{"session_id":"s1"}')
-        assert await store.load("s1") == '{"session_id":"s1"}'
+        await save_session_state(store, "s1", '{"session_id":"s1"}')
+        assert await read_session_state(store, "s1") == '{"session_id":"s1"}'
 
     async def test_save_is_upsert(self, engine):
         """每轮都会覆盖写同一会话，第二次不能因主键冲突失败。"""
         store = SqlSessionStore(engine)
-        await store.save("s1", '{"v":1}')
-        await store.save("s1", '{"v":2}')
-        assert await store.load("s1") == '{"v":2}'
+        await save_session_state(store, "s1", '{"v":1}')
+        await save_session_state(store, "s1", '{"v":2}')
+        assert await read_session_state(store, "s1") == '{"v":2}'
 
     async def test_missing_returns_none(self, engine):
-        assert await SqlSessionStore(engine).load("nope") is None
+        assert await read_session_state(SqlSessionStore(engine), "nope") is None
 
 
 class TestConversationStore:

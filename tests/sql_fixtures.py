@@ -9,3 +9,21 @@ async def make_store(path,cls):
     return cls(engine)
 async def preference_store(path):return await make_store(path,SqlPreferenceStore)
 async def session_store(path):return await make_store(path,SqlSessionStore)
+
+async def read_session_state(store, session_id):
+    from app.infrastructure.persistence.sql.tables import AgentSessionStateRow
+    await store.initialize()
+    async with store._sessions() as db:
+        row = await db.get(AgentSessionStateRow, session_id)
+        return row.state_json if row else None
+
+async def save_session_state(store, session_id, state_json):
+    claim = await store.claim(session_id, buyer_id="buyer")
+    return await store.save_claim(claim, state_json)
+
+async def seed_historical_state(store, session_id, state_json, owner=None):
+    from app.infrastructure.persistence.sql.tables import AgentSessionStateRow, ConversationSessionRow
+    async with store._transaction() as db:
+        db.add(AgentSessionStateRow(session_id=session_id, state_json=state_json))
+        if owner:
+            db.add(ConversationSessionRow(session_id=session_id, buyer_id=owner))

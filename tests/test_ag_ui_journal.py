@@ -380,3 +380,16 @@ async def test_history_snapshot_does_not_hold_write_lock_for_other_sessions(tmp_
     finally:
         release.set()
         await reader
+
+
+async def test_message_identity_is_persisted_once_for_queue_and_replay(tmp_path):
+    path=tmp_path/'identity.db';journal=AGUIJournal(path)
+    first,created=await journal.reserve(body(), 'b1','owner',queued=True)
+    identifier=first['input']['messages'][-1]['id']
+    assert created and identifier!='u-r1'
+    replay,created=await AGUIJournal(path).reserve(body(),'b1','other',queued=True)
+    assert not created and replay['input']==first['input']
+    queued,_,_=await journal.events('r1','b1')
+    assert queued[-1]['event']['snapshot']['process']['userMessageId']==identifier
+    claimed,ok=await journal.claim('r1','b1','worker',30)
+    assert ok and claimed['input']['messages'][-1]['id']==identifier

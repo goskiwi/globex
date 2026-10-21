@@ -12,6 +12,8 @@ from app.domain.catalog.product import Product
 
 
 class ProductRepository(ABC):
+    """每次读取返回独立的商品及嵌套资料，库存只属于本次观察。"""
+
     @abstractmethod
     async def find_by_id(self, product_id: str) -> Optional[Product]:
         ...

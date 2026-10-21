@@ -7,6 +7,7 @@ OrderRepository 提供自增单号（GBX-XXXX 前缀，便于日志排查）。
 from __future__ import annotations
 
 import itertools
+from copy import deepcopy
 from typing import Awaitable, Callable, Optional
 
 from app.domain.catalog.ports.product_repository import ProductRepository
@@ -19,13 +20,15 @@ from app.infrastructure.persistence.seed_products import build_seed_products
 class InMemoryProductRepository(ProductRepository):
     def __init__(self, products: Optional[list[Product]] = None) -> None:
         seed = products if products is not None else build_seed_products()
-        self._products: dict[str, Product] = {p.product_id: p for p in seed}
+        self._products: dict[str, Product] = {p.product_id: deepcopy(p) for p in seed}
         self._inventory_reader: Callable[[list[str]], Awaitable[dict[str, int]]] | None = None
 
     def bind_inventory(self, reader: Callable[[list[str]], Awaitable[dict[str, int]]]) -> None:
         self._inventory_reader = reader
 
     async def _refresh_inventory(self, products: list[Product]) -> list[Product]:
+        # 本次读取拥有完整对象；等待库存时也不能暴露目录模板。
+        products = deepcopy(products)
         if self._inventory_reader is not None:
             stocks = await self._inventory_reader([sku.sku_id for p in products for sku in p.skus])
             for product in products:

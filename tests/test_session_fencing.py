@@ -1,5 +1,6 @@
 """独立连接/Registry 的持久 fencing 验证，不依赖 Redis 和外部模型。"""
 from __future__ import annotations
+from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
 
 from tests.sql_fixtures import preference_store
 
@@ -40,9 +41,9 @@ async def test_new_claim_invalidates_old_writer_before_new_owner_has_saved(store
     assert second.fence > first.fence and second.revision == first.revision == 0
     with pytest.raises(StaleSessionWrite):
         await old.save_claim(first, '{"old":true}')
-    assert await new.load("session") is None
+    assert await read_session_state(new, "session") is None
     await new.save_claim(second, '{"new":true}')
-    assert await old.load("session") == '{"new":true}'
+    assert await read_session_state(old, "session") == '{"new":true}'
 
 
 async def test_revision_rejects_repeated_save_with_same_ticket(stores):
@@ -52,9 +53,8 @@ async def test_revision_rejects_repeated_save_with_same_ticket(stores):
     assert saved.revision == claim.revision + 1
     with pytest.raises(StaleSessionWrite):
         await other.save_claim(claim, '{"v":2}')
-    with pytest.raises(StaleSessionWrite):
-        await other.save("session", '{"bypass":true}')
-    assert await other.load("session") == '{"v":1}'
+    assert not hasattr(other, "save")
+    assert await read_session_state(other, "session") == '{"v":1}'
 
 
 async def test_delayed_save_started_before_takeover_cannot_overwrite_new_state(stores):
@@ -76,7 +76,7 @@ async def test_delayed_save_started_before_takeover_cannot_overwrite_new_state(s
     release.set()
     with pytest.raises(StaleSessionWrite):
         await pending
-    assert await old.load("session") == '{"winner":true}'
+    assert await read_session_state(old, "session") == '{"winner":true}'
 
 
 async def test_independent_claims_allocate_unique_monotonic_epochs(stores):
@@ -105,7 +105,7 @@ async def test_save_failure_rolls_back_revision_and_snapshot(stores):
             await store.save_claim(claim, '{"v":1}')
     finally:
         event.remove(engines[0].sync_engine, "before_cursor_execute", fail)
-    assert await other.load("session") is None
+    assert await read_session_state(other, "session") is None
     saved = await other.save_claim(claim, '{"retry":true}')
     assert saved.revision == 1
 
@@ -121,25 +121,15 @@ async def test_owner_binding_is_persistent_and_can_be_explicitly_disabled(stores
         await other.assert_owner("session", "buyer-b")
 
 
-async def test_legacy_sql_owner_is_inferred_only_from_existing_history(stores):
-    (store, other), engines = stores
-    await store.save("legacy", '{"v":1}')
-    async with async_sessionmaker(engines[0])() as db:
-        db.add(ConversationSessionRow(session_id="legacy", buyer_id="original-buyer"))
-        await db.commit()
-    with pytest.raises(SessionOwnerMismatch):
-        await other.claim("legacy", buyer_id="intruder")
-    restored = await other.claim("legacy", buyer_id="original-buyer")
-    assert restored.state_json == '{"v":1}'
-
-
-async def test_unowned_legacy_snapshot_requires_explicit_migration(stores):
-    (store, _), _ = stores
-    await store.save("legacy", '{"v":1}')
-    with pytest.raises(SessionOwnerUnbound):
-        await store.claim("legacy", buyer_id="buyer")
-    await store.bind_legacy_owner("legacy", "buyer")
-    assert (await store.claim("legacy", buyer_id="buyer")).state_json == '{"v":1}'
+@pytest.mark.parametrize("owner", [None, "original-buyer"])
+async def test_historical_state_is_not_implicitly_adopted(stores, owner):
+    (store, other), _ = stores
+    await seed_historical_state(store, "legacy", '{"v":1}', owner)
+    for buyer in ("intruder", "original-buyer"):
+        with pytest.raises(SessionOwnerUnbound):
+            await other.claim("legacy", buyer_id=buyer)
+    assert await read_session_state(store, "legacy") == '{"v":1}'
+    assert not hasattr(store, "bind_legacy_owner") and not hasattr(store, "import_legacy")
 
 
 

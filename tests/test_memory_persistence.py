@@ -2,6 +2,7 @@
 from tests.sql_fixtures import preference_store,session_store
 # -*- coding: utf-8 -*-
 """二期记忆与持久化单测：偏好 Store / 会话状态 round-trip。"""
+from tests.sql_fixtures import read_session_state, save_session_state, seed_historical_state
 import pytest
 
 import json
@@ -104,17 +105,17 @@ class TestSessionPersistence:
     async def test_agent_state_roundtrip_via_store(self, tmp_path):
         store = await session_store(tmp_path)
         messages=[HumanMessage(name="buyer-001",content="我想买露营灯"),AIMessage(name="concierge",content="好的，已为你检索")]
-        await store.save("s1",json.dumps({'messages':messages_to_dict(messages)},ensure_ascii=False))
-        restored=messages_from_dict(json.loads(await store.load("s1"))['messages'])
+        await save_session_state(store, "s1",json.dumps({'messages':messages_to_dict(messages)},ensure_ascii=False))
+        restored=messages_from_dict(json.loads(await read_session_state(store, "s1"))['messages'])
         assert len(restored)==2 and restored[0].text=="我想买露营灯"
 
     async def test_load_missing_session_returns_none(self, tmp_path):
         store = await session_store(tmp_path)
-        assert await store.load("nonexistent") is None
+        assert await read_session_state(store, "nonexistent") is None
 
     async def test_raw_session_ids_remain_distinct(self, tmp_path):
         store = await session_store(tmp_path)
-        await store.save("cart:1", '{"owner":"one"}')
-        await store.save("cart1", '{"owner":"two"}')
-        assert await store.load("cart:1") == '{"owner":"one"}'
-        assert await store.load("cart1") == '{"owner":"two"}'
+        await save_session_state(store, "cart:1", '{"owner":"one"}')
+        await save_session_state(store, "cart1", '{"owner":"two"}')
+        assert await read_session_state(store, "cart:1") == '{"owner":"one"}'
+        assert await read_session_state(store, "cart1") == '{"owner":"two"}'

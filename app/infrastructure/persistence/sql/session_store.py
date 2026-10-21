@@ -119,22 +119,19 @@ class SqlFencedSessionStore(SessionStore):
                 raise
 
     @staticmethod
-    async def _ownership(db, session_id: str, buyer_id: str, *, create: bool, enforce_owner: bool, allow_legacy: bool = False):
+    async def _ownership(db, session_id: str, buyer_id: str, *, create: bool, enforce_owner: bool):
         row = await db.get(SessionWriteClaimRow, session_id)
         state = await db.get(AgentSessionStateRow, session_id)
         if row is None:
             if not create:
                 raise SessionNotFound("会话不存在")
-            legacy = await db.get(ConversationSessionRow, session_id)
-            owner = legacy.buyer_id if legacy and legacy.buyer_id else None
-            if owner is None and state is not None and enforce_owner and not allow_legacy:
-                raise SessionOwnerUnbound("历史会话没有可信归属记录，请先显式迁移 owner")
-            row = SessionWriteClaimRow(session_id=session_id, owner_id=owner or buyer_id, revision=0, fence=0)
+            history = await db.get(ConversationSessionRow, session_id)
+            if state is not None or history is not None:
+                raise SessionOwnerUnbound("历史会话缺少执行归属，请先显式迁移")
+            row = SessionWriteClaimRow(session_id=session_id, owner_id=buyer_id, revision=0, fence=0)
             db.add(row)
         if row.owner_id is None:
-            if state is not None and enforce_owner and not allow_legacy:
-                raise SessionOwnerUnbound("历史会话归属未绑定，请先迁移 owner")
-            row.owner_id = buyer_id
+            raise SessionOwnerUnbound("历史会话归属未绑定，请先显式迁移")
         if enforce_owner and row.owner_id != buyer_id:
             raise SessionOwnerMismatch("无权访问其他买家的会话")
         if row.deleted and create:
@@ -146,13 +143,6 @@ class SqlFencedSessionStore(SessionStore):
         _identifier(buyer_id, "buyer_id")
         async with self._transaction() as db:
             await self._ownership(db, session_id, buyer_id, create=create, enforce_owner=enforce_owner)
-
-    async def bind_legacy_owner(self, session_id: str, buyer_id: str) -> None:
-        """仅供可信迁移程序调用；仍不允许更改已经绑定的 owner。"""
-        _identifier(session_id, "session_id")
-        _identifier(buyer_id, "buyer_id")
-        async with self._transaction() as db:
-            await self._ownership(db, session_id, buyer_id, create=True, enforce_owner=True, allow_legacy=True)
 
     async def bind_task_owner(self, task_id: str, session_id: str, buyer_id: str) -> None:
         _identifier(task_id, "task_id")
@@ -229,32 +219,6 @@ class SqlFencedSessionStore(SessionStore):
                     operation.payload = json.dumps({'statistics':governance.get('last_compaction',{}), 'message':'当前无需整理' if operation.status=='noop' else '上下文已整理，原始记录保留'},ensure_ascii=False)
             await db.flush()
             return replace(claim, revision=claim.revision + 1, state_json=state_json)
-
-    async def save(self, session_id: str, state_json: str) -> None:
-        """兼容未迁移快照的初始化；已进入 fencing 的会话禁止绕过版本校验。"""
-        _identifier(session_id, "session_id")
-        _valid_json(state_json)
-        async with self._transaction() as db:
-            if await db.get(SessionWriteClaimRow, session_id) is not None:
-                raise StaleSessionWrite("受保护的会话必须使用 save_claim 保存")
-            await db.merge(AgentSessionStateRow(session_id=session_id, state_json=state_json))
-
-    async def import_legacy(self, session_id: str, state_json: str, *, owner_id: str | None = None) -> None:
-        """幂等迁移文件快照；目标存在时始终保留数据库的较新版本。"""
-        _identifier(session_id, "session_id")
-        _valid_json(state_json)
-        async with self._transaction() as db:
-            if await db.get(SessionWriteClaimRow, session_id) is not None or await db.get(AgentSessionStateRow, session_id) is not None:
-                return
-            db.add(AgentSessionStateRow(session_id=session_id, state_json=state_json))
-            db.add(SessionWriteClaimRow(session_id=session_id, owner_id=owner_id, revision=0, fence=0))
-
-    async def load(self, session_id: str) -> str | None:
-        _identifier(session_id, "session_id")
-        await self.initialize()
-        async with self._sessions() as db:
-            row = await db.get(AgentSessionStateRow, session_id)
-            return row.state_json if row else None
 
     async def context_view(self, session_id: str, buyer_id: str) -> dict:
         async with self._transaction() as db:
