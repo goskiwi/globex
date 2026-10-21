@@ -39,7 +39,6 @@ EVENT_TYPES = (
     "agent.dispatch",
     "tool.invoke",
     "tool.result",
-    "tool.lifecycle",
     "handoff.result",
     "plan.update",
     "context.compressed",
@@ -118,8 +117,5 @@ class TradeEventBus:
         observer = _run_observer.get()
         if observer is not None:
             observer(event)
-        # 原生执行增量只给当前运行的 AG-UI 适配器，不广播工具参数和 Skill 正文。
-        if event_type == "tool.lifecycle":
-            return
         for queue in self._subscribers.get(event.shopping_session_id, []):
             queue.put_nowait(event)

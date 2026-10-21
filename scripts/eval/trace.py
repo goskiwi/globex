@@ -21,8 +21,13 @@ def tool_observations(frames):
         elif kind == 'TOOL_CALL_RESULT':
             call = calls[frame['toolCallId']]
             receipt = decode_receipt(frame['content'])
+            raw = call['arguments_text']
+            try:
+                arguments = json.loads(raw)
+            except ValueError:
+                arguments = raw
             observations.append({'index': index, 'call_index': call['index'], 'call_id': frame['toolCallId'],
-                'name': call['name'], 'arguments': json.loads(call['arguments_text'] or '{}'), **receipt})
+                'name': call['name'], 'arguments': arguments, **receipt})
     return observations
 
 

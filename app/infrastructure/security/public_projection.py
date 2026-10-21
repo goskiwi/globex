@@ -41,10 +41,7 @@ class PublicProjection:
         return json.dumps(self.business(parsed),ensure_ascii=False)
 
     def trade(self, event_type, payload):
-        result=self.business(payload)
-        if event_type=='tool.lifecycle' and payload.get('type') == 'TOOL_CALL_DELTA':
-            result['delta']=self.encoded_business(payload.get('delta',''))
-        return result
+        return self.business(payload)
 
     def event(self, event):
         result=deepcopy(event)

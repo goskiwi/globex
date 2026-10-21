@@ -30,16 +30,18 @@ async def test_command_updates_state_and_emits_one_complete_receipt():
     graph=create_agent(model,tools=[*build_shopping_operations(None)],middleware=[
         BusinessToolMiddleware(None,bus),WorkingStateMiddleware()])
     try:
-        with observe_run_events(events.append):
+        from tests.native_tool_helpers import observe_tool_facts
+        native=[]
+        with observe_tool_facts(native.append), observe_run_events(events.append):
             result=await graph.ainvoke({'messages':[HumanMessage(name='buyer',content='预算300元')]})
         assert result['shopping_work']['filters']['price_max_major']==300
         receipts=[m for m in result['messages'] if isinstance(m,ToolMessage)]
         assert len(receipts)==1 and receipts[0].status=='success'
-        lifecycle=[e.payload['type'] for e in events if e.type=='tool.lifecycle']
+        lifecycle=[e.type for e in native]
         assert lifecycle==['TOOL_CALL_START','TOOL_CALL_DELTA','TOOL_CALL_END',
                            'TOOL_RESULT_START','TOOL_RESULT_END']
         assert len([e for e in events if e.type=='tool.result'])==1
-        assert 'Command(' not in ''.join(e.payload.get('delta','') for e in events)
+        assert 'Command(' not in ''.join(e.delta for e in native)
     finally:ShoppingContext.reset(token)
 
 

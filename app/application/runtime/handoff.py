@@ -296,7 +296,8 @@ class HandoffMiddleware(AgentMiddleware[HandoffState, HandoffContext]):
         if state.get("handoff_attempts") and last:
             # 修正交付时原业务工具已执行过，不允许重放确认准备等操作。
             rejected = [ToolMessage(name=c["name"], tool_call_id=c["id"], status="error",
-                content="提交修正阶段未执行业务工具；请使用已有结果修正提交。")
+                content="提交修正阶段未执行业务工具；请使用已有结果修正提交。",
+                artifact={"executed": False, "error_code": "submission_correction"})
                 for c in last.tool_calls if c["name"] != "SubagentResult"]
         if submissions:
             return {"handoff_submission": submissions, "messages": rejected}

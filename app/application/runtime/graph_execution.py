@@ -47,9 +47,13 @@ class _GraphStreamObserver(AsyncCallbackHandler):
 
 
 async def execute_graph(session_id: str, session, graph_input, event_observer=None) -> ExecutionResult:
+    from app.application.runtime.facts import ExecutionFacts
+    facts = ExecutionFacts(event_observer)
+    facts_token = facts.bind()
     evidence = TaskEvidence(session_id)
     observer = _GraphStreamObserver(event_observer)
     config = {**session.config, "callbacks": [observer]}
+    closing_reason = "execution_error"
     try:
         with trace.get_tracer(__name__).start_as_current_span(
             "globex.agent", attributes={"gen_ai.operation.name": "invoke_agent",
@@ -57,13 +61,29 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
             record_exception=False, set_status_on_exception=False,
         ):
             with observe_run_events(evidence.capture):
-                result = await session.graph.ainvoke(graph_input, config=config)
+                result = {}
+                seeded = set()
+                async for scope, mode, update in session.graph.astream(
+                        graph_input, config=config, stream_mode=['updates', 'values'], subgraphs=True):
+                    if mode == 'values':
+                        if scope not in seeded:
+                            facts.observe(update.get('messages', []), scope, seed=True)
+                            seeded.add(scope)
+                        if not scope:
+                            result = update
+                    else:
+                        if update.get('__interrupt__'):
+                            facts.waiting.update(facts.scopes.get(scope, {}).values())
+                        for value in update.values():
+                            facts.observe_update(value, scope)
+            closing_reason = "incomplete"
             if observer.interrupted:
                 raise asyncio.CancelledError()
     except (asyncio.CancelledError, ExecutionStopped, GraphRecursionError, ContextCapacityError) as error:
         cancelled = isinstance(error, asyncio.CancelledError)
         reason = 'cancelled' if cancelled else error.reason if isinstance(error, ExecutionStopped) else (
             "context_capacity" if isinstance(error, ContextCapacityError) else "step_limit")
+        closing_reason = reason
         text = "本轮执行已中断；已完成操作保留，未完成调用不会自动重放。" if cancelled else evidence.stopped_text(reason)
         # 原生 END 更新提交已完成并行节点的 pending writes，并清除未运行任务。
         # 不调用模型补总结，也不 resume 任何写工具。
@@ -76,6 +96,7 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
             artifact={"stop_reason": reason})
             for m in messages if isinstance(m, AIMessage)
             for c in [*m.tool_calls, *m.invalid_tool_calls] if c["id"] not in answered]
+        facts.observe(unfinished)
         final = AIMessage(content=text, additional_kwargs={"execution_stop": reason})
         await session.graph.aupdate_state(session.config, {"messages": [*unfinished, final]}, as_node="model")
         await session.graph.aupdate_state(session.config, None, as_node=END)
@@ -87,6 +108,8 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
         presentations=tuple(p for p in snapshot.values.get('presentations',[]) if not context or p['runId']==context.source_run_id)
         return ExecutionResult(text, "partial" if evidence.successful_tools or evidence.delegated or presentations else "failed", reason,presentations)
     finally:
+        facts.close_unfinished(closing_reason)
+        ExecutionFacts.reset(facts_token)
         budget = get_budget()
         if budget is not None:
             budget.release_delivery()

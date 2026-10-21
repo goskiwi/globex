@@ -33,3 +33,16 @@ def tool_graph(function, *, middlewares):
 async def call_tool(graph, **kwargs):
     result=await graph.ainvoke({'messages':[HumanMessage(content=json.dumps(kwargs))]})
     return next(message for message in reversed(result['messages']) if isinstance(message,ToolMessage))
+
+
+from contextlib import contextmanager
+from app.application.runtime.facts import ExecutionFacts
+
+@contextmanager
+def observe_tool_facts(observer):
+    facts = ExecutionFacts(observer)
+    token = facts.bind()
+    try:
+        yield facts
+    finally:
+        ExecutionFacts.reset(token)

@@ -41,16 +41,10 @@ class BusinessToolMiddleware(AgentMiddleware):
         from app.application.runtime.results import message_data, project_data, tool_receipts, replace_receipts, receipt_failure
         name, call_id = request.tool_call["name"], request.tool_call["id"]
         session = ShoppingContext.current_session_id()
-        execution = request.runtime.execution_info
-        event_id = f"{execution.task_id}:{execution.node_attempt}:{call_id}"
-        def emit(kind, delta="", state="success", data=None, failure=None):
-            self.bus.publish(session, "tool.lifecycle", {"type":kind,"tool_call_id":event_id,
-                "tool_call_name":name,"delta":delta,"state":state,
-                "data":data,"failure":failure,
-                "arguments":request.tool_call["args"] if kind=="TOOL_CALL_START" else None})
-        emit("TOOL_CALL_START")
-        emit("TOOL_CALL_DELTA", json.dumps(request.tool_call["args"],ensure_ascii=False))
-        emit("TOOL_CALL_END");emit("TOOL_RESULT_START")
+        from app.application.runtime.facts import ExecutionFacts, execution_call, call_identity
+        run_facts = ExecutionFacts.current()
+        message, _ = execution_call(request.state['messages'], call_id)
+        event_id = run_facts.begin(request.state['messages'], call_id) if run_facts else call_identity(message, call_id)
 
         def clean(value):
             if isinstance(value,str): return sanitize_tool_output(value)
@@ -137,7 +131,8 @@ class BusinessToolMiddleware(AgentMiddleware):
                             'confirmation_id':operation['confirmation_id'], 'action':operation['action'], 'status':'pending'},notices=notices)
                         processed[-1]=receipt
                     self.bus.publish(session,"tool.result",{"tool":name,"tool_call_id":event_id,**body})
-                    emit("TOOL_RESULT_END",state=receipt.status,data=public,failure=receipt_failure(receipt))
+                    if run_facts is not None:
+                        run_facts.result(event_id, receipt, public)
                 observe_tool_result(failed=failed)
                 normalized=replace_receipts(output,processed)
                 if not presentations and not operations:return normalized
@@ -150,7 +145,10 @@ class BusinessToolMiddleware(AgentMiddleware):
             except BaseException as error:
                 observe_tool_result(failed=True)
                 span.set_attribute("error.type",type(error).__name__);span.set_status(Status(StatusCode.ERROR))
-                emit("TOOL_RESULT_END",state="error",failure={'code':'interrupted' if isinstance(error,asyncio.CancelledError) else 'internal'})
+                if run_facts is not None:
+                    failure = ToolMessage(tool_call_id=call_id, name=name, status='error', content='工具执行未取得完整结果，请先核查状态。',
+                        artifact={'error_code': 'interrupted' if isinstance(error, asyncio.CancelledError) else 'internal'})
+                    run_facts.result(event_id, failure, None)
                 raise
 
 
@@ -174,7 +172,8 @@ class MemoryApprovalMiddleware(AgentMiddleware):
         if names & MEMORY_WRITE_TOOLS and names - MEMORY_WRITE_TOOLS:
             return {"messages": [ToolMessage(
                 content="记忆变更必须与业务工具分批调用；本批均未执行。变更完成后重新决策。",
-                name=call["name"], tool_call_id=call["id"], status="error")
+                name=call["name"], tool_call_id=call["id"], status="error",
+                artifact={"executed": False, "error_code": "invalid_input"})
                 for call in message.tool_calls]}
         rejected = []
         for call in message.tool_calls:
@@ -194,7 +193,8 @@ class MemoryApprovalMiddleware(AgentMiddleware):
                            and fact.statement == expected_text for fact in facts):
                     rejected.append(ToolMessage(content="目标记忆或版本已变化，未执行；请按最新 ID、版本与原文重新申请：\n"
                         + render_preference_lines(facts), tool_call_id=call["id"],
-                        name=call["name"], status="error"))
+                        name=call["name"], status="error",
+                        artifact={"executed": False, "error_code": "stale_memory"}))
                     continue
             response = interrupt({"action_id": call["id"], "action_requests": [{
                 "name": call["name"], "args": call["args"],
@@ -210,6 +210,7 @@ class MemoryApprovalMiddleware(AgentMiddleware):
                 rejected.append(ToolMessage(
                     content="买家已拒绝本次操作，未执行；未经新的明确请求不得重试。",
                     tool_call_id=call["id"], name=call["name"], status="error",
+                    artifact={"executed": False, "error_code": "user_rejected"},
                 ))
         return {"messages": rejected} if rejected else None
 

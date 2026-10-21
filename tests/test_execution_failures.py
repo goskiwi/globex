@@ -13,7 +13,7 @@ from app.application.tools.recommendation_tools import RecommendationInput
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.resilience import CircuitBreakerRegistry
-from tests.native_tool_helpers import tool_graph, call_tool
+from tests.native_tool_helpers import tool_graph, call_tool, observe_tool_facts
 from tests.test_ag_ui_journal import body
 
 
@@ -38,7 +38,7 @@ async def test_actual_nested_validation_then_corrected_call_retains_two_receipts
     picks=[{'product_id':'P1','sku_id':'P1-S1','quantity':1,'reason':'便携'},
            {'product_id':'P2','sku_id':'P2-S1','reason':'收纳'}]
     arguments={'picks':picks,'guidance':'按需要选择'}
-    with observe_run_events(adapter.on_trade_event):
+    with observe_tool_facts(adapter.on_agent_event), observe_run_events(adapter.on_trade_event):
         failed = await call_tool(graph,**arguments)
         assert failed.status == 'error' and not executions
         failure=receipt_failure(failed)
@@ -66,7 +66,7 @@ async def test_declared_error_category_survives_middleware_event_and_projection(
         return ToolResult('timeout 503 库存不足 private address',state=ToolResultState.ERROR,
             error_code=kind,error_reason='库存不足，无法准备确认单' if kind=='business_rejected' else None)
     graph=tool_graph(rejected,middlewares=[BusinessToolMiddleware(None,bus),ToolResilienceMiddleware(CircuitBreakerRegistry())])
-    with observe_run_events(adapter.on_trade_event):receipt=await call_tool(graph)
+    with observe_tool_facts(adapter.on_agent_event), observe_run_events(adapter.on_trade_event):receipt=await call_tool(graph)
     summary=adapter.state['process']['steps'][0]['summary']
     assert expected in summary and 'private address' not in summary
     assert receipt_failure(receipt)['code']==kind

@@ -4,6 +4,8 @@ from ag_ui.core import RunAgentInput
 from tests.test_agent_handoff import factories,call,submission,task,context
 from app.application.agents.ag_ui_adapter import AGUIRunAdapter
 from app.infrastructure.eventbus import observe_run_events
+from tests.native_tool_helpers import observe_tool_facts
+from dataclasses import asdict
 
 async def test_rejected_submission_is_not_reported_completed(tmp_path,monkeypatch,context):
  invalid=submission(candidates=[{'product_id':'invented','assessment':'合成错误候选。'}])
@@ -15,11 +17,14 @@ async def test_rejected_submission_is_not_reported_completed(tmp_path,monkeypatc
  def observe(event):
   events.append(event)
   adapter.on_trade_event(event)
- with observe_run_events(observe):output=(await dispatch('search_agent',task())).data
- starts=[e.payload for e in events if e.type=='tool.lifecycle' and e.payload.get('type')=='TOOL_CALL_START' and e.payload.get('tool_call_name')=='SubagentResult']
+ native=[]
+ def native_event(event):
+  native.append(event);adapter.on_agent_event(event)
+ with observe_tool_facts(native_event), observe_run_events(observe):output=(await dispatch('search_agent',task())).data
+ starts=[asdict(e) for e in native if e.type=='TOOL_CALL_START' and e.tool_call_name=='SubagentResult']
  assert output['status']=='completed' and model.cursor==3
  bad=starts[0]['tool_call_id'];step=next(s for s in adapter.state['process']['steps'] if s['id']=='review:tool:'+bad)
  print(json.dumps({'final_status':output['status'],'rejected_payload':starts[0]['arguments'],'displayed_step':step,
   'later_feedback':[m.content for m in model.seen[-1] if m.name=='handoff_feedback'],
-  'raw_end_events':[e.payload for e in events if e.type=='tool.lifecycle' and e.payload.get('tool_call_id')==bad and e.payload.get('type')=='TOOL_RESULT_END']},ensure_ascii=False))
+  'raw_end_events':[asdict(e) for e in native if e.tool_call_id==bad and e.type=='TOOL_RESULT_END']},ensure_ascii=False))
  assert step['status']!='completed','来源校验拒绝的提交仍在执行过程显示已完成'

@@ -203,10 +203,7 @@ class AGUIRunAdapter:
             return
         value = event.to_dict()['payload']
         payload = value if isinstance(value, dict) else {}
-        if event.type == "tool.lifecycle":
-            from app.application.runtime.events import ToolEvent
-            self.on_agent_event(ToolEvent(**payload))
-        elif event.type == "handoff.result":
+        if event.type == "handoff.result":
             identifier = self._id("tool", payload["tool_call_id"])
             accepted = payload["decision"] == "accepted"
             data = payload.get("result") or {}
