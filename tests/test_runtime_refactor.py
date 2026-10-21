@@ -37,7 +37,7 @@ async def test_command_updates_state_and_emits_one_complete_receipt():
         assert len(receipts)==1 and receipts[0].status=='success'
         lifecycle=[e.payload['type'] for e in events if e.type=='tool.lifecycle']
         assert lifecycle==['TOOL_CALL_START','TOOL_CALL_DELTA','TOOL_CALL_END',
-                           'TOOL_RESULT_START','TOOL_RESULT_TEXT_DELTA','TOOL_RESULT_END']
+                           'TOOL_RESULT_START','TOOL_RESULT_END']
         assert len([e for e in events if e.type=='tool.result'])==1
         assert 'Command(' not in ''.join(e.payload.get('delta','') for e in events)
     finally:ShoppingContext.reset(token)

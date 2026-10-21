@@ -2,6 +2,13 @@
 import json
 
 
+def decode_receipt(content):
+    receipt = json.loads(content)
+    if not isinstance(receipt, dict) or set(receipt) != {'status', 'data', 'failure'} or receipt['status'] not in {'success', 'error'}:
+        raise ValueError('工具回执缺少当前status/data/failure')
+    return receipt
+
+
 def tool_observations(frames):
     calls = {}
     observations = []
@@ -13,9 +20,7 @@ def tool_observations(frames):
             calls[frame['toolCallId']]['arguments_text'] += frame['delta']
         elif kind == 'TOOL_CALL_RESULT':
             call = calls[frame['toolCallId']]
-            receipt = json.loads(frame['content'])
-            if set(receipt) != {'status', 'data', 'failure'} or receipt['status'] not in {'success', 'error'}:
-                raise ValueError('工具回执缺少当前status/data/failure')
+            receipt = decode_receipt(frame['content'])
             observations.append({'index': index, 'call_index': call['index'], 'call_id': frame['toolCallId'],
                 'name': call['name'], 'arguments': json.loads(call['arguments_text'] or '{}'), **receipt})
     return observations

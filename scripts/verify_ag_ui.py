@@ -23,6 +23,9 @@ import httpx
 from ag_ui.core import Event
 from pydantic import TypeAdapter
 
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.eval.trace import decode_receipt
+
 EVENT_ADAPTER = TypeAdapter(Event)
 _FORBIDDEN_TOOLS = {"create_order_tool", "query_order_tool", "cancel_order_tool", "remember_preference_tool", "forget_preference_tool"}
 
@@ -128,13 +131,15 @@ class StreamAudit:
             snapshot = event["snapshot"]
             if not isinstance(snapshot, dict):
                 raise ContractViolation("invalid_delivery_snapshot")
-            delivery = snapshot.get("comparison") or snapshot.get("recommendation")
+            deliveries = [p['payload'] for p in snapshot.get('presentations', [])
+                          if p['kind'] in {'recommendation', 'comparison', 'product_view'}]
+            delivery = deliveries[-1] if deliveries else None
             products = delivery.get("hits", []) if isinstance(delivery, dict) else []
             self.final_state = {
                 "status": snapshot.get("status"),
                 "productCount": len(products),
                 "productIds": [product.get("product_id") for product in products if isinstance(product, dict)],
-                "progressCount": len(snapshot.get("progress", [])),
+                "progressCount": len(snapshot.get("process", {}).get("steps", [])),
             }
         elif kind == "MESSAGES_SNAPSHOT":
             assistants = [message for message in event["messages"] if message["role"] == "assistant"]
@@ -164,7 +169,8 @@ class StreamAudit:
     def _record_retrieval(self, tool_call_id: str, content: str) -> None:
         """只保留工具真实 JSON 的检索模式证据，绝不据商品出现推断重排成功。"""
         try:
-            result = json.loads(content)
+            receipt = decode_receipt(content)
+            result = receipt["data"] if receipt["status"]=="success" else None
         except ValueError:
             self.unparsed_product_search_results += 1
             return
@@ -186,7 +192,7 @@ class StreamAudit:
     def report(self, total_ms: float) -> dict:
         strategies = sorted({item["recall_strategy"] for item in self.retrieval_evidence if item["recall_strategy"]})
         full_main_chain = bool(self.retrieval_evidence) and not self.unparsed_product_search_results and all(
-            item["recall_strategy"] == "embedding_rerank" and item["rerank_applied"] is True
+            item["recall_strategy"] in {"embedding_rerank", "hybrid_rerank"} and item["rerank_applied"] is True
             for item in self.retrieval_evidence
         )
         return {

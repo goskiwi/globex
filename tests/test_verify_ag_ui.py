@@ -75,6 +75,7 @@ def test_verifier_rejects_missing_terminal():
 @pytest.mark.parametrize("strategy, reranked, full_chain", [
     ("embedding_only", False, False),
     ("embedding_rerank", True, True),
+    ("hybrid_rerank", True, True),
     ("embedding_rerank", False, False),
 ])
 def test_retrieval_evidence_records_actual_strategy_without_claiming_quality_gates(strategy, reranked, full_chain):
@@ -84,10 +85,10 @@ def test_retrieval_evidence_records_actual_strategy_without_claiming_quality_gat
     feed(audit, {"type": "TOOL_CALL_END", "toolCallId": "call"})
     feed(audit, {
         "type": "TOOL_CALL_RESULT", "toolCallId": "call", "messageId": "result",
-        "content": json.dumps({
+        "content": json.dumps({"status":"success","failure":None,"data":{
             "recall_strategy": strategy, "rerank_applied": reranked, "total_candidates": 7,
             "hits": [{"product_id": "product-secret-marker", "title": "不能输出的正文"}],
-        }),
+        }}),
     })
     report = audit.report(10)
     assert report["retrievalEvidence"] == [{
@@ -104,3 +105,13 @@ def test_missing_retrieval_evidence_does_not_claim_main_chain():
     report = started_audit().report(10)
     assert report["retrievalEvidence"] == []
     assert report["retrievalSummary"]["allObservedSearchesUseEmbeddingAndRerank"] is False
+
+
+def test_verifier_counts_current_presentations_and_process_steps():
+    audit=started_audit()
+    feed(audit,{'type':'STATE_SNAPSHOT','snapshot':{'status':'completed','presentations':[
+        {'id':'delivery','runId':'run','kind':'recommendation','status':'completed',
+         'payload':{'hits':[{'product_id':'P1003'}]}}],
+        'process':{'runId':'run','steps':[{'id':'tool','status':'completed'}]}}})
+    assert audit.final_state['productCount']==1
+    assert audit.final_state['progressCount']==1

@@ -111,7 +111,7 @@ async def test_parallel_graphs_with_same_provider_call_id_do_not_collide(scope):
     results=[e for e in events if e.type=='TOOL_CALL_RESULT']
     assert len({e.tool_call_id for e in results})==2
     assert len(adapter.state['process']['steps'])==2
-    assert {e.content for e in results}=={'包资料','耳机资料'}
+    assert {json.loads(e.content)['data'] for e in results}=={'包资料','耳机资料'}
 
 
 async def test_tool_metrics_count_registered_calls_once_including_failures(scope):
