@@ -211,7 +211,7 @@ class SqlTradeStore(TradeStore):
         if cancellation is None:
             async with self._read_snapshot() as db:
                 order, lines = await self._owned_order(db, order_id, buyer_id)
-                return {'order': self._order_snapshot(order, lines), 'confirmation': None, 'rejection': None}
+                return {'order': self._order_snapshot(order, lines), 'confirmation': None, 'rejection': None, 'observed_at':_utc(self._clock()).isoformat()}
         async with self._transaction() as db:
             return await self._prepare_confirmation(db, operation_id=cancellation['operation_id'],
                 buyer_id=buyer_id, session_id=session_id, action='cancel',
@@ -239,7 +239,7 @@ class SqlTradeStore(TradeStore):
             if action == 'cancel':
                 order, lines = await self._owned_order(db, request['order_id'], buyer_id)
                 snapshot = self._order_snapshot(order, lines)
-            return {'confirmation': self._confirmation(existing), 'order': snapshot, 'rejection': None}
+            return {'confirmation': self._confirmation(existing), 'order': snapshot, 'rejection': None, 'observed_at':_utc(self._clock()).isoformat()}
         now = _utc(self._clock())
         if expiry <= now:
             raise TradeStoreError("CONFIRMATION_EXPIRED", "确认有效期已过，请重新生成确认")
@@ -260,7 +260,7 @@ class SqlTradeStore(TradeStore):
                 normalized = self._cancel_payload(order, lines, request['reason'])
             except TradeStoreError as error:
                 return {'confirmation': None, 'order': snapshot,
-                        'rejection': {'code': error.code, 'message': str(error)}}
+                        'rejection': {'code': error.code, 'message': str(error)}, 'observed_at':now.isoformat()}
         confirmation_id = uuid.uuid4().hex
         binding = {"buyer_id": buyer_id, "session_id": session_id, "action": action,
                    "payload": normalized, "expires_at": expiry.isoformat()}
@@ -273,7 +273,7 @@ class SqlTradeStore(TradeStore):
         )
         db.add(row)
         await db.flush()
-        return {'confirmation': self._confirmation(row), 'order': snapshot, 'rejection': None}
+        return {'confirmation': self._confirmation(row), 'order': snapshot, 'rejection': None, 'observed_at':_utc(self._clock()).isoformat()}
 
     async def get_confirmation(self, confirmation_id: str, *, buyer_id: str, session_id: str) -> dict:
         async with self._sessions() as db:

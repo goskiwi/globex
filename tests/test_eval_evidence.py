@@ -19,7 +19,7 @@ def test_required_and_forbidden_tools_are_checked_from_trace():
     results = evaluate_trace_assertions(
         [
             {"criterion": "调商品检索", "kind": "required_tools", "tools": ["product_search_tool"]},
-            {"criterion": "不下单", "kind": "forbidden_tools", "tools": ["cancel_order_tool"]},
+            {"criterion": "不下单", "kind": "forbidden_tools", "tools": ["handle_order"]},
         ],
         EVENTS,
     )

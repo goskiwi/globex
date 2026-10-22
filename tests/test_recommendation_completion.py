@@ -43,10 +43,10 @@ async def test_failed_recommendation_can_correct_and_success_stops_then_new_turn
 async def test_other_failed_or_unfinished_tools_are_not_hidden():
     middleware = FinalDeliveryMiddleware()
     calls = AIMessage(content="", tool_calls=[{"id": "a", "name": "recommend_products", "args": {}},
-        {"id": "b", "name": "query_order_tool", "args": {}}])
+        {"id": "b", "name": "handle_order", "args": {'turn_action': 'continue'}}])
     success = ToolMessage(name="recommend_products", tool_call_id="a", content="ok")
     assert await middleware.abefore_model({"messages": [calls, success]}, None) is None
-    failure = ToolMessage(name="query_order_tool", tool_call_id="b", content="error", status="error")
+    failure = ToolMessage(name="handle_order", tool_call_id="b", content="error", status="error")
     assert await middleware.abefore_model({"messages": [calls, success, failure]}, None) is None
 
 

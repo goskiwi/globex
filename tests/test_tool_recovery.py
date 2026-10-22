@@ -46,7 +46,7 @@ async def test_error_prefix_in_success_is_not_execution_failure():
     assert result.status=='success'
 
 
-@pytest.mark.parametrize("name",["create_order_tool","cancel_order_tool","remember_preference_tool","task_dispatch"])
+@pytest.mark.parametrize("name",["create_order_tool","handle_order","remember_preference_tool","task_dispatch"])
 async def test_runtime_never_replays_side_effect_or_dispatch(name):
     calls=[]
     async def uncertain():

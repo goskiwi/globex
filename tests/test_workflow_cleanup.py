@@ -111,7 +111,7 @@ async def test_incomplete_trade_delegation_keeps_actual_outcome(tmp_path,monkeyp
     from langchain_core.messages import AIMessage
     parent = ScriptedModel(responses=[call('task_dispatch',{'subagent_type':'trade_agent',
         'task':{'goal':'核查订单准备取消'}}),AIMessage(content='已说明剩余事项。')])
-    child = ScriptedModel(responses=([call('query_order_tool',{'order_id':'synthetic-missing'}),
+    child = ScriptedModel(responses=([call('handle_order',{'order_id': 'synthetic-missing', 'turn_action': 'continue'}),
         submission(status='failed',issues=['没有找到订单'])] if child_status=='failed' else
         [submission(status='needs_input',questions=['请提供订单号'])]))
     c = await _container(tmp_path,monkeypatch,parent)
@@ -130,7 +130,7 @@ async def test_independent_order_query_runs_with_requirement_search(tmp_path,mon
     from langchain_core.messages import AIMessage,ToolMessage
     calls=[{'name':'product_search_tool','id':'search','args':{'product_id':'P1003',
         'conditions':{'filters':{'price_max_major':200,'target_currency':'CNY'}}}},
-        {'name':'query_order_tool','id':'order','args':{'order_id':'synthetic-missing'}}]
+        {'name':'handle_order','id':'order','args':{'order_id': 'synthetic-missing', 'turn_action': 'continue'}}]
     model=ScriptedModel(responses=[AIMessage(content='',tool_calls=calls),AIMessage(content='候选已查询，订单未找到。')])
     c=await _container(tmp_path,monkeypatch,model)
     try:
@@ -138,8 +138,8 @@ async def test_independent_order_query_runs_with_requirement_search(tmp_path,mon
         state=(await c.orchestrator._sessions._agents['s'].graph.aget_state(c.orchestrator._sessions._agents['s'].config)).values
         receipts={m.name:m for m in state['messages'] if isinstance(m,ToolMessage)}
         assert receipts['product_search_tool'].status=='success'
-        assert receipts['query_order_tool'].status=='error'
-        assert receipts['query_order_tool'].artifact['error_code']=='business_rejected'
+        assert receipts['handle_order'].status=='error'
+        assert receipts['handle_order'].artifact['error_code']=='business_rejected'
         assert state['shopping_work']['filters']['price_max_major']==200
     finally:
         await c.shutdown()
@@ -152,7 +152,7 @@ def test_only_actual_state_conflicts_block_and_independent_calls_remain_runnable
     detail=c('product_search_tool',{'product_id':'P1003'},'details')
     assert not conflicting_shopping_calls([selected,detail])
     changing=c('set_shopping_requirements',{'changes':{'filters':{'ship_to':'CN'}}},'requirements')
-    order=c('query_order_tool',{'order_id':'synthetic'},'order')
+    order=c('handle_order',{'order_id':'synthetic'},'order')
     assert conflicting_shopping_calls([changing,detail,order])=={'requirements','details'}
     assert not conflicting_shopping_calls([changing,selected,order])
 

@@ -132,7 +132,7 @@ def test_role_tool_scope_is_not_expanded(env):
     token=ShoppingContext.set(ShoppingContextSnapshot('new','buyer','zh-CN','CNY'))
     try:
         with pytest.raises(ValueError):
-            read_skill(env.registry,env.personal,{'query_order_tool'},'backpack','1')
+            read_skill(env.registry,env.personal,{'handle_order'},'backpack','1')
         assert read_skill(env.registry,env.personal,{'product_search_tool'},'backpack','1')['body']
     finally:ShoppingContext.reset(token)
 

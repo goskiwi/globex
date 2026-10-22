@@ -52,7 +52,7 @@ async def main():
                 sink=evaluation_evidence_sink.set(samples.append)
                 bus=TradeEventBus();circuits=CircuitBreakerRegistry();throttle=GatewayThrottle(3,0)
                 search=SearchAgentFactory(settings,CatalogSearchUseCase(InMemoryProductRepository()),bus,None,circuits,throttle, model_client=model_client)
-                trade=TradeAgentFactory(settings,None,None,None,bus,circuits,throttle, model_client=model_client)
+                trade=TradeAgentFactory(settings,None,None,bus,circuits,throttle, model_client=model_client)
                 factory=MainAgentFactory(settings,search,trade,bus,SqlPreferenceStore(engine),
                     circuits,throttle,checkpointer=InMemorySaver(),loop_detector=LoopDetector(),
                     capability_registry=registry,buyer_skill_store=personal, model_client=model_client)

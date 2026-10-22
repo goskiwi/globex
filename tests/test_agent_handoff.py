@@ -88,7 +88,7 @@ def factories(tmp_path, monkeypatch, responses, role="search", tools=None):
     if role == "search":
         factory = SearchAgentFactory(settings, __import__('app.application.usecases.catalog_search', fromlist=['CatalogSearchUseCase']).CatalogSearchUseCase(None), bus, None, registry, throttle, model_client=None)
     else:
-        factory = TradeAgentFactory(settings, None, None, None, bus, registry, throttle, model_client=None)
+        factory = TradeAgentFactory(settings, None, None, bus, registry, throttle, model_client=None)
     factory.bind_harness(None)
 
     @tool
@@ -281,7 +281,7 @@ async def test_historical_lookup_is_valid_but_labelled_historical(tmp_path, monk
 @pytest.mark.parametrize("harness_enabled", [True, False])
 async def test_real_trade_tools_prepare_without_order_or_inventory_write(confirmation_env, tmp_path, monkeypatch, valid_submission, harness_enabled):
     from dataclasses import asdict
-    from app.application.usecases.order_usecases import PlaceOrderUseCase, QueryOrderUseCase, CancelOrderUseCase
+    from app.application.usecases.order_usecases import PlaceOrderUseCase, QueryOrderUseCase, HandleOrderUseCase
     env = confirmation_env
     product = (await env.products.list_all())[0]
     sku = product.skus[0]
@@ -296,7 +296,7 @@ async def test_real_trade_tools_prepare_without_order_or_inventory_write(confirm
         *result_messages])
     monkeypatch.setattr("app.application.agents.trade_agent.create_chat_model", lambda *a, **kw: model)
     factory = TradeAgentFactory(replace(_settings(tmp_path), harness_enabled=harness_enabled),
-        PlaceOrderUseCase(env.service), QueryOrderUseCase(env.store), CancelOrderUseCase(env.service),
+        PlaceOrderUseCase(env.service), HandleOrderUseCase(env.service),
         env.bus, CircuitBreakerRegistry(), GatewayThrottle(3, 0), model_client=None)
     factory.evidence_store = env.evidence
     factory.bind_harness(None)

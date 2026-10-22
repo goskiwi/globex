@@ -17,12 +17,12 @@ from app.application.runtime.skills import SkillReferenceMiddleware
 from app.application.runtime.context import RequestContextMiddleware
 from app.application.tools.capability_tools import build_capability_tools, CAPABILITY_POLICY
 from app.application.tools.conversation_fact_lookup import build_conversation_fact_lookup
+from app.application.tools.order_inputs import HandleOrderInput
 from app.application.tools.order_tools import (
-    build_cancel_order_tool,
+    build_handle_order_tool,
     build_create_order_tool,
-    build_query_order_tool,
 )
-from app.application.usecases.order_usecases import CancelOrderUseCase, PlaceOrderUseCase, QueryOrderUseCase
+from app.application.usecases.order_usecases import HandleOrderUseCase, PlaceOrderUseCase
 from app.infrastructure.eventbus import TradeEventBus
 from app.infrastructure.llm import create_chat_model
 from app.infrastructure.persistence.context_evidence import ContextEvidenceStore
@@ -34,8 +34,7 @@ class TradeAgentFactory:
         self,
         settings: Settings,
         place_order: PlaceOrderUseCase,
-        query_order: QueryOrderUseCase,
-        cancel_order: CancelOrderUseCase,
+        handle_order: HandleOrderUseCase,
         bus: TradeEventBus,
         circuit_registry: Any,
         throttle: Any,
@@ -44,8 +43,7 @@ class TradeAgentFactory:
         self._model_client = model_client
         self._settings = settings
         self._place_order = place_order
-        self._query_order = query_order
-        self._cancel_order = cancel_order
+        self._handle_order = handle_order
         self._bus = bus
         self._circuit_registry = circuit_registry
         self._throttle = throttle
@@ -59,8 +57,7 @@ class TradeAgentFactory:
     def build_tools(self, *, turn_delivery: bool = False) -> list[BaseTool]:
         return [
             as_langchain_tool(build_create_order_tool(self._place_order, self._bus, self.evidence_store), turn_delivery=turn_delivery),
-            as_langchain_tool(build_query_order_tool(self._query_order, self._bus), read_only=True),
-            as_langchain_tool(build_cancel_order_tool(self._cancel_order, self._bus), turn_delivery=turn_delivery),
+            as_langchain_tool(build_handle_order_tool(self._handle_order, self._bus), args_schema=HandleOrderInput, turn_delivery=turn_delivery),
         ]
 
     def build(self):

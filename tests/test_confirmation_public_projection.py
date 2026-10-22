@@ -9,8 +9,8 @@ from app.application.runtime.request_scope import ShoppingContext,ShoppingContex
 from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.delivery import FinalDeliveryMiddleware
 from app.application.runtime.tools import as_langchain_tool
-from app.application.tools.order_tools import build_cancel_order_tool
-from app.application.usecases.order_usecases import OrderItemInput,CancelOrderUseCase
+from app.application.tools.order_tools import build_handle_order_tool
+from app.application.usecases.order_usecases import OrderItemInput,HandleOrderUseCase
 from app.infrastructure.eventbus import observe_run_events
 from tests.test_agent_handoff import ScriptedModel,call
 from tests.trade_test_helpers import confirmation_env,test_address as address
@@ -21,8 +21,8 @@ async def test_confirmation_and_tool_share_public_projection(confirmation_env):
     c=prepared['confirmation']
     approved=await e.service.resolve(c['confirmation_id'],'audit-buyer','audit-session',c['snapshot_hash'],True)
     marker='sk-'+'SyntheticAuditMarker1234567890'
-    model=ScriptedModel(responses=[call('cancel_order_tool',{'order_id':approved['order']['order_id'],'reason':marker},turn_action='finish')])
-    tool=as_langchain_tool(build_cancel_order_tool(CancelOrderUseCase(e.service),e.bus),turn_delivery=True)
+    model=ScriptedModel(responses=[call('handle_order',{'order_id': approved['order']['order_id'], 'cancellation': {'reason': marker}},turn_action='finish')])
+    tool=as_langchain_tool(build_handle_order_tool(HandleOrderUseCase(e.service),e.bus),turn_delivery=True)
     graph=create_agent(model,tools=[tool],middleware=[BusinessToolMiddleware(None,e.bus),FinalDeliveryMiddleware()])
     body=RunAgentInput.model_validate({'threadId':'audit-session','runId':'audit-run','messages':[{'id':'u','role':'user','content':'取消测试订单'}],
         'state':{},'tools':[],'context':[],'forwardedProps':{'buyerId':'audit-buyer'}})
@@ -59,7 +59,7 @@ async def test_confirmation_http_and_persisted_restore_share_policy(confirmation
     prepared=await e.service.prepare_order('buyer','session',[OrderItemInput('P1003','P1003-S1',1)],address(),'CNY')
     card=prepared['confirmation']
     order=(await e.service.resolve(card['confirmation_id'],'buyer','session',card['snapshot_hash'],True))['order']
-    cancel=(await e.service.prepare_cancel('buyer','session',order['order_id'],marker))['confirmation']
+    cancel=(await e.service.handle_order('buyer', 'session', order['order_id'], {'reason': marker}))['confirmation']
     app=FastAPI();register_confirmation_routes(app,lambda:e.service,projection=lambda:policy)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
         for path in ['/commerce/confirmations','/commerce/confirmations/'+cancel['confirmation_id']]:

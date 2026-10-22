@@ -7,11 +7,11 @@ from datetime import timedelta
 
 import pytest
 
-from app.application.tools.order_tools import build_cancel_order_tool, build_create_order_tool, build_query_order_tool
+from app.application.tools.order_tools import build_handle_order_tool, build_create_order_tool
 from app.application.tools.product_search_tool import build_product_search_tool
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.confirmation_service import ConfirmationService
-from app.application.usecases.order_usecases import CancelOrderUseCase, OrderItemInput, PlaceOrderUseCase, QueryOrderUseCase
+from app.application.usecases.order_usecases import HandleOrderUseCase, OrderItemInput, PlaceOrderUseCase, QueryOrderUseCase
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env, test_address as address  # noqa: F401
 
@@ -126,12 +126,12 @@ async def test_query_and_cancel_enforce_owner_and_cancellation_requires_separate
     created = await approve(env, await prepare(env, quantity=2))
     order_id = created["order"]["order_id"]
     query = QueryOrderUseCase(env.store)
-    cancel = CancelOrderUseCase(env.service)
+    cancel = HandleOrderUseCase(env.service)
     with pytest.raises(ValueError):
         await query.execute(order_id, buyer_id="other")
     with pytest.raises(ValueError):
-        await cancel.execute(order_id, "不需要了", buyer_id="other", session_id="session-1")
-    pending = await cancel.execute(order_id, "不需要了", buyer_id="buyer-1", session_id="session-1")
+        await cancel.execute(order_id, cancellation={'reason': '不需要了'}, buyer_id='other', session_id='session-1')
+    pending = await cancel.execute(order_id, cancellation={'reason': '不需要了'}, buyer_id='buyer-1', session_id='session-1')
     assert pending["confirmation_required"] is True
     assert pending["confirmation"]["payload"]["items"][0]["quantity"] == 2
     assert (await query.execute(order_id, buyer_id="buyer-1"))["status"] == "CONFIRMED"
@@ -202,10 +202,10 @@ async def test_model_write_tools_prepare_only_and_cannot_choose_identity_approva
     env = confirmation_env
     create = build_create_order_tool(PlaceOrderUseCase(env.service), env.bus, env.evidence)
     search = build_product_search_tool(CatalogSearchUseCase(env.products), env.bus, env.evidence)
-    cancel = build_cancel_order_tool(CancelOrderUseCase(env.service), env.bus)
-    query = build_query_order_tool(QueryOrderUseCase(env.store), env.bus)
+    cancel = build_handle_order_tool(HandleOrderUseCase(env.service), env.bus)
+    query = build_handle_order_tool(HandleOrderUseCase(env.service), env.bus)
     assert set(inspect.signature(create).parameters) == {"items", "shipping_address", "runtime"}
-    assert set(inspect.signature(cancel).parameters) == {"order_id", "reason"}
+    assert set(inspect.signature(cancel).parameters) == {"order_id", "cancellation"}
     without_context = await create(items=[{'product_id': sku.split('-S')[0], 'sku_id': sku, 'quantity': 1} for sku in []], shipping_address={})
     assert without_context.text.startswith("[error]")
     from tests.shopping_state_helpers import selected_lines
@@ -225,8 +225,8 @@ async def test_model_write_tools_prepare_only_and_cannot_choose_identity_approva
         assert bad.text.startswith("[error]")
         committed = await approve(env, prepared)
         order_id = committed["order"]["order_id"]
-        assert json.loads((await query(order_id)).text)["buyer_id"] == "buyer-1"
-        cancellation = json.loads((await cancel(order_id, "用户想取消")).text)
+        assert json.loads((await query(order_id)).text)["order"]["buyer_id"] == "buyer-1"
+        cancellation = json.loads((await cancel(order_id, {'reason':"用户想取消"})).text)
         assert cancellation["confirmation_required"] is True
         assert (await env.store.get_order(order_id, buyer_id="buyer-1"))["status"] == "CONFIRMED"
     finally:
@@ -240,7 +240,7 @@ async def test_agent_state_restores_current_order_status_without_shipping_or_con
     assert pending["orders"] == []
     assert pending["pending_confirmations"][0]["items"][0]["quantity"] == 1
     created = await approve(env, prepared)
-    cancel = await env.service.prepare_cancel("buyer-1", "session-1", created["order"]["order_id"], "测试取消")
+    cancel = await env.service.handle_order('buyer-1', 'session-1', created['order']['order_id'], {'reason': '测试取消'})
     await approve(env, cancel)
     state = await env.service.agent_state("buyer-1", "session-1")
     assert len(state["orders"]) == 1

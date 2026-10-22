@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""订单工具集：create_order_tool / query_order_tool / cancel_order_tool
+"""订单工具集：下单准备与完整订单任务
 
 MainAgent 单干与 TradeAgent 派发两条路径共用。写工具只准备确认凭证，不执行用户决议。
 
@@ -13,14 +13,12 @@ from app.application.tools.shopping_operations import selected_work,work_update
 from app.application.runtime.results import ToolResult, ToolResultState
 
 from app.application.usecases.order_usecases import (
-    CancelOrderUseCase,
     OrderItemInput,
     PlaceOrderUseCase,
-    QueryOrderUseCase,
 )
 from app.domain.order.address import Address
 from app.application.catalog_evidence import verified_sku_items
-from app.application.tools.order_inputs import CreateOrderInput, ShippingAddressInput
+from app.application.tools.order_inputs import CreateOrderInput, ShippingAddressInput, CancellationInput, HandleOrderInput
 from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
 
@@ -100,50 +98,20 @@ def build_create_order_tool(usecase: PlaceOrderUseCase, bus: TradeEventBus, evid
     return create_order_tool
 
 
-def build_query_order_tool(usecase: QueryOrderUseCase, bus: TradeEventBus):
-    async def query_order_tool(order_id: str) -> ToolResult:
-        """查询当前买家的订单详情；订单号本身不构成读取权限。
+def build_handle_order_tool(usecase, bus: TradeEventBus):
+    async def handle_order(order_id: str, cancellation: CancellationInput | None = None) -> ToolResult:
+        """查看当前买家的完整订单；携带cancellation时在同一任务中准备取消确认卡。
 
-        Args:
-            order_id (`str`):
-                订单号，如 "GBX-000001"。
+        返回订单查看快照、操作结果与可选确认单。只查看不准备或取消订单；准备取消不回补库存，
+        用户点击页面确认卡后才执行。订单归属、当前状态和账单由服务端事务核验。
         """
         try:
             buyer_id, session_id = _identity()
-        except ValueError as err:
-            return _fail(str(err))
-        bus.publish(session_id, "tool.invoke", {"tool": "query_order_tool", "args": {"order_id": order_id}})
-        try:
-            snapshot = await usecase.execute(order_id, buyer_id=buyer_id)
-        except ValueError as err:
-            return _fail(str(err))
-        return _ok(snapshot)
-
-    return query_order_tool
-
-
-def build_cancel_order_tool(usecase: CancelOrderUseCase, bus: TradeEventBus):
-    async def cancel_order_tool(order_id: str, reason: str) -> ToolResult:
-        """准备当前买家的订单取消确认卡，不立即取消或回补库存。
-
-        本操作内部读取并校验当前订单，确认卡含原订单明细、金额与取消原因；无需先调查询工具。
-        用户必须点击页面确认卡才能执行。自然语言同意不能代替该用户动作。
-
-        Args:
-            order_id (`str`):
-                订单号，如 "GBX-000001"。
-            reason (`str`):
-                取消原因，必填。
-        """
-        try:
-            buyer_id, session_id = _identity()
-        except ValueError as err:
-            return _fail(str(err))
-        bus.publish(session_id, "tool.invoke", {"tool": "cancel_order_tool", "args": {"order_id": order_id, "reason": reason}})
-        try:
-            result = await usecase.execute(order_id, reason, buyer_id=buyer_id, session_id=session_id)
-        except ValueError as err:
-            return _fail(str(err))
+            request = HandleOrderInput(order_id=order_id, cancellation=cancellation)
+            bus.publish(session_id, 'tool.invoke', {'tool':'handle_order','args':request.model_dump()})
+            result = await usecase.execute(request.order_id, buyer_id=buyer_id, session_id=session_id,
+                cancellation=request.cancellation.model_dump() if request.cancellation is not None else None)
+        except ValueError as error:
+            return _fail(str(error))
         return _ok(result)
-
-    return cancel_order_tool
+    return handle_order

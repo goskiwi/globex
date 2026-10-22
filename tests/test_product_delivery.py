@@ -94,7 +94,7 @@ async def test_display_batch_requires_successful_final_delivery(tmp_path,monkeyp
     from tests.test_execution_stop import StopModel
     presentation=call('recommend_products', {'guidance': '首选满足这次用途，商品资料与单款理由见卡片。', 'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1, 'reason': '满足用途', 'tradeoffs': []}]}, 'deliver', turn_action='finish')
     if not complete:
-        presentation.tool_calls.append({'id':'missing-order','name':'query_order_tool','args':{'order_id':'GBX-NOT-FOUND'},'type':'tool_call'})
+        presentation.tool_calls.append({'id':'missing-order','name':'handle_order','args':{'order_id': 'GBX-NOT-FOUND', 'turn_action': 'continue'},'type':'tool_call'})
     model=StopModel(responses=[call('product_search_tool',{'product_id':'P1003'}),presentation])
     container=await _container(tmp_path,monkeypatch,model)
     catalog=container.orchestrator._sessions._main_factory._search_factory._catalog_search

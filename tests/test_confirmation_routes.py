@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select
 
-from app.application.usecases.order_usecases import CancelOrderUseCase, QueryOrderUseCase
+from app.application.usecases.order_usecases import HandleOrderUseCase, QueryOrderUseCase
 from app.infrastructure.persistence.sql.tables import OrderRow
 from app.presentation.confirmations import register_confirmation_routes
 from tests.trade_test_helpers import confirmation_env, test_address as address  # noqa: F401
@@ -157,7 +157,7 @@ async def test_real_server_cancel_route_prepares_then_resolves_using_same_ledger
     lightweight = SimpleNamespace(
         confirmations=env.service, bus=env.bus, backplane=None,
         settings=SimpleNamespace(metrics_reader_buyers=(), metrics_scrape_token_file=""), identity_policy=None,
-        cancel_order=CancelOrderUseCase(env.service), query_order=QueryOrderUseCase(env.store),
+        handle_order=HandleOrderUseCase(env.service), query_order=QueryOrderUseCase(env.store),
         orchestrator=None, startup=AsyncMock(), shutdown=AsyncMock(),
     )
     monkeypatch.setattr(server, "build_container", AsyncMock(return_value=lightweight))

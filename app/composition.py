@@ -28,7 +28,7 @@ from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.confirmation_service import ConfirmationService
 from app.infrastructure.persistence.sql.trade_store import SqlTradeStore
 from app.application.usecases.order_usecases import (
-    CancelOrderUseCase,
+    HandleOrderUseCase,
     PlaceOrderUseCase,
     QueryOrderUseCase,
 )
@@ -83,7 +83,7 @@ class Container:
     cache: RedisCache
     task_queue: Optional[TaskQueue]
     query_order: QueryOrderUseCase
-    cancel_order: CancelOrderUseCase
+    handle_order: HandleOrderUseCase
     product_repo: InMemoryProductRepository
     embedder: Any
     vector_index: QdrantProductIndex
@@ -239,7 +239,7 @@ async def build_container() -> Container:
     )
     place_order = PlaceOrderUseCase(confirmations)
     query_order = QueryOrderUseCase(trade_store)
-    cancel_order = CancelOrderUseCase(confirmations)
+    handle_order = HandleOrderUseCase(confirmations)
 
     from app.infrastructure.llm import create_chat_client
     model_client = create_chat_client(settings)
@@ -248,7 +248,7 @@ async def build_container() -> Container:
             settings, catalog_search, bus, knowledge_base, circuit_registry, throttle, model_client=model_client,
         )
         trade_factory = TradeAgentFactory(
-            settings, place_order, query_order, cancel_order, bus, circuit_registry, throttle, model_client=model_client,
+            settings, place_order, handle_order, bus, circuit_registry, throttle, model_client=model_client,
         )
         # 规范化事实与向量同库提交；默认长期记忆走语义检索。
         from app.infrastructure.semantic_memory import SemanticPreferenceStore, PreferenceDistiller
@@ -298,7 +298,7 @@ async def build_container() -> Container:
             cache=cache,
             task_queue=task_queue,
             query_order=query_order,
-            cancel_order=cancel_order,
+            handle_order=handle_order,
             product_repo=product_repo,
             embedder=embedder,
             vector_index=vector_index,

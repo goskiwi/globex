@@ -38,7 +38,7 @@ async def main(comparison=False):
         model = create_chat_model(settings, stream=False, client=create_chat_client(settings))
         model_client=model.client
         search = SearchAgentFactory(settings, catalog, bus, None, circuit, throttle, model_client=model_client)
-        trade = TradeAgentFactory(settings, None, None, None, bus, circuit, throttle, model_client=model_client)
+        trade = TradeAgentFactory(settings, None, None, bus, circuit, throttle, model_client=model_client)
         factory = MainAgentFactory(settings, search, trade, bus, SqlPreferenceStore(engine),
             circuit, throttle, checkpointer=InMemorySaver(), loop_detector=LoopDetector(), model_client=model_client)
         token = ShoppingContext.set(ShoppingContextSnapshot("pricing-live", "synthetic", "zh-CN", "CNY"))

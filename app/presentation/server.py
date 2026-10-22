@@ -201,7 +201,7 @@ def build_app() -> FastAPI:
         body.buyer_id = await require_buyer(request, body.buyer_id)
         await require_session(request, body.buyer_id, body.session_id, create=True)
         try:
-            return container().bus.projection.business(await container().cancel_order.execute(order_id, body.reason, buyer_id=body.buyer_id, session_id=body.session_id))
+            return container().bus.projection.business(await container().handle_order.execute(order_id, cancellation={"reason":body.reason}, buyer_id=body.buyer_id, session_id=body.session_id))
         except ValueError as err:
             raise confirmation_error(err) from err
 

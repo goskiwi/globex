@@ -3,8 +3,8 @@ import asyncio
 import json
 from datetime import timedelta
 from pathlib import Path
-from app.application.usecases.order_usecases import OrderItemInput, QueryOrderUseCase, CancelOrderUseCase
-from app.application.tools.order_tools import build_query_order_tool, build_cancel_order_tool
+from app.application.usecases.order_usecases import OrderItemInput, QueryOrderUseCase, HandleOrderUseCase
+from app.application.tools.order_tools import build_handle_order_tool, build_handle_order_tool
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from tests.trade_test_helpers import confirmation_env, test_address as address
 
@@ -22,13 +22,13 @@ async def test_cancel_order_reads(confirmation_env):
         return await original(db,order_id,buyer_id)
     e.store._owned_order=observed
     token=ShoppingContext.set(ShoppingContextSnapshot('synthetic-session','synthetic-buyer','zh-CN','CNY'))
-    query=build_query_order_tool(QueryOrderUseCase(e.store),e.bus)
-    cancel=build_cancel_order_tool(CancelOrderUseCase(e.service),e.bus)
+    query=build_handle_order_tool(HandleOrderUseCase(e.service),e.bus)
+    cancel=build_handle_order_tool(HandleOrderUseCase(e.service),e.bus)
     samples=[]
     try:
         for with_query in [False,True]:
             owned.clear()
-            results=await asyncio.gather(*([query(order['order_id'])] if with_query else []),cancel(order['order_id'],'合成测试'))
+            results=await asyncio.gather(*([query(order['order_id'])] if with_query else []),cancel(order['order_id'],{'reason':'合成测试'}))
             assert all(r.ok for r in results)
             count=len(owned)
             samples.append({'parallel_query_tool':with_query,'owned_order_reads':count})

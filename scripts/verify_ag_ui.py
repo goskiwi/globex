@@ -27,7 +27,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scripts.eval.trace import decode_receipt
 
 EVENT_ADAPTER = TypeAdapter(Event)
-_FORBIDDEN_TOOLS = {"create_order_tool", "query_order_tool", "cancel_order_tool", "remember_preference_tool", "forget_preference_tool"}
+_FORBIDDEN_TOOLS = {"create_order_tool", "handle_order", "handle_order", "remember_preference_tool", "forget_preference_tool"}
 
 
 class ContractViolation(ValueError):

@@ -433,7 +433,7 @@
             "criterion": "执行所需业务工具",
             "kind": "required_tools",
             "tools": [
-              "query_order_tool"
+              "handle_order"
             ]
           }
         ],

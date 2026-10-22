@@ -98,19 +98,6 @@ class ConfirmationService:
         self._publish(session_id, "confirmation.required", confirmation)
         return self._envelope(confirmation)
 
-    async def prepare_cancel(self, buyer_id: str, session_id: str, order_id: str, reason: str) -> dict:
-        self._identity(buyer_id, session_id)
-        _required_text(order_id, "订单号")
-        _required_text(reason, "取消原因")
-        confirmation = await self._trade_store.prepare_confirmation(
-            operation_id=f"operation-{uuid.uuid4().hex}", buyer_id=buyer_id, session_id=session_id,
-            action="cancel", payload={"order_id": order_id, "reason": reason.strip(),
-                "amount_scope": "landed", "order_kind": "purchase_intent"},
-            expires_at=self._clock() + self._ttl,
-        )
-        self._publish(session_id, "confirmation.required", confirmation)
-        return self._envelope(confirmation)
-
     async def handle_order(self, buyer_id: str, session_id: str, order_id: str, cancellation: dict | None = None) -> dict:
         self._identity(buyer_id, session_id)
         _required_text(order_id, '订单号')
@@ -123,7 +110,7 @@ class ConfirmationService:
         if confirmation is not None:
             self._publish(session_id, 'confirmation.required', confirmation)
         rejection = result['rejection']
-        return {'order':result['order'], 'operation': {'kind':'prepare_cancel' if request is not None else 'inspect',
+        return {'order':result['order'], 'observed_at':result['observed_at'], 'operation': {'kind':'prepare_cancel' if request is not None else 'inspect',
                 'status':'rejected' if rejection else 'awaiting_confirmation' if confirmation is not None else 'completed',
                 'rejection': rejection},
             'confirmation_required': confirmation is not None and confirmation['status']=='pending',

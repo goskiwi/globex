@@ -23,6 +23,9 @@ def product_result_view(data):
 
 def presentation_receipt(kind, data):
     """已成功接纳的组件只回传交付事实；失败与未完成信息仍对模型可见。"""
+    if kind == 'order':
+        from app.application.usecases.order_outcome import order_model_receipt
+        return order_model_receipt(data)
     receipt = {'displayed': True, 'kind': kind}
     for key in ('result_ref', 'status', 'plan_outcome', 'unverified_requirements'):
         if key in data:

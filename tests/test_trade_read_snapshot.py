@@ -17,7 +17,7 @@ async def test_approval_during_state_read_keeps_one_consistent_snapshot(confirma
     if cancel:
         created = await approve(env, prepared)
         order_id = created["order"]["order_id"]
-        prepared = await env.service.prepare_cancel("buyer-1", "session-1", order_id, "synthetic cancellation")
+        prepared = await env.service.handle_order('buyer-1', 'session-1', order_id, {'reason': 'synthetic cancellation'})
     reading, release = asyncio.Event(), asyncio.Event()
     original = AsyncSession.scalars
 

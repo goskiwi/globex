@@ -11,7 +11,7 @@ TOOL_LABELS = {
     'web_search_tool': '核实外部资料', 'task_dispatch': '委派专家任务',
     'remember_preference_tool': '保存购物偏好', 'forget_preference_tool': '删除购物偏好',
     'update_preference_tool': '修改购物偏好', 'create_order_tool': '准备下单确认',
-    'query_order_tool': '查询订单', 'cancel_order_tool': '准备取消确认',
+    'handle_order': '处理订单',
     'load_agent_skill_tool': '读取选购方案', 'lookup_strategy_memory_tool': '查阅选购建议',
 }
 DELIVERY_TOOLS = {'recommend_products': 'recommendation', 'recommend_bundle': 'recommendation', 'compare_products': 'comparison',
@@ -43,6 +43,8 @@ def product_count(items):
 
 
 def label(name, arguments, data=None):
+    if name == 'handle_order':
+        return '查看并准备取消' if arguments.get('cancellation') is not None else '查看订单'
     if name == 'task_dispatch':
         agent = (data or {}).get('agent') if isinstance(data, dict) else None
         return AGENTS.get(text(agent) or text(arguments.get('subagent_type')), '委派专家任务')
@@ -53,7 +55,7 @@ def step_status(name, data, success):
     """工具执行成功与业务完成分开投影，报告部分完成不能显示成全部完成。"""
     if not success:
         return 'failed'
-    if name in {'task_dispatch', 'present_research', 'SubagentResult'} and isinstance(data, dict):
+    if name in {'task_dispatch', 'present_research', 'SubagentResult', 'handle_order'} and isinstance(data, dict):
         return {'completed':'completed', 'partial':'partial', 'needs_input':'waiting_input',
                 'failed':'failed'}.get(text(data.get('status')), 'unconfirmed')
     return 'completed'
@@ -218,12 +220,10 @@ def result_summary(name, arguments, data, success, *, failure=None):
         return quote_summary(data.get('quote')) or '已取得报价结果'
     if name == 'load_agent_skill_tool':
         return '已读取：' + text(data.get('title')) if text(data.get('title')) else '已读取选购方案'
+    if name == 'handle_order':
+        return text(data.get('guidance')) or '已取得订单任务结果'
     confirmation = data.get('confirmation')
     if isinstance(confirmation, dict):
         q = confirmation.get('payload')
         return '确认单已准备，等待用户决定' + (('；' + quote_summary(q)) if isinstance(q, dict) else '')
-    if name == 'query_order_tool':
-        status = {'CONFIRMED': '已确认', 'CANCELLED': '已取消', 'DRAFT': '待确认'}.get(text(data.get('status')))
-        if status:
-            return '订单状态：' + status
     return '工具已返回结果'

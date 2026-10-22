@@ -46,7 +46,7 @@ def presentation(name,payload,identifier):
             raise ValueError('展示结果缺少说明')
         if kind=='research' and (not payload.get('reports') or not payload.get('task_ids')):
             raise ValueError('研究交付缺少报告或任务来源')
-        status=payload.get('status','completed') if kind=='research' else payload.get('plan_outcome',{}).get('status','completed')
+        status=payload.get('status','completed') if kind in {'research','order'} else payload.get('plan_outcome',{}).get('status','completed')
     from app.application.runtime.request_scope import ShoppingContext
     context=ShoppingContext.current()
     return {'id':identifier,'runId':context.source_run_id if context else '', 'kind':kind,'status':status,'payload':payload}

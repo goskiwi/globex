@@ -12,8 +12,7 @@ TOOL_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "product_search_tool": ("hits", "recall_strategy"),
     "category_insight_tool": ("insights",),
     "create_order_tool": ("confirmation_required", "confirmation"),
-    "query_order_tool": ("order_id", "status"),
-    "cancel_order_tool": ("confirmation_required", "confirmation"),
+    "handle_order": ("order", "operation", "confirmation_required", "confirmation", "guidance", "status"),
 }
 
 @dataclass

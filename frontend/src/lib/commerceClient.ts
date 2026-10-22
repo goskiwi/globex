@@ -19,6 +19,7 @@ import { readPublishedSkills, readSkillUsages } from "./skills";
 import {readProcess,readProcesses,upsertProcess} from './execution';
 
 import {readResearchReports} from './research';
+import {readOrderOutcome} from './orderOutcome';
 
 const MAX_SESSIONS = 12;
 interface SavedSession {
@@ -107,6 +108,7 @@ export function readPresentations(value:unknown): CommerceSnapshot['presentation
     const valid=item.kind==='recommendation'?!!readRecommendation(payload):item.kind==='comparison'?!!readComparison(payload)
       :item.kind==='product_view'?!!readProductViews([{...payload,runId:item.runId}]).length
       :item.kind==='research'?!!readResearchReports([{...payload,runId:item.runId}]).length
+      :item.kind==='order'?!!readOrderOutcome(payload)
       :item.kind==='clarification'&&typeof payload.form_id==='string';
     return valid?[{id:item.id,runId:item.runId,kind:item.kind as CommerceSnapshot['presentations'][number]['kind'],
       status:item.status as CommerceSnapshot['presentations'][number]['status'],payload}]:[];
@@ -948,6 +950,11 @@ export class CommerceClient {
         session_id: sessionId,
       });
       if (sessionId !== this.snapshot.sessionId) return false;
+      if (isRecord(data.operation) && data.operation.status === 'rejected') {
+        const rejection = isRecord(data.operation.rejection) ? data.operation.rejection : {};
+        this.update({confirmationError:typeof rejection.message === 'string' ? rejection.message : '订单操作未准备，请刷新订单状态。'});
+        return false;
+      }
       const next = this.ownedConfirmations([data.confirmation]);
       if (!next.length)
         throw new Error("确认结果格式无效，请刷新状态，避免重复准备操作。");

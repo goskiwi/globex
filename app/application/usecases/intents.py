@@ -5,14 +5,14 @@ from typing import Literal, TypedDict
 
 DELIVERY_KINDS = {"recommend_products":"recommendation", "recommend_bundle":"recommendation", "compare_products":"comparison",
                   "show_product_details":"product_view", "present_research":"research",
-                  "show_shopping_form":"clarification"}
+                  "show_shopping_form":"clarification", "handle_order":"order"}
 PRODUCT_DELIVERIES = frozenset({"recommendation", "comparison", "product_view"})
 
 
 class Presentation(TypedDict):
     id: str
     runId: str
-    kind: Literal["recommendation", "comparison", "product_view", "research", "clarification"]
+    kind: Literal["recommendation", "comparison", "product_view", "research", "clarification", "order"]
     status: Literal["completed", "partial", "needs_input"]
     payload: dict
 

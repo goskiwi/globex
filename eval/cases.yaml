@@ -192,7 +192,7 @@ cases:
       p1:
         - criterion: "程序断言：闲聊不得调用业务工具"
           kind: forbidden_tools
-          tools: [product_search_tool, category_insight_tool, create_order_tool, query_order_tool, cancel_order_tool]
+          tools: [product_search_tool, category_insight_tool, create_order_tool, handle_order]
 
   - id: category-insight
     description: 品类选购常识（RAG 知识库）

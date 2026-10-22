@@ -20,7 +20,7 @@ from app.application.runtime.execution import ExecutionMiddleware
 from app.application.runtime.handoff import TaskEvidence
 from app.application.runtime.middleware import BusinessToolMiddleware
 from app.application.runtime.results import ToolResult, ToolResultState
-from app.application.tools.order_tools import build_query_order_tool
+from app.application.tools.order_tools import build_handle_order_tool
 from app.application.usecases.order_usecases import QueryOrderUseCase
 from app.application.runtime.request_scope import ShoppingContext, ShoppingContextSnapshot
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
@@ -91,8 +91,10 @@ async def test_skill_success_with_notice_uses_structured_event(scope):
 
 async def test_order_query_survives_in_handoff_and_partial_delivery(scope):
     bus=TradeEventBus();evidence=TaskEvidence('s1')
-    store=SimpleNamespace(get_order=AsyncMock(return_value={'order_id':'GBX-AUDIT','status':'CONFIRMED','items':[]}))
-    graph=tool_graph(build_query_order_tool(QueryOrderUseCase(store),bus),middlewares=[BusinessToolMiddleware(None,bus)])
+    result={'order':{'order_id':'GBX-AUDIT','status':'CONFIRMED','currency':'CNY','total_amount_minor':15400,'created_at':'2026-10-22T00:00:00+00:00'},
+        'operation':{'kind':'inspect','status':'completed','rejection':None},'confirmation_required':False,'confirmation':None,'status':'completed','guidance':'订单状态：已确认'}
+    usecase=SimpleNamespace(execute=AsyncMock(return_value=result))
+    graph=tool_graph(build_handle_order_tool(usecase,bus),middlewares=[BusinessToolMiddleware(None,bus)])
     with observe_run_events(evidence.capture):await call_tool(graph,order_id='GBX-AUDIT')
     assert evidence.trade==[{'order_id':'GBX-AUDIT','status':'CONFIRMED'}]
     assert 'GBX-AUDIT' in evidence.stopped_text('model_call_limit')

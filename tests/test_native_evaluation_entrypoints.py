@@ -30,9 +30,9 @@ def scripted_response(request):
             'shipping_address':{'recipient_name':'评测买家','country':'CN','state':'上海','city':'上海','address_line':'评测街1号','postal_code':'200000','phone':'00000000000'}}
     elif '订单 ' in query:
         order=re.search(r'订单\s+(\S+)',query).group(1)
-        if not results:tool='query_order_tool';args={'order_id':order}
-        elif '申请取消' in query and 'cancel_order_tool' not in calls:
-            tool='cancel_order_tool';args={'order_id':order,'reason':'买家不再需要','turn_action':'finish'}
+        if not results:
+            tool='handle_order';args={'order_id':order,'turn_action':'finish'}
+            if '申请取消' in query:args['cancellation']={'reason':'买家不再需要'}
     elif not results:tool='product_search_tool';args={'product_id':'P1003','sku_id':'P1003-S1'}
     if tool:
         raw['choices'][0]['finish_reason']='tool_calls'

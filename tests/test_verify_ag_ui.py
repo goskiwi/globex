@@ -61,7 +61,7 @@ def test_verifier_observes_invalid_arguments_without_confusing_end_with_validity
     assert audit.tools["call"]["argumentsJsonValid"] is False
 
 
-@pytest.mark.parametrize("tool", ["create_order_tool", "cancel_order_tool", "remember_preference_tool"])
+@pytest.mark.parametrize("tool", ["create_order_tool", "handle_order", "remember_preference_tool"])
 def test_verifier_rejects_write_tool(tool):
     with pytest.raises(ContractViolation, match="out_of_scope_tool_requested"):
         feed(started_audit(), {"type": "TOOL_CALL_START", "toolCallId": "call", "toolCallName": tool})

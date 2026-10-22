@@ -122,7 +122,7 @@ class TestLoopDetector:
         assert hint is None and not other['stop']
         for tool in ['create_order_tool','remember_preference_tool']:
             assert detector.observation(tool,{}, {},'success',{}, read_only=False) is None
-        for tool in ['quote_products','query_order_tool']:
+        for tool in ['quote_products','handle_order']:
             assert detector.observation(tool,{}, {},'success',{}, read_only=True) is not None
 
 

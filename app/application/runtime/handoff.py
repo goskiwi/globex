@@ -142,7 +142,7 @@ class TaskEvidence:
                 id=payload.get("tool_call_id"), artifact={"data":payload})])
             return
         if name not in {"product_search_tool", "category_insight_tool", "web_search_tool",
-                        "query_order_tool", "create_order_tool", "cancel_order_tool", "quote_products"}:
+                        "handle_order", "create_order_tool", "quote_products"}:
             return
         self.successful_tools.add(name)
         if payload.get("result_ref"):
@@ -151,7 +151,7 @@ class TaskEvidence:
         if name == "quote_products":
             self._quotes(payload.get("quote", {}), payload.get("result_ref"), False, payload.get("observed_at"))
         confirmation = payload.get("confirmation") or {}
-        order = payload if name == "query_order_tool" else payload.get("order") or {}
+        order = payload.get("order") or {}
         for record in [confirmation.get("payload") or {}, order]:
             for line in record.get("items", record.get("lines", [])):
                 self.identifiers.update(str(line[k]) for k in ("product_id", "sku_id") if line.get(k))

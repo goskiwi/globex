@@ -27,7 +27,7 @@ from tests.test_ag_ui_journal import body
 
 def api_for(registry):
     from app.application.usecases.buyer_workspace import BuyerWorkspace
-    workspace = BuyerWorkspace(None, None, registry, lambda: {"product_search_tool", "query_order_tool"})
+    workspace = BuyerWorkspace(None, None, registry, lambda: {"product_search_tool", "handle_order"})
     orchestrator = MainAgentOrchestrator(SimpleNamespace(), TradeEventBus(), buyer_workspace=workspace)
     api = FastAPI()
     register_ag_ui_routes(api, lambda: orchestrator,get_runtime=unused_runtime)

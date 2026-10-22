@@ -130,7 +130,7 @@ export interface ProductView {
 }
 
 export interface Presentation {
-  id:string; runId:string; kind:"recommendation"|"comparison"|"product_view"|"research"|"clarification";
+  id:string; runId:string; kind:"recommendation"|"comparison"|"product_view"|"research"|"clarification"|"order";
   status:"completed"|"partial"|"needs_input"; payload:Record<string,unknown>;
 }
 
@@ -279,4 +279,16 @@ export interface ResearchDelivery {
   status: 'completed' | 'partial';
   task_ids: string[];
   completed_task_ids: string[];
+}
+
+
+export interface OrderView {
+  order_id:string; status:'DRAFT'|'CONFIRMED'|'CANCELLED'; currency:string; total_amount_minor:number;
+  total_amount_major:number; created_at:string; shipping_address:string; cancel_reason:string|null;
+  lines:{product_id:string;sku_id:string;title:string;unit_price_major:number;quantity:number}[];
+}
+export interface OrderOutcome {
+  order:OrderView; observed_at:string; status:'completed'|'partial'; guidance:string;
+  operation:{kind:'inspect'|'prepare_cancel';status:'completed'|'awaiting_confirmation'|'rejected';rejection:{code:string;message:string}|null};
+  confirmation_required:boolean; confirmation:TradeConfirmation|null;
 }

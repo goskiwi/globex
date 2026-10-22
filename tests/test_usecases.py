@@ -4,7 +4,7 @@ import pytest
 
 from app.application.usecases.catalog_search import CatalogSearchUseCase
 from app.application.usecases.order_usecases import (
-    CancelOrderUseCase,
+    HandleOrderUseCase,
     OrderItemInput,
     PlaceOrderUseCase,
     QueryOrderUseCase,
@@ -68,7 +68,7 @@ class TestOrderLifecycle:
         env = confirmation_env
         place = PlaceOrderUseCase(env.service)
         query = QueryOrderUseCase(env.store)
-        cancel = CancelOrderUseCase(env.service)
+        cancel = HandleOrderUseCase(env.service)
 
         prepared = await place.execute(
             buyer_id="buyer-1",
@@ -93,9 +93,7 @@ class TestOrderLifecycle:
         queried = await query.execute(snapshot["order_id"], buyer_id="buyer-1")
         assert queried["order_id"] == snapshot["order_id"]
 
-        cancellation = await cancel.execute(
-            snapshot["order_id"], "买家改主意了", buyer_id="buyer-1", session_id="session-1",
-        )
+        cancellation = await cancel.execute(snapshot['order_id'], cancellation={'reason': '买家改主意了'}, buyer_id='buyer-1', session_id='session-1')
         assert (await env.store.get_inventory(["P1001-S1"]))["P1001-S1"] == 48
         confirmation = cancellation["confirmation"]
         cancelled = (await env.service.resolve(

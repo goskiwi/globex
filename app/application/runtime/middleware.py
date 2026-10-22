@@ -124,7 +124,7 @@ class BusinessToolMiddleware(AgentMiddleware):
                         from app.application.runtime.model_views import presentation_receipt
                         receipt=project_data(receipt,presentation_receipt(accepted['kind'],full),notices=notices)
                         processed[-1]=receipt
-                    if receipt.status == 'success' and isinstance(full, dict) and full.get('confirmation_required') is True:
+                    if receipt.status == 'success' and name not in DELIVERY_KINDS and isinstance(full, dict) and full.get('confirmation_required') is True:
                         from app.application.runtime.delivery import confirmation_delivery
                         operation=confirmation_delivery(full,event_id)
                         operations.append(operation)

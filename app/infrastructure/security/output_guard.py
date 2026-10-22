@@ -21,12 +21,13 @@ import re
 
 REDACTED = "[已脱敏]"
 
-# 真实存在的内部工具名（与 app/application/tools/ 一致）
+# 当前工具与历史工具名均脱敏；保留历史名称不代表注册旧执行入口。
 _INTERNAL_TOOLS = (
     "product_search_tool",
     "category_insight_tool",
     "web_search_tool",
     "create_order_tool",
+    "handle_order",
     "query_order_tool",
     "cancel_order_tool",
     "remember_preference_tool",

@@ -25,3 +25,14 @@ class CreateOrderInput(BaseModel):
         if len({item.sku_id for item in self.items}) != len(self.items):
             raise ValueError("items中的SKU不得重复")
         return self
+
+
+class CancellationInput(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    reason: str = Field(min_length=1, max_length=500, description='买家提供的取消原因')
+
+
+class HandleOrderInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    order_id: str = Field(min_length=1, max_length=32, description='当前买家的订单号')
+    cancellation: CancellationInput | None = Field(default=None, description='需要准备取消时填写；省略或null只查看订单')

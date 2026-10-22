@@ -25,7 +25,7 @@ async def test_quote_confirmation_order_and_cancel_share_amounts(confirmation_en
     assert approved["pricing"] == quote
     assert approved["total_amount_minor"] == quote["total_amount_minor"]
     assert approved["total_amount_major"] == quote["total_amount_minor"] / 100
-    cancellation = (await env.service.prepare_cancel("buyer-1", "session-1", approved["order_id"], "测试"))["confirmation"]
+    cancellation = (await env.service.handle_order('buyer-1', 'session-1', approved['order_id'], {'reason': '测试'}))["confirmation"]
     assert cancellation["payload"]["total_amount_minor"] == quote["total_amount_minor"]
     replay = await env.service.resolve(prepared["confirmation_id"], "buyer-1", "session-1", prepared["snapshot_hash"], True)
     assert replay["order"] == approved
@@ -145,7 +145,7 @@ async def test_cancel_does_not_restore_mutated_order_quantities(confirmation_env
     env = confirmation_env
     c = (await env.service.prepare_order("buyer-1", "session-1", [OrderItemInput("P1001", "P1001-S1", 1)], address()))["confirmation"]
     order = (await env.service.resolve(c["confirmation_id"], "buyer-1", "session-1", c["snapshot_hash"], True))["order"]
-    cancel = (await env.service.prepare_cancel("buyer-1", "session-1", order["order_id"], "测试"))["confirmation"]
+    cancel = (await env.service.handle_order('buyer-1', 'session-1', order['order_id'], {'reason': '测试'}))["confirmation"]
     stock = await env.store.get_inventory()
     async with env.engine.begin() as db:
         await db.execute(update(OrderLineRow).where(OrderLineRow.order_id == order["order_id"]).values(quantity=10))

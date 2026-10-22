@@ -45,7 +45,7 @@ async def test_valid_catalog_identifier_is_not_a_business_rejection(tmp_path,mon
 async def test_saved_plan_does_not_block_independent_delegation(tmp_path,monkeypatch,role):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008','sku_id':'P1008-S1'}),submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'独立水杯研究'}])])
     if role=='trade_agent':
-        child=ScriptedModel(responses=[call('query_order_tool',{'order_id':'synthetic-missing-order'}),submission(status='failed',issues=['订单未找到'])])
+        child=ScriptedModel(responses=[call('handle_order',{'order_id': 'synthetic-missing-order', 'turn_action': 'continue'}),submission(status='failed',issues=['订单未找到'])])
     parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'保留背包研究'}]}),AIMessage(content='计划已保存，暂不执行。'),call('task_dispatch',{'subagent_type':role,'task':{'goal':'独立查询一个订单' if role=='trade_agent' else '独立研究水杯'}}),AIMessage(content='已返回')])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)

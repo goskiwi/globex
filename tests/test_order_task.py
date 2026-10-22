@@ -44,3 +44,37 @@ async def test_unowned_order_never_returns_a_view(confirmation_env,cancel):
     e=confirmation_env;order=await create(e)
     with pytest.raises(ValueError):
         await e.service.handle_order('other','other-session',order['order_id'],{'reason':'越权'} if cancel else None)
+
+@pytest.mark.parametrize('mode',['inspect','cancel','rejected'])
+async def test_model_order_task_delivers_once_and_restores_across_turns(tmp_path,monkeypatch,mode):
+    from types import SimpleNamespace
+    from tests.test_langgraph_runtime import _container
+    from tests.test_agent_handoff import ScriptedModel,call
+    from tests.test_execution_facts import request
+    from scripts.eval.trace import tool_observations
+    model=ScriptedModel(responses=[])
+    c=await _container(tmp_path,monkeypatch,model)
+    e=SimpleNamespace(service=c.confirmations,store=c.trade_store)
+    try:
+        order=await create(e)
+        if mode=='rejected':
+            p=await c.confirmations.handle_order('buyer','facts-session',order['order_id'],{'reason':'已取消'})
+            card=p['confirmation'];await c.confirmations.resolve(card['confirmation_id'],'buyer','facts-session',card['snapshot_hash'],True)
+        args={'order_id':order['order_id']}
+        if mode!='inspect':args['cancellation']={'reason':'重复选购'}
+        model.responses.append(call('handle_order',args,turn_action='finish'))
+        await c.runs.startup();await c.runs.start(request('order-task'),'buyer')
+        saved=await c.runs.wait('order-task','buyer',10)
+        assert saved['result']['status']==('partial' if mode=='rejected' else 'completed')
+        assert model.cursor==1
+        panels=saved['state']['presentations'];assert len(panels)==1 and panels[0]['kind']=='order'
+        data=panels[0]['payload'];assert data['order']['created_at'] and data['observed_at']
+        assert data['operation']['status']=={'inspect':'completed','cancel':'awaiting_confirmation','rejected':'rejected'}[mode]
+        rows,_,_=await c.runs.journal.events('order-task','buyer')
+        assert [r['name'] for r in tool_observations([r['event'] for r in rows])]==['handle_order']
+        assert saved['messages'][-1]['content']==data['guidance']
+        history=await c.runs.journal.session('facts-session','buyer')
+        assert history['presentations']==panels
+        tools=c.orchestrator._sessions._agents['facts-session'].tool_names
+        assert 'handle_order' in tools and not {'query_order_tool','cancel_order_tool'}&tools
+    finally:await c.shutdown()

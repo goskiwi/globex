@@ -55,7 +55,7 @@ class TestHarnessMiddleware:
         settings = replace(_settings(tmp_path), harness_enabled=True)
         bus, circuit, throttle = TradeEventBus(), CircuitBreakerRegistry(), GatewayThrottle(1, 0)
         search = SearchAgentFactory(settings, __import__('app.application.usecases.catalog_search', fromlist=['CatalogSearchUseCase']).CatalogSearchUseCase(None), bus, None, circuit, throttle, model_client=None)
-        orders = TradeAgentFactory(settings, None, None, None, bus, circuit, throttle, model_client=None)
+        orders = TradeAgentFactory(settings, None, None, bus, circuit, throttle, model_client=None)
         main = MainAgentFactory(settings, search, orders, bus, None, circuit, throttle,
             checkpointer=InMemorySaver(), loop_detector=LoopDetector(repeat_threshold=3), model_client=None)
         assert search._loop_detector is orders._loop_detector is main._loop_detector

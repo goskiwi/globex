@@ -70,7 +70,7 @@ async def test_delivered_card_stays_complete_while_next_model_receives_only_rece
                     'guidance': '这款适合随身携带，详细资料在卡片。', 'turn_action':'finish',
                 'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1,
                            'reason': '重量轻且可折叠', 'tradeoffs': ['未标注电脑隔层']}]}},
-            {'id': 'read', 'name': 'query_order_tool', 'args': {'order_id': 'UNKNOWN'}}]),
+            {'id': 'read', 'name': 'handle_order', 'args': {'order_id': 'UNKNOWN', 'turn_action': 'continue'}}]),
         AIMessage(content='卡片已展示，订单号未找到。')])
     container = await _container(tmp_path, monkeypatch, model)
     catalog = container.orchestrator._sessions._main_factory._search_factory._catalog_search

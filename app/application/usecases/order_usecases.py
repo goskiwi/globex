@@ -50,18 +50,12 @@ class QueryOrderUseCase:
         return await self._trade_store.get_order(order_id, buyer_id=buyer_id)
 
 
-class CancelOrderUseCase:
-    def __init__(self, confirmations: ConfirmationService) -> None:
-        self._confirmations = confirmations
-
-    async def execute(self, order_id: str, reason: str, *, buyer_id: str, session_id: str) -> dict:
-        """只准备取消确认；库存回补由用户确认后的单个事务执行。"""
-        return await self._confirmations.prepare_cancel(buyer_id, session_id, order_id, reason)
-
 
 class HandleOrderUseCase:
     def __init__(self, confirmations: ConfirmationService) -> None:
         self._confirmations = confirmations
 
     async def execute(self, order_id: str, *, buyer_id: str, session_id: str, cancellation: dict | None = None) -> dict:
-        return await self._confirmations.handle_order(buyer_id, session_id, order_id, cancellation)
+        from app.application.usecases.order_outcome import order_guidance
+        result = await self._confirmations.handle_order(buyer_id, session_id, order_id, cancellation)
+        return {**result, "guidance":order_guidance(result)}
