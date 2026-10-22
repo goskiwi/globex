@@ -160,7 +160,8 @@ class MainAgentOrchestrator:
         session_id = intent.shopping_session_id
         try:
             session = await self._sessions.get_or_create(session_id)
-            snapshot = await session.graph.aget_state(session.config)
+            from app.application.runtime.graph_recovery import recover_graph
+            snapshot = await recover_graph(session)
             pending = snapshot.interrupts
             if intent.confirmations:
                 if not pending:
@@ -241,6 +242,9 @@ class MainAgentOrchestrator:
                 execution = ExecutionResult(final_text, "needs_input")
             return SubmitIntentOutput(session_id, final_text, status=execution.status, stop_reason=execution.stop_reason,
                                       presentations=execution.presentations)
+        except RunPersistenceError:
+            text = '执行记录尚未完整保存；涉及写入请先核查订单和确认单，不直接重复操作。'
+            return SubmitIntentOutput(session_id, text, text, 'PERSISTENCE_FAILED', status='failed', stop_reason='persistence_error')
         except ContextCapacityError:
             text = "本次比较的内容超过安全上下文容量。原始记录已保留，请缩小商品范围或分批比较。"
             final_text = text

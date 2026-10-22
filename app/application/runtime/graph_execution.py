@@ -1,10 +1,10 @@
 """图执行边界：模型流观察、预算停止、未完成调用收口与结果投影。"""
 import asyncio
+import logging
 
 from opentelemetry import trace
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
-from langgraph.graph import END
 from langgraph.errors import GraphRecursionError
 
 from app.application.runtime.events import ModelStarted, ModelFinished
@@ -13,6 +13,10 @@ from app.application.runtime.handoff import TaskEvidence
 from app.application.runtime.execution import ExecutionResult
 from app.infrastructure.budget import get_budget
 from app.infrastructure.eventbus import observe_run_events
+from app.application.runtime.graph_recovery import close_graph
+from app.application.runtime.finalization import RunPersistenceError
+
+logger = logging.getLogger(__name__)
 
 def _message_text(message: BaseMessage | None) -> str:
     if message is None:
@@ -79,29 +83,27 @@ async def execute_graph(session_id: str, session, graph_input, event_observer=No
             closing_reason = "incomplete"
             if observer.interrupted:
                 raise asyncio.CancelledError()
-    except (asyncio.CancelledError, ExecutionStopped, GraphRecursionError, ContextCapacityError) as error:
+    except (asyncio.CancelledError, Exception) as error:
         cancelled = isinstance(error, asyncio.CancelledError)
         reason = 'cancelled' if cancelled else error.reason if isinstance(error, ExecutionStopped) else (
-            "context_capacity" if isinstance(error, ContextCapacityError) else "step_limit")
+            'context_capacity' if isinstance(error, ContextCapacityError) else
+            'step_limit' if isinstance(error, GraphRecursionError) else 'execution_error')
         closing_reason = reason
-        text = "本轮执行已中断；已完成操作保留，未完成调用不会自动重放。" if cancelled else evidence.stopped_text(reason)
-        # 原生 END 更新提交已完成并行节点的 pending writes，并清除未运行任务。
-        # 不调用模型补总结，也不 resume 任何写工具。
-        await session.graph.aupdate_state(session.config, None, as_node=END)
-        snapshot = await session.graph.aget_state(session.config)
-        messages = snapshot.values.get("messages", [])
-        answered = {m.tool_call_id for m in messages if isinstance(m, ToolMessage)}
-        unfinished = [ToolMessage(tool_call_id=c["id"], name=c["name"], status="error",
-            content="本轮执行已停止，此调用未取得完整结果；涉及写入请先核查状态，不得直接重放。",
-            artifact={"stop_reason": reason})
-            for m in messages if isinstance(m, AIMessage)
-            for c in [*m.tool_calls, *m.invalid_tool_calls] if c["id"] not in answered]
-        facts.observe(unfinished)
-        final = AIMessage(content=text, additional_kwargs={"execution_stop": reason})
-        await session.graph.aupdate_state(session.config, {"messages": [*unfinished, final]}, as_node="model")
-        await session.graph.aupdate_state(session.config, None, as_node=END)
+        text = ('本轮执行已中断；已完成操作保留，未完成调用不会自动重放。' if cancelled else
+                '执行发生故障；已保存结果保留，涉及写入请先核查状态。' if reason == 'execution_error' else
+                evidence.stopped_text(reason))
+        try:
+            snapshot, unfinished = await close_graph(session, reason, text)
+            facts.observe(unfinished)
+        except Exception as persistence_error:
+            logger.error('图执行收尾未保存：原故障=%s，保存故障=%s', type(error).__name__, type(persistence_error).__name__)
+            if cancelled:
+                raise error from persistence_error
+            raise RunPersistenceError('执行后的图状态未保存，请先核查状态') from persistence_error
         # 用户停止、服务中断也必须先关闭持久工具批次，再交给运行服务记录停止状态。
         if cancelled:
+            raise
+        if reason == 'execution_error':
             raise
         from app.application.runtime.request_scope import ShoppingContext
         context=ShoppingContext.current()

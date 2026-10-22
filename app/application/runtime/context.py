@@ -13,6 +13,7 @@ from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.context_products import token_estimate
 from app.application.runtime.errors import ContextCapacityError
 from app.application.runtime.results import message_data, project_data
+from app.application.runtime.tool_history import tool_call_records
 from app.infrastructure.budget import get_budget
 from app.infrastructure.context_usage import context_call_kind, record_context_diagnostic, context_request_details
 from opentelemetry import trace
@@ -85,16 +86,15 @@ def summary_boundary(messages, user_indexes, protected):
     """摘要只覆盖完整早期轮次；保留当前及两个完成轮次和全部未决调用。"""
     limit = user_indexes[-3] if len(user_indexes) >= 3 else 0
     limit = min(limit, min((i for i, m in enumerate(messages) if m.id in protected), default=len(messages)))
-    calls = {call['id']: i for i, message in enumerate(messages) if isinstance(message, AIMessage)
-             for call in [*message.tool_calls, *message.invalid_tool_calls]}
-    results = {message.tool_call_id: i for i, message in enumerate(messages) if isinstance(message, ToolMessage)}
-    for identifier in calls.keys() - results.keys():
-        limit = min(limit, calls[identifier])
+    records = tool_call_records(messages)
+    for record in records:
+        if record.receipt is None:
+            limit = min(limit, record.index)
     cut = max((i for i in user_indexes if i <= limit), default=0)
     # 工具对即使跨越买家消息也必须位于同一侧，不能生成孤立工具结果。
     while True:
-        crossing = [index for identifier, index in calls.items()
-                    if index < cut <= results.get(identifier, -1)]
+        crossing = [r.index for r in records
+                    if r.receipt_index is not None and r.index < cut <= r.receipt_index]
         if not crossing:
             return cut
         cut = max((i for i in user_indexes if i <= min(crossing)), default=0)

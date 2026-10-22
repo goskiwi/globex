@@ -6,18 +6,9 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.types import Command
 from app.application.runtime.events import ToolEvent
 from app.application.runtime.results import message_data, receipt_failure
+from app.application.runtime.tool_history import call_identity, execution_call
 
 _current: ContextVar['ExecutionFacts | None'] = ContextVar('execution_facts', default=None)
-
-
-def call_identity(message, call_id):
-    return f'{message.id}:{call_id}'
-
-
-def execution_call(messages, call_id):
-    message = next(m for m in reversed(messages) if isinstance(m, AIMessage)
-                   and any(c['id'] == call_id for c in [*m.tool_calls, *m.invalid_tool_calls]))
-    return message, next(c for c in [*message.tool_calls, *message.invalid_tool_calls] if c['id'] == call_id)
 
 
 class ExecutionFacts:
@@ -89,7 +80,10 @@ class ExecutionFacts:
             if isinstance(message, AIMessage):
                 self.register(message, scope, announce=not seed)
             elif isinstance(message, ToolMessage):
-                identifier = self.message_calls.get(message.id) or self.scopes.get(scope, {}).get(message.tool_call_id)
+                identifier = ((message.artifact or {}).get('execution_id') or self.message_calls.get(message.id)
+                              or self.scopes.get(scope, {}).get(message.tool_call_id))
+                if identifier not in self.calls:
+                    continue
                 if identifier is not None and message.id is not None:
                     self.message_calls[message.id] = identifier
                 if identifier is not None and seed:

@@ -42,7 +42,8 @@ class BusinessToolMiddleware(AgentMiddleware):
         from app.application.runtime.results import message_data, project_data, tool_receipts, replace_receipts, receipt_failure
         name, call_id = request.tool_call["name"], request.tool_call["id"]
         session = ShoppingContext.current_session_id()
-        from app.application.runtime.facts import ExecutionFacts, execution_call, call_identity
+        from app.application.runtime.facts import ExecutionFacts
+        from app.application.runtime.tool_history import execution_call, call_identity
         run_facts = ExecutionFacts.current()
         message, _ = execution_call(request.state['messages'], call_id)
         event_id = run_facts.begin(request.state['messages'], call_id) if run_facts else call_identity(message, call_id)
