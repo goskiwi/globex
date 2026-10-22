@@ -31,6 +31,10 @@ class TradeStore(ABC):
     ) -> dict: ...
 
     @abstractmethod
+    async def handle_order(self, order_id: str, *, buyer_id: str, session_id: str, cancellation: dict | None = None) -> dict:
+        """一次读取返回订单视图与可选取消确认；业务拒绝保留已授权取得的状态。"""
+
+    @abstractmethod
     async def get_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,
     ) -> dict: ...

@@ -196,6 +196,28 @@ class SqlTradeStore(TradeStore):
         self, *, operation_id: str, buyer_id: str, session_id: str,
         action: Literal["create", "cancel"], payload: dict, expires_at: datetime,
     ) -> dict:
+        async with self._transaction() as db:
+            result = await self._prepare_confirmation(db, operation_id=operation_id, buyer_id=buyer_id,
+                session_id=session_id, action=action, payload=payload, expires_at=expires_at)
+            if result['rejection'] is not None:
+                raise TradeStoreError(result['rejection']['code'], result['rejection']['message'])
+            return result['confirmation']
+
+    async def handle_order(self, order_id: str, *, buyer_id: str, session_id: str, cancellation: dict | None = None) -> dict:
+        """订单查看及可选取消准备；订单视图与确认单来自同一次权威读取。"""
+        _string(order_id, 'order_id', 32)
+        _string(buyer_id, 'buyer_id', 64)
+        _string(session_id, 'session_id', 64)
+        if cancellation is None:
+            async with self._read_snapshot() as db:
+                order, lines = await self._owned_order(db, order_id, buyer_id)
+                return {'order': self._order_snapshot(order, lines), 'confirmation': None, 'rejection': None}
+        async with self._transaction() as db:
+            return await self._prepare_confirmation(db, operation_id=cancellation['operation_id'],
+                buyer_id=buyer_id, session_id=session_id, action='cancel',
+                payload={'order_id':order_id, 'reason':cancellation['reason']}, expires_at=cancellation['expires_at'])
+
+    async def _prepare_confirmation(self, db, *, operation_id, buyer_id, session_id, action, payload, expires_at):
         operation_id = _string(operation_id, "operation_id", 128)
         buyer_id = _string(buyer_id, "buyer_id", 64)
         session_id = _string(session_id, "session_id", 64)
@@ -208,41 +230,50 @@ class SqlTradeStore(TradeStore):
             raise TradeStoreError("INVALID_ARGUMENT", "不支持的交易操作")
         request_hash = _hash({"action": action, "payload": request})
         expiry = _utc(expires_at)
-        async with self._transaction() as db:
-            existing = await db.scalar(select(TradeConfirmationRow).where(TradeConfirmationRow.operation_id == operation_id))
-            if existing is not None:
-                self._owner(existing, buyer_id, session_id)
-                if existing.request_hash != request_hash:
-                    raise TradeStoreError("OPERATION_CONFLICT", "同一操作编号不能更改商品、数量、地址或操作")
-                return self._confirmation(existing)
-            now = _utc(self._clock())
-            if expiry <= now:
-                raise TradeStoreError("CONFIRMATION_EXPIRED", "确认有效期已过，请重新生成确认")
-            if action == "create":
-                normalized = request
-                for item in normalized["items"]:
-                    inventory = await self._quoted_inventory(db, item)
-                    if inventory.stock < item["quantity"]:
-                        raise TradeStoreError("INSUFFICIENT_STOCK", f"SKU {item['sku_id']} 库存不足")
-                    item["title"] = inventory.title
-            else:
-                order, lines = await self._owned_order(db, request["order_id"], buyer_id)
-                if order.status != "CONFIRMED":
-                    raise TradeStoreError("ORDER_CHANGED", "只有已确认且未取消的订单可以发起取消")
-                normalized = self._cancel_payload(order, lines, request["reason"])
-            confirmation_id = uuid.uuid4().hex
-            binding = {"buyer_id": buyer_id, "session_id": session_id, "action": action,
-                       "payload": normalized, "expires_at": expiry.isoformat()}
-            row = TradeConfirmationRow(
-                confirmation_id=confirmation_id, operation_id=operation_id,
-                buyer_id=buyer_id, session_id=session_id, action=action,
-                request_hash=request_hash, payload=normalized, snapshot_hash=_hash(binding),
-                expires_at=expiry.isoformat(), status="pending", result=None,
-                created_at=now.isoformat(), resolved_at=None,
-            )
-            db.add(row)
-            await db.flush()
-            return self._confirmation(row)
+        existing = await db.scalar(select(TradeConfirmationRow).where(TradeConfirmationRow.operation_id == operation_id))
+        if existing is not None:
+            self._owner(existing, buyer_id, session_id)
+            if existing.request_hash != request_hash:
+                raise TradeStoreError("OPERATION_CONFLICT", "同一操作编号不能更改商品、数量、地址或操作")
+            snapshot = None
+            if action == 'cancel':
+                order, lines = await self._owned_order(db, request['order_id'], buyer_id)
+                snapshot = self._order_snapshot(order, lines)
+            return {'confirmation': self._confirmation(existing), 'order': snapshot, 'rejection': None}
+        now = _utc(self._clock())
+        if expiry <= now:
+            raise TradeStoreError("CONFIRMATION_EXPIRED", "确认有效期已过，请重新生成确认")
+        snapshot = None
+        if action == "create":
+            normalized = request
+            for item in normalized["items"]:
+                inventory = await self._quoted_inventory(db, item)
+                if inventory.stock < item["quantity"]:
+                    raise TradeStoreError("INSUFFICIENT_STOCK", f"SKU {item['sku_id']} 库存不足")
+                item["title"] = inventory.title
+        else:
+            order, lines = await self._owned_order(db, request["order_id"], buyer_id)
+            snapshot = self._order_snapshot(order, lines)
+            try:
+                if order.status != 'CONFIRMED':
+                    raise TradeStoreError('ORDER_CHANGED', '只有已确认且未取消的订单可以发起取消')
+                normalized = self._cancel_payload(order, lines, request['reason'])
+            except TradeStoreError as error:
+                return {'confirmation': None, 'order': snapshot,
+                        'rejection': {'code': error.code, 'message': str(error)}}
+        confirmation_id = uuid.uuid4().hex
+        binding = {"buyer_id": buyer_id, "session_id": session_id, "action": action,
+                   "payload": normalized, "expires_at": expiry.isoformat()}
+        row = TradeConfirmationRow(
+            confirmation_id=confirmation_id, operation_id=operation_id,
+            buyer_id=buyer_id, session_id=session_id, action=action,
+            request_hash=request_hash, payload=normalized, snapshot_hash=_hash(binding),
+            expires_at=expiry.isoformat(), status="pending", result=None,
+            created_at=now.isoformat(), resolved_at=None,
+        )
+        db.add(row)
+        await db.flush()
+        return {'confirmation': self._confirmation(row), 'order': snapshot, 'rejection': None}
 
     async def get_confirmation(self, confirmation_id: str, *, buyer_id: str, session_id: str) -> dict:
         async with self._sessions() as db:

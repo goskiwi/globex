@@ -111,6 +111,24 @@ class ConfirmationService:
         self._publish(session_id, "confirmation.required", confirmation)
         return self._envelope(confirmation)
 
+    async def handle_order(self, buyer_id: str, session_id: str, order_id: str, cancellation: dict | None = None) -> dict:
+        self._identity(buyer_id, session_id)
+        _required_text(order_id, '订单号')
+        request = None
+        if cancellation is not None:
+            request = {'reason': _required_text(cancellation['reason'], '取消原因').strip(),
+                'operation_id': 'operation-' + uuid.uuid4().hex, 'expires_at': self._clock() + self._ttl}
+        result = await self._trade_store.handle_order(order_id, buyer_id=buyer_id, session_id=session_id, cancellation=request)
+        confirmation = result['confirmation']
+        if confirmation is not None:
+            self._publish(session_id, 'confirmation.required', confirmation)
+        rejection = result['rejection']
+        return {'order':result['order'], 'operation': {'kind':'prepare_cancel' if request is not None else 'inspect',
+                'status':'rejected' if rejection else 'awaiting_confirmation' if confirmation is not None else 'completed',
+                'rejection': rejection},
+            'confirmation_required': confirmation is not None and confirmation['status']=='pending',
+            'confirmation': confirmation, 'status':'partial' if rejection else 'completed'}
+
     async def resolve(
         self, confirmation_id: str, buyer_id: str, session_id: str, snapshot_hash: str, approved: bool,
     ) -> dict:
