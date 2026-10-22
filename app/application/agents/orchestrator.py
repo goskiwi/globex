@@ -209,12 +209,12 @@ class MainAgentOrchestrator:
 
             messages = list(snapshot.values.get("messages", [])) if isinstance(snapshot.values, dict) else []
             trade_state = await self._trade_state_provider(intent.buyer_id, session_id) if self._trade_state_provider else {}
-            has_trade_state = bool(trade_state.get("orders") or trade_state.get("pending_confirmations"))
+            has_trade_state = bool(trade_state.get("order_refs") or trade_state.get("pending_confirmations"))
             inputs = [HumanMessage(content=intent.raw_query, name=intent.buyer_id,
                                    id=intent.message_id or None)]
             if has_trade_state:
                 inputs.insert(0, SystemMessage(content=(
-                    "以下是服务端交易账本当前事实。待确认不等于已执行，不能代替买家批准。\n"
+                    "以下是有效待确认操作与历史订单引用。引用仅用于定位订单，当前状态由订单任务读取；待确认不等于已执行。\n"
                     + json.dumps(trade_state, ensure_ascii=False)
                 ), name="trade_state"))
             if self._evidence_store is not None:

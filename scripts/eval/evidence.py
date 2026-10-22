@@ -43,7 +43,9 @@ def _order_statuses(events):
 def _written_orders(event: dict) -> list[dict]:
     payload = event.get("payload") or {}
     orders = []
-    if isinstance(payload.get("order"), dict):
+    operation = payload.get('operation')
+    inspected = isinstance(operation, dict) and operation.get('kind') in {'inspect', 'prepare_cancel'}
+    if isinstance(payload.get("order"), dict) and not inspected:
         orders.append(payload["order"])
     confirmation = payload.get("confirmation")
     if isinstance(confirmation, dict) and isinstance(confirmation.get("result"), dict):

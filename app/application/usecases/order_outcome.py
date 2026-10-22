@@ -15,7 +15,7 @@ def order_guidance(outcome):
 
 
 def order_model_receipt(outcome):
-    return {'displayed':True, 'kind':'order', 'status':outcome['status'],
+    return {'displayed':True, 'kind':'order', 'status':outcome['status'], 'observed_at':outcome['observed_at'],
         'order':{key:outcome['order'][key] for key in ('order_id','status','currency','total_amount_minor','created_at')},
         'operation':outcome['operation'], 'confirmation_required':outcome['confirmation_required'],
         'confirmation_id':outcome['confirmation']['confirmation_id'] if outcome['confirmation'] is not None else None}

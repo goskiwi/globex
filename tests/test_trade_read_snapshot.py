@@ -38,15 +38,17 @@ async def test_approval_during_state_read_keeps_one_consistent_snapshot(confirma
     state = await reader
     assert len(state["pending_confirmations"]) == 1
     if cancel:
-        assert state["orders"][0]["order_id"] == order_id
-        assert state["orders"][0]["status"] == "CONFIRMED"
+        assert state["order_refs"][0]["order_id"] == order_id
+        assert set(state["order_refs"][0]) == {"order_id","created_at","items"}
         assert committed["order"]["status"] == "CANCELLED"
     else:
-        assert state["orders"] == []
+        assert state["order_refs"] == []
         assert committed["order"]["status"] == "CONFIRMED"
     after = await env.service.agent_state("buyer-1", "session-1")
     assert after["pending_confirmations"] == []
-    assert after["orders"][0]["status"] == committed["order"]["status"]
+    assert [r["order_id"] for r in after["order_refs"]] == [committed["order"]["order_id"]]
+    assert after["order_refs"][0]["created_at"] == committed["order"]["created_at"]
+    assert (await env.store.get_order(committed["order"]["order_id"], buyer_id="buyer-1"))["status"] == committed["order"]["status"]
 
 
 async def test_current_transactions_survive_more_than_twenty_history_records(confirmation_env):
@@ -58,10 +60,10 @@ async def test_current_transactions_survive_more_than_twenty_history_records(con
         env.now[0] += timedelta(seconds=1)
         await approve(env, await prepare(env), approved=False)
     state = await env.service.agent_state("buyer-1", "session-1")
-    assert state["orders"][0]["order_id"] == created["order"]["order_id"]
+    assert state["order_refs"][0]["order_id"] == created["order"]["order_id"]
     assert len(state["pending_confirmations"]) == 1
     restored = (await env.service.restore("buyer-1", "session-1"))["confirmations"]
     assert len(restored) == 21
     assert pending["confirmation_id"] in {c["confirmation_id"] for c in restored}
     assert (await env.service.restore("other", "session-1"))["confirmations"] == []
-    assert (await env.service.agent_state("buyer-1", "other")) == {"orders": [], "pending_confirmations": []}
+    assert (await env.service.agent_state("buyer-1", "other")) == {"order_refs": [], "pending_confirmations": []}

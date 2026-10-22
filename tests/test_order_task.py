@@ -3,13 +3,14 @@ import pytest
 from app.application.usecases.order_usecases import OrderItemInput,HandleOrderUseCase
 from tests.trade_test_helpers import confirmation_env,test_address as address
 
-async def create(e):
-    p=await e.service.prepare_order('buyer','session',[OrderItemInput('P1003','P1003-S1',1)],address(),'CNY')
-    c=p['confirmation'];return (await e.service.resolve(c['confirmation_id'],'buyer','session',c['snapshot_hash'],True))['order']
+async def create(e, session='session'):
+    p=await e.service.prepare_order('buyer',session,[OrderItemInput('P1003','P1003-S1',1)],address(),'CNY')
+    c=p['confirmation'];return (await e.service.resolve(c['confirmation_id'],'buyer',session,c['snapshot_hash'],True))['order']
 
 @pytest.mark.parametrize('cancel',[False,True])
 async def test_order_task_reads_once_and_returns_complete_order(confirmation_env,cancel):
     e=confirmation_env;order=await create(e);inventory=await e.store.get_inventory()
+    confirmations=await e.store.list_confirmations(buyer_id='buyer',session_id='session')
     reads=[];original=e.store._owned_order
     async def observed(*args):reads.append(args[1]);return await original(*args)
     e.store._owned_order=observed
@@ -26,7 +27,10 @@ async def test_order_task_reads_once_and_returns_complete_order(confirmation_env
         reads.clear()
         await e.service.resolve(card['confirmation_id'],'buyer','session',card['snapshot_hash'],True)
         assert reads==[order['order_id']], '买家确认是另一次独立权威核验，不能用准备快照替代'
-    else:assert outcome['confirmation'] is None and outcome['operation']['kind']=='inspect'
+    else:
+        assert outcome['confirmation'] is None and outcome['operation']['kind']=='inspect'
+        assert await e.store.list_confirmations(buyer_id='buyer',session_id='session')==confirmations
+        assert (await e.store.list_orders(buyer_id='buyer'))['total']==1
 
 async def test_rejected_cancellation_keeps_owned_current_order_without_confirmation(confirmation_env):
     e=confirmation_env;order=await create(e)
@@ -56,10 +60,13 @@ async def test_model_order_task_delivers_once_and_restores_across_turns(tmp_path
     c=await _container(tmp_path,monkeypatch,model)
     e=SimpleNamespace(service=c.confirmations,store=c.trade_store)
     try:
-        order=await create(e)
+        order=await create(e,session='facts-session')
         if mode=='rejected':
             p=await c.confirmations.handle_order('buyer','facts-session',order['order_id'],{'reason':'已取消'})
             card=p['confirmation'];await c.confirmations.resolve(card['confirmation_id'],'buyer','facts-session',card['snapshot_hash'],True)
+        reads=[];original=c.trade_store._owned_order
+        async def measured(*args):reads.append(args[1]);return await original(*args)
+        c.trade_store._owned_order=measured
         args={'order_id':order['order_id']}
         if mode!='inspect':args['cancellation']={'reason':'重复选购'}
         model.responses.append(call('handle_order',args,turn_action='finish'))
@@ -67,6 +74,7 @@ async def test_model_order_task_delivers_once_and_restores_across_turns(tmp_path
         saved=await c.runs.wait('order-task','buyer',10)
         assert saved['result']['status']==('partial' if mode=='rejected' else 'completed')
         assert model.cursor==1
+        assert reads==[order['order_id']], '模型前上下文只给引用，当前订单在任务内读取一次'
         panels=saved['state']['presentations'];assert len(panels)==1 and panels[0]['kind']=='order'
         data=panels[0]['payload'];assert data['order']['created_at'] and data['observed_at']
         assert data['operation']['status']=={'inspect':'completed','cancel':'awaiting_confirmation','rejected':'rejected'}[mode]

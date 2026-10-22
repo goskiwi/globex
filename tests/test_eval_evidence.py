@@ -128,3 +128,16 @@ def test_landed_price_consistency_is_checked_from_tool_facts():
 
     assert evaluate_trace_assertions(assertion, good)[0]["pass"] is True
     assert evaluate_trace_assertions(assertion, bad)[0]["pass"] is False
+
+
+@pytest.mark.parametrize('mode',['inspect','prepare_cancel'])
+def test_order_task_view_is_not_misreported_as_a_new_write(mode):
+    data={'order':{'order_id':'existing','status':'CONFIRMED'},
+          'operation':{'kind':mode,'status':'completed' if mode=='inspect' else 'awaiting_confirmation'},
+          'confirmation':None}
+    def check(payload):
+        events=[{'type':'eval.confirmations.snapshot','payload':{'confirmations':[]}},*tool_frames('handle_order',payload)]
+        return evaluate_trace_assertions([{'criterion':'先确认后写入','kind':'no_orders_before_http_confirmation'}],events)[0]['pass']
+    assert check(data)
+    assert not check({**data,'confirmation':{'result':{'order_id':'unexpected','status':'CONFIRMED'}}})
+    assert not check({'order':{'order_id':'unexpected','status':'CONFIRMED'}})

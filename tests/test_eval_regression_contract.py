@@ -103,7 +103,8 @@ def test_failed_deterministic_p1_assertion_blocks_case_even_when_score_is_above_
 def test_main_prompt_requires_authoritative_confirmation_for_order_writes():
     prompt = load_prompts()["main_agent"]["system_prompt"]
 
-    assert "只准备服务端确认单" in prompt
+    assert "create_order_tool准备下单确认" in prompt
+    assert "handle_order查看订单，并按cancellation准备取消确认" in prompt
     assert "都不能代替页面上的确认动作" in prompt
     assert "原因已给出时不要重复索要" in prompt
     assert "未在 hits 或 filtered_out 中出现" in prompt

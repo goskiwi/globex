@@ -149,9 +149,9 @@ class ConfirmationService:
         )}
 
     async def agent_state(self, buyer_id: str, session_id: str) -> dict:
-        """向模型提供精简的权威交易状态，不重复注入收货地址或确认校验值。"""
+        """向模型提供有效待确认操作和历史订单引用；当前订单事实按需读取。"""
         self._identity(buyer_id, session_id)
-        snapshot = await self._trade_store.session_trade_state(buyer_id=buyer_id, session_id=session_id)
+        snapshot = await self._trade_store.session_trade_context(buyer_id=buyer_id, session_id=session_id)
         return {
             "pending_confirmations": [{
                 "action": item["action"], "expired": item["expired"],
@@ -159,9 +159,7 @@ class ConfirmationService:
                           for line in item["payload"]["items"]],
                 "order_id": item["payload"].get("order_id"),
             } for item in snapshot["pending_confirmations"]],
-            "orders": [{key: order.get(key) for key in (
-                "order_id", "status", "currency", "total_amount_major", "lines", "cancel_reason",
-            )} for order in snapshot["orders"]],
+            "order_refs": snapshot['order_refs'],
         }
 
     async def pending(self, buyer_id: str, session_id: str) -> list[dict]:

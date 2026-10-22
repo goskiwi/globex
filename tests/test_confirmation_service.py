@@ -233,20 +233,21 @@ async def test_model_write_tools_prepare_only_and_cannot_choose_identity_approva
         ShoppingContext.reset(token)
 
 
-async def test_agent_state_restores_current_order_status_without_shipping_or_confirmation_secrets(confirmation_env):
+async def test_agent_state_restores_only_order_references_without_shipping_or_confirmation_secrets(confirmation_env):
     env = confirmation_env
     prepared = await prepare(env)
     pending = await env.service.agent_state("buyer-1", "session-1")
-    assert pending["orders"] == []
+    assert pending["order_refs"] == []
     assert pending["pending_confirmations"][0]["items"][0]["quantity"] == 1
     created = await approve(env, prepared)
     cancel = await env.service.handle_order('buyer-1', 'session-1', created['order']['order_id'], {'reason': '测试取消'})
     await approve(env, cancel)
     state = await env.service.agent_state("buyer-1", "session-1")
-    assert len(state["orders"]) == 1
-    assert state["orders"][0]["status"] == "CANCELLED"
+    assert len(state["order_refs"]) == 1
+    assert set(state["order_refs"][0]) == {"order_id","created_at","items"}
+    assert (await env.store.get_order(created["order"]["order_id"], buyer_id="buyer-1"))["status"] == "CANCELLED"
     assert state["pending_confirmations"] == []
-    assert await env.service.agent_state("another-buyer", "session-1") == {"orders": [], "pending_confirmations": []}
+    assert await env.service.agent_state("another-buyer", "session-1") == {"order_refs": [], "pending_confirmations": []}
     serialized = json.dumps(state, ensure_ascii=False)
     for sensitive in ("shipping_address", address().address_line, address().phone, "snapshot_hash", "confirmation_id"):
         assert sensitive not in serialized

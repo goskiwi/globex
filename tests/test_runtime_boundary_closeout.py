@@ -92,7 +92,7 @@ async def test_skill_success_with_notice_uses_structured_event(scope):
 async def test_order_query_survives_in_handoff_and_partial_delivery(scope):
     bus=TradeEventBus();evidence=TaskEvidence('s1')
     result={'order':{'order_id':'GBX-AUDIT','status':'CONFIRMED','currency':'CNY','total_amount_minor':15400,'created_at':'2026-10-22T00:00:00+00:00'},
-        'operation':{'kind':'inspect','status':'completed','rejection':None},'confirmation_required':False,'confirmation':None,'status':'completed','guidance':'订单状态：已确认'}
+        'operation':{'kind':'inspect','status':'completed','rejection':None},'confirmation_required':False,'confirmation':None,'status':'completed','guidance':'订单状态：已确认','observed_at':'2026-10-22T00:00:00+00:00'}
     usecase=SimpleNamespace(execute=AsyncMock(return_value=result))
     graph=tool_graph(build_handle_order_tool(usecase,bus),middlewares=[BusinessToolMiddleware(None,bus)])
     with observe_run_events(evidence.capture):await call_tool(graph,order_id='GBX-AUDIT')

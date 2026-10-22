@@ -139,19 +139,18 @@ async def test_session_lease_automatically_reloads_and_combines_caller_guard():
     assert held == []
 
 
-async def test_orchestrator_passes_recovered_trade_fact_to_model_and_bypasses_text_cache():
+async def test_orchestrator_passes_historical_order_references_without_current_state_claims():
     orchestrator, _, _ = make_orchestrator()
-    fact = {"orders": [{"order_id": "order-test", "status": "CANCELLED"}], "pending_confirmations": []}
+    fact = {"order_refs": [{"order_id": "order-test"}], "pending_confirmations": []}
     orchestrator._trade_state_provider = AsyncMock(return_value=fact)
-    orchestrator._lookup_cache = AsyncMock(return_value="旧的订单回复")
     orchestrator._reply = AsyncMock(return_value=ExecutionResult("这笔意向单已取消", "completed"))
     body = RunAgentInput.model_validate(request_data())
     result = await orchestrator.handle_intent(parse_intent(body))
     assert result.final_text == "这笔意向单已取消"
-    orchestrator._lookup_cache.assert_not_awaited()
     messages = orchestrator._reply.call_args.args[2]
     assert "order-test" in str(messages[0].content)
-    assert "CANCELLED" in str(messages[0].content)
+    assert "CANCELLED" not in str(messages[0].content)
+    assert "历史订单引用" in str(messages[0].content)
 
 
 @pytest.mark.parametrize("stage", ["session", "evidence"])

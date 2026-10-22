@@ -302,7 +302,7 @@ class SqlTradeStore(TradeStore):
             # 统一通过 _confirmation 的时区解析判断有效期，不依赖字符串排序。
             return [value for row in rows if not (value := self._confirmation(row))["expired"]]
 
-    async def session_trade_state(self, *, buyer_id: str, session_id: str) -> dict:
+    async def session_trade_context(self, *, buyer_id: str, session_id: str) -> dict:
         _string(buyer_id, "buyer_id", 64)
         _string(session_id, "session_id", 64)
         async with self._read_snapshot() as db:
@@ -312,12 +312,11 @@ class SqlTradeStore(TradeStore):
             ).order_by(TradeConfirmationRow.created_at, TradeConfirmationRow.confirmation_id)))
             pending = [value for row in rows if row.status == "pending"
                        and not (value := self._confirmation(row))["expired"]]
-            order_ids = dict.fromkeys(row.result["order_id"] for row in rows if row.result)
-            orders = []
-            for order_id in order_ids:
-                order, lines = await self._owned_order(db, order_id, buyer_id)
-                orders.append(self._order_snapshot(order, lines))
-            return {"pending_confirmations": pending, "orders": orders}
+            references = {row.result['order_id']:{
+                'order_id':row.result['order_id'], 'created_at':row.result['created_at'],
+                'items':[{key:item[key] for key in ('product_id','sku_id')} for item in row.result['lines']],
+            } for row in rows if row.result}
+            return {'pending_confirmations':pending, 'order_refs':list(references.values())}
 
     async def restore_confirmations(self, *, buyer_id: str, session_id: str, history_limit: int = 20) -> list[dict]:
         _string(buyer_id, "buyer_id", 64)
