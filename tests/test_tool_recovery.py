@@ -116,7 +116,7 @@ async def test_declared_execution_failure_counts_without_keyword(code):
     assert registry.status('lookup')=='open'
 
 
-async def test_completed_tool_is_not_replayed_when_model_fails_then_checkpoint_resumes(monkeypatch):
+async def test_completed_tool_is_not_replayed_when_model_fails_then_new_turn_starts(monkeypatch):
     from contextvars import ContextVar
     from langchain.agents import create_agent
     from langchain_core.messages import HumanMessage, AIMessage
@@ -151,6 +151,7 @@ async def test_completed_tool_is_not_replayed_when_model_fails_then_checkpoint_r
     with pytest.raises(httpx.ReadTimeout):
         await orchestrator._reply('recovery',session,[HumanMessage(content='准备')])
     assert model.failures==3 and writes==[1]
+    assert not (await graph.aget_state(session.config)).next
     model.broken=False
-    result=await graph.ainvoke(None,session.config)
-    assert writes==[1] and result['messages'][-1].content=='已有结果，无需再次执行'
+    result=await orchestrator._reply('recovery',session,[HumanMessage(content='核查已有准备结果')])
+    assert writes==[1] and result.text=='已有结果，无需再次执行'

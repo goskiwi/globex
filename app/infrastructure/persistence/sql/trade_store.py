@@ -318,7 +318,8 @@ class SqlTradeStore(TradeStore):
             } for row in rows if row.result}
             return {'pending_confirmations':pending, 'order_refs':list(references.values())}
 
-    async def restore_confirmations(self, *, buyer_id: str, session_id: str, history_limit: int = 20) -> list[dict]:
+    async def restore_confirmations(self, *, buyer_id: str, session_id: str,
+                                    confirmation_ids: list[str], history_limit: int = 20) -> dict:
         _string(buyer_id, "buyer_id", 64)
         _string(session_id, "session_id", 64)
         history_limit = min(_integer(history_limit, "history_limit", 1), 20)
@@ -332,23 +333,27 @@ class SqlTradeStore(TradeStore):
             recent = list(await db.scalars(query.where(TradeConfirmationRow.confirmation_id.not_in(active)).order_by(
                 TradeConfirmationRow.created_at.desc(), TradeConfirmationRow.confirmation_id.desc()).limit(history_limit)))
             values = [self._confirmation(row) for row in recent] + list(active.values())
-            return sorted(values, key=lambda value: (value["created_at"], value["confirmation_id"]), reverse=True)
+            return {'confirmations': sorted(values, key=lambda value: (value['created_at'], value['confirmation_id']), reverse=True),
+                    'confirmationDecisions': await self._confirmation_decisions(db, confirmation_ids, buyer_id, session_id)}
 
     async def confirmation_decisions(self, confirmation_ids: list[str], *, buyer_id: str, session_id: str) -> list[dict]:
         _string(buyer_id, 'buyer_id', 64)
         _string(session_id, 'session_id', 64)
+        async with self._read_snapshot() as db:
+            return await self._confirmation_decisions(db, confirmation_ids, buyer_id, session_id)
+
+    async def _confirmation_decisions(self, db, confirmation_ids, buyer_id, session_id):
         identifiers = list(dict.fromkeys(_string(i, 'confirmation_id', 64) for i in confirmation_ids))
         if not identifiers:
             return []
-        async with self._read_snapshot() as db:
-            rows = await db.execute(select(
-                TradeConfirmationRow.confirmation_id, TradeConfirmationRow.buyer_id, TradeConfirmationRow.session_id,
-                TradeConfirmationRow.action, TradeConfirmationRow.status, TradeConfirmationRow.expires_at,
-            ).where(TradeConfirmationRow.buyer_id == buyer_id, TradeConfirmationRow.session_id == session_id,
-                    TradeConfirmationRow.confirmation_id.in_(identifiers)))
-            now = _utc(self._clock())
-            return [{**row._asdict(), 'expired': row.status == 'pending' and datetime.fromisoformat(row.expires_at) <= now}
-                    for row in rows]
+        rows = await db.execute(select(
+            TradeConfirmationRow.confirmation_id, TradeConfirmationRow.buyer_id, TradeConfirmationRow.session_id,
+            TradeConfirmationRow.action, TradeConfirmationRow.status, TradeConfirmationRow.expires_at,
+        ).where(TradeConfirmationRow.buyer_id == buyer_id, TradeConfirmationRow.session_id == session_id,
+                TradeConfirmationRow.confirmation_id.in_(identifiers)))
+        now = _utc(self._clock())
+        return [{**row._asdict(), 'expired': row.status == 'pending' and datetime.fromisoformat(row.expires_at) <= now}
+                for row in rows]
 
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,

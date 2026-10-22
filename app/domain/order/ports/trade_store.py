@@ -53,8 +53,9 @@ class TradeStore(ABC):
         """同一读快照中的有效确认及历史订单引用，不预读当前订单状态，也不使用历史展示截断。"""
 
     @abstractmethod
-    async def restore_confirmations(self, *, buyer_id: str, session_id: str, history_limit: int = 20) -> list[dict]:
-        """恢复全部有效待确认单与最近历史；有效操作不占历史配额。"""
+    async def restore_confirmations(self, *, buyer_id: str, session_id: str,
+                                    confirmation_ids: list[str], history_limit: int = 20) -> dict:
+        """同一快照恢复有效操作、最近历史与被引用的决议；有效操作不占历史配额。"""
 
     @abstractmethod
     async def confirmation_decisions(self, confirmation_ids: list[str], *, buyer_id: str, session_id: str) -> list[dict]:

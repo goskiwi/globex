@@ -173,5 +173,5 @@ class ConfirmationService:
 
     async def restore(self, buyer_id: str, session_id: str, confirmation_ids: list[str] | None = None) -> dict:
         self._identity(buyer_id, session_id)
-        return {"confirmations": await self._trade_store.restore_confirmations(buyer_id=buyer_id, session_id=session_id),
-                "confirmationDecisions": await self.decisions(buyer_id, session_id, confirmation_ids or [])}
+        return await self._trade_store.restore_confirmations(buyer_id=buyer_id, session_id=session_id,
+                                                              confirmation_ids=confirmation_ids or [])
