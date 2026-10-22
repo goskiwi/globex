@@ -100,7 +100,7 @@ it('实际App查看到确认闭环传递精确平台SKU与展示币种，准备�
     }
     if(url.endsWith('/confirmations/orders')){
       prepared={confirmation_id:'confirm-view',operation_id:'operation-view',buyer_id:'test-buyer',session_id:session,action:'create',
-        status:'pending',result:null,snapshot_hash:'test-snapshot',expires_at:new Date(Date.now()+300000).toISOString(),expired:false,
+        status:'pending',result:null,created_at:'2026-10-22T00:00:00Z',snapshot_hash:'test-snapshot',expires_at:new Date(Date.now()+300000).toISOString(),expired:false,
         payload:{items:[{...body.items[0],title:'Roamix 雾灰',unit_price_minor:21399,currency:'CNY'}],shipping_address:body.shipping_address,
           currency:'CNY',subtotal_minor:21399,freight_minor:2500,tariff_minor:0,total_amount_minor:23899,amount_scope:'landed',order_kind:'purchase_intent'}};
       return Response.json({confirmation_required:true,confirmation:prepared});

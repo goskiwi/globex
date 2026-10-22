@@ -232,17 +232,8 @@ class AGUIRunAdapter:
             if (isinstance(confirmation, dict) and isinstance(self.request.forwarded_props, dict)
                     and confirmation.get("buyer_id") == self.request.forwarded_props.get("buyerId")
                     and confirmation.get("session_id") == self.request.thread_id):
-                previous = self.state["confirmations"]
-                entries = [copy.deepcopy(confirmation), *[
-                    item for item in previous if item["confirmation_id"] != confirmation["confirmation_id"]]]
-                active = {item["confirmation_id"] for item in entries
-                          if item["status"] == "pending" and not item.get("expired", False)}
-                history = {item["confirmation_id"] for item in entries
-                           if item["confirmation_id"] not in active}
-                # 历史展示保留20条，有效待确认单不能被后来的事件挤掉。
-                recent = [item["confirmation_id"] for item in entries if item["confirmation_id"] in history][:20]
-                self.state["confirmations"] = [item for item in entries
-                    if item["confirmation_id"] in active or item["confirmation_id"] in recent]
+                from app.application.usecases.confirmation_views import recent_confirmations
+                self.state['confirmations'] = recent_confirmations(self.state['confirmations'], [copy.deepcopy(confirmation)])
                 self.snapshot()
         elif event.type == "usage.summary":
             self.emit(CustomEvent(name="usage.summary", value=payload))

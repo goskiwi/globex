@@ -61,11 +61,12 @@ def register_confirmation_routes(api: FastAPI, service: Callable[[], Confirmatio
             raise confirmation_error(err) from err
 
     @api.get("/commerce/confirmations")
-    async def list_confirmations(request: Request, buyer_id: str = Query(min_length=1), session_id: str = Query(min_length=1)) -> dict:
+    async def list_confirmations(request: Request, buyer_id: str = Query(min_length=1), session_id: str = Query(min_length=1),
+                                 confirmation_ids: list[str] = Query(default=[])) -> dict:
         buyer_id = await require_buyer(request, buyer_id)
         await require_session(request, buyer_id, session_id)
         try:
-            return public().business(await service().restore(buyer_id, session_id))
+            return public().business(await service().restore(buyer_id, session_id, confirmation_ids))
         except ValueError as err:
             raise confirmation_error(err) from err
 

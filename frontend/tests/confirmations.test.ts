@@ -11,7 +11,7 @@ const card: TradeConfirmation = {
   action: "create",
   buyer_id: "b1",
   session_id: "s1",
-  snapshot_hash: "a".repeat(64),
+  created_at:'2026-10-22T00:00:00Z',snapshot_hash: "a".repeat(64),
   expires_at: "2099-01-01T00:00:00+00:00",
   expired: false,
   status: "pending",
@@ -107,7 +107,7 @@ describe("权威确认快照与用户动作", () => {
     ])
       expect(readConfirmations([{ ...card, ...patch }])).toEqual([]);
   });
-  it("迟到pending不能反转批准，取消同步到同一订单历史卡", () => {
+  it("迟到pending不能反转批准，取消不改写原始创建回执", () => {
     expect(mergeConfirmations([approved()], [card])[0].status).toBe("approved");
     const cancelled = {
       ...approved(),
@@ -115,11 +115,9 @@ describe("权威确认快照与用户动作", () => {
       action: "cancel" as const,
       result: { ...approved().result!, status: "CANCELLED" as const },
     };
-    expect(
-      mergeConfirmations([approved()], [cancelled]).every(
-        (item) => item.result?.status === "CANCELLED",
-      ),
-    ).toBe(true);
+    const merged=mergeConfirmations([approved()], [cancelled]);
+    expect(merged.find(c=>c.confirmation_id==='c1')!.result!.status).toBe('CONFIRMED');
+    expect(merged.find(c=>c.confirmation_id==='cancel-1')!.result!.status).toBe('CANCELLED');
   });
   it("准备只发商品地址；批准只发凭证绑定，不接收客户端金额", async () => {
     const requests: Record<string, unknown>[] = [];

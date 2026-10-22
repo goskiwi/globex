@@ -36,7 +36,7 @@ it("取消筛选结果最后一页的唯一订单后，自动回到仍有订单�
  });
  const confirmation:TradeConfirmation={
   confirmation_id:"c",operation_id:"op",action:"cancel",buyer_id:"test",session_id:"s",
-  snapshot_hash:"hash",status:"pending",expired:false,expires_at:new Date(Date.now()+60000).toISOString(),result:null,
+  created_at:'2026-10-22T00:00:00Z',snapshot_hash:"hash",status:"pending",expired:false,expires_at:new Date(Date.now()+60000).toISOString(),result:null,
   payload:{order_id:"GBX-10",reason:"调整计划",items:[],total_amount_minor:9900,currency:"CNY",
    subtotal_minor:9900,freight_minor:0,tariff_minor:0,amount_scope:"landed",order_kind:"purchase_intent",
    shipping_address:{recipient_name:"测试",country:"CN",state:"",city:"",address_line:"测试地址",postal_code:"",phone:""}}

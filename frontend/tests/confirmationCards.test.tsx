@@ -12,7 +12,7 @@ const confirmation: TradeConfirmation = {
   action: "create",
   buyer_id: "buyer-1",
   session_id: "session-1",
-  snapshot_hash: "a".repeat(64),
+  created_at:'2026-10-22T00:00:00Z',snapshot_hash: "a".repeat(64),
   expires_at: "2026-09-09T12:05:00Z",
   expired: false,
   status: "pending",

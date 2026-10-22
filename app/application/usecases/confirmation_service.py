@@ -167,6 +167,11 @@ class ConfirmationService:
         self._identity(buyer_id, session_id)
         return await self._trade_store.pending_confirmations(buyer_id=buyer_id, session_id=session_id)
 
-    async def restore(self, buyer_id: str, session_id: str) -> dict:
+    async def decisions(self, buyer_id: str, session_id: str, confirmation_ids: list[str]) -> list[dict]:
         self._identity(buyer_id, session_id)
-        return {"confirmations": await self._trade_store.restore_confirmations(buyer_id=buyer_id, session_id=session_id)}
+        return await self._trade_store.confirmation_decisions(confirmation_ids, buyer_id=buyer_id, session_id=session_id)
+
+    async def restore(self, buyer_id: str, session_id: str, confirmation_ids: list[str] | None = None) -> dict:
+        self._identity(buyer_id, session_id)
+        return {"confirmations": await self._trade_store.restore_confirmations(buyer_id=buyer_id, session_id=session_id),
+                "confirmationDecisions": await self.decisions(buyer_id, session_id, confirmation_ids or [])}

@@ -167,6 +167,6 @@ def register_ag_ui_routes(
         await require_buyer(request, buyer_id)
         await require_session(request, buyer_id, session_id, create=False)
         try:
-            return await runtime().journal.session(session_id, buyer_id)
+            return await runtime().session(session_id, buyer_id)
         except (JournalConflict, JournalForbidden, JournalNotFound) as err:
             raise translate(err) from err

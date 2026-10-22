@@ -334,6 +334,22 @@ class SqlTradeStore(TradeStore):
             values = [self._confirmation(row) for row in recent] + list(active.values())
             return sorted(values, key=lambda value: (value["created_at"], value["confirmation_id"]), reverse=True)
 
+    async def confirmation_decisions(self, confirmation_ids: list[str], *, buyer_id: str, session_id: str) -> list[dict]:
+        _string(buyer_id, 'buyer_id', 64)
+        _string(session_id, 'session_id', 64)
+        identifiers = list(dict.fromkeys(_string(i, 'confirmation_id', 64) for i in confirmation_ids))
+        if not identifiers:
+            return []
+        async with self._read_snapshot() as db:
+            rows = await db.execute(select(
+                TradeConfirmationRow.confirmation_id, TradeConfirmationRow.buyer_id, TradeConfirmationRow.session_id,
+                TradeConfirmationRow.action, TradeConfirmationRow.status, TradeConfirmationRow.expires_at,
+            ).where(TradeConfirmationRow.buyer_id == buyer_id, TradeConfirmationRow.session_id == session_id,
+                    TradeConfirmationRow.confirmation_id.in_(identifiers)))
+            now = _utc(self._clock())
+            return [{**row._asdict(), 'expired': row.status == 'pending' and datetime.fromisoformat(row.expires_at) <= now}
+                    for row in rows]
+
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,
         snapshot_hash: str, approved: bool,

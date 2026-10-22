@@ -159,6 +159,7 @@ export interface CommerceSnapshot {
   error: string | null;
   history: SessionSummary[];
   confirmations: TradeConfirmation[];
+  confirmationDecisions: ConfirmationDecision[];
   confirmationBusy: boolean;
   confirmationError: string | null;
   recoverableRunId: string | null;
@@ -195,6 +196,7 @@ export interface TradeConfirmation {
   session_id: string;
   snapshot_hash: string;
   expires_at: string;
+  created_at: string;
   expired: boolean;
   status: "pending" | "approved" | "rejected";
   payload: {
@@ -220,6 +222,9 @@ export interface TradeConfirmation {
   };
   result: OrderSnapshot | null;
 }
+
+export type ConfirmationDecision = Pick<TradeConfirmation,
+  'confirmation_id'|'buyer_id'|'session_id'|'action'|'status'|'expires_at'|'expired'>;
 
 export interface PublishedSkill {
   id: string;

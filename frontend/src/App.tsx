@@ -468,7 +468,7 @@ export default function App({session,onLogout}:{session:AuthSession;onLogout:()=
                         </div>
                         {agent.presentations.filter(p=>message.id===`${p.runId}:final:answer`).map(p=>
                           p.id===currentDecisionId?<div key={p.id}>{deliveredProducts}</div>
-                          :p.kind==='order'&&readOrderOutcome(p.payload)?<OrderOutcomeCard key={p.id} outcome={readOrderOutcome(p.payload)!} confirmation={agent.confirmations.find(c=>c.confirmation_id===readOrderOutcome(p.payload)!.confirmation?.confirmation_id)}/>
+                          :p.kind==='order'&&readOrderOutcome(p.payload)?<OrderOutcomeCard key={p.id} outcome={readOrderOutcome(p.payload)!} decision={agent.confirmationDecisions.find(c=>c.confirmation_id===readOrderOutcome(p.payload)!.confirmation?.confirmation_id)}/>
                           :p.kind==='product_view'?<section key={p.id} className="product-views" aria-label="商品详情"><ProductCards mode="view" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>
                           :p.kind==='research'?<ResearchReports key={p.id} delivery={{...p.payload,runId:p.runId} as unknown as ResearchDelivery}/>
                           :p.kind==='recommendation'||p.kind==='comparison'?<section key={p.id} className="historical-products">{p.kind==='comparison'&&<p className="comparison-focus">{(p.payload as unknown as Comparison).dimensions.join('、')}</p>}<ProductCards mode="research" products={readProducts(p.payload.hits)} onDetail={setDetail}/></section>:null)}

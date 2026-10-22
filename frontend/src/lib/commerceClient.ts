@@ -13,7 +13,7 @@ import type {
   SessionSummary,
   RunProcess,
 } from "../types";
-import { readConfirmations, mergeConfirmations } from "./confirmations";
+import { readConfirmations, mergeConfirmations,readConfirmationDecisions,mergeConfirmationDecisions } from "./confirmations";
 import { recoveringFetch } from "./recoveringFetch";
 import { readPublishedSkills, readSkillUsages } from "./skills";
 import {readProcess,readProcesses,upsertProcess} from './execution';
@@ -330,6 +330,7 @@ function emptySnapshot(sessionId = newId()): CommerceSnapshot {
     error: null,
     history: [],
     confirmations: [],
+    confirmationDecisions: [],
     toolApprovals: [],
     confirmationBusy: false,
     confirmationError: null,
@@ -452,7 +453,15 @@ export class CommerceClient {
     };
   };
   private update(patch: Partial<CommerceSnapshot>) {
-    this.snapshot = { ...this.snapshot, ...patch };
+    const next={...this.snapshot,...patch};
+    const references=new Set(next.presentations.flatMap(p=>p.kind==='order'&&isRecord(p.payload.confirmation)
+      &&typeof p.payload.confirmation.confirmation_id==='string'?[p.payload.confirmation.confirmation_id]:[]));
+    next.confirmationDecisions=mergeConfirmationDecisions(
+      next.sessionId===this.snapshot.sessionId?this.snapshot.confirmationDecisions:[],
+      [...(patch.confirmationDecisions??[]),...readConfirmationDecisions(patch.confirmations)]
+        .filter(c=>c.buyer_id===this.buyerId&&c.session_id===next.sessionId)
+    ).filter(c=>c.buyer_id===this.buyerId&&c.session_id===next.sessionId&&references.has(c.confirmation_id));
+    this.snapshot = next;
     this.listeners.forEach((listener) => listener());
   }
   private history() {
@@ -601,6 +610,7 @@ export class CommerceClient {
             this.snapshot.confirmations,
             this.ownedConfirmations(state.confirmations),
           ),
+          confirmationDecisions:readConfirmationDecisions(state.confirmations),
           ...(process?.runId===runId ? {processes:upsertProcess(this.snapshot.processes,process)}:{}),
         });
         if (Array.isArray(state.shoppingForms) && state.shoppingForms.length) void this.refreshShoppingForms();
@@ -743,6 +753,7 @@ export class CommerceClient {
       messages: [...historyPrefix(this.snapshot.messages, messages), ...messages], ...this.applyDelivery(state, String(run.runId)),
       skillUsages: readSkillUsages(state.skillUsages),
       confirmations: mergeConfirmations(this.snapshot.confirmations, this.ownedConfirmations(state.confirmations)),
+      confirmationDecisions:readConfirmationDecisions(state.confirmations),
       recoverableRunId: running && typeof run.runId === "string" ? run.runId : null,
       status: running ? "running" : state.executionStatus === "partial" ? "stopped" : run.status === "completed" ? "idle" : run.status === "stopped" ? "stopped" : "error",
       ...(process?{processes:upsertProcess(this.snapshot.processes,process)}:{}),
@@ -763,6 +774,7 @@ export class CommerceClient {
       this.update({
         ...(Array.isArray(data.messages) ? {messages: readMessages(data.messages)} : {}),
         ...presentationViews(readPresentations(data.presentations)),
+        confirmationDecisions:readConfirmationDecisions(data.confirmationDecisions),
         processes:readProcesses(data.processes),
         events: Array.isArray(data.events) ? data.events.filter(isRecord).flatMap(item =>
           typeof item.id === "string" && typeof item.type === "string"
@@ -901,6 +913,10 @@ export class CommerceClient {
         buyer_id: this.buyerId,
         session_id: sessionId,
       });
+      for(const p of this.snapshot.presentations){
+        if(p.kind==='order'&&isRecord(p.payload.confirmation)&&typeof p.payload.confirmation.confirmation_id==='string')
+          query.append('confirmation_ids',p.payload.confirmation.confirmation_id);
+      }
       const data = await this.confirmationRequest(`/confirmations?${query}`);
       if (
         sessionId !== this.snapshot.sessionId ||
@@ -909,6 +925,7 @@ export class CommerceClient {
         return;
       this.update({
         confirmations: this.ownedConfirmations(data.confirmations),
+        confirmationDecisions:readConfirmationDecisions(data.confirmationDecisions),
         confirmationError: null,
       });
       this.save();
@@ -961,6 +978,7 @@ export class CommerceClient {
       ++this.confirmationRevision;
       this.update({
         confirmations: mergeConfirmations(this.snapshot.confirmations, next),
+        confirmationDecisions:readConfirmationDecisions(next),
       });
       this.save();
       return true;

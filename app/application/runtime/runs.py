@@ -167,6 +167,14 @@ class RunService:
                 return run
             await asyncio.sleep(.05)
 
+    async def session(self, session_id, buyer_id):
+        history = await self.journal.session(session_id, buyer_id)
+        from app.application.usecases.confirmation_views import confirmation_references
+        references = confirmation_references(history['presentations'])
+        history['confirmationDecisions'] = (await self.confirmations.decisions(buyer_id, session_id, references)
+                                           if self.confirmations is not None else [])
+        return self.journal.projection.session(history)
+
     async def cancel(self, run_id, buyer_id):
         run = await self.journal.request_stop(run_id, buyer_id)
         entry = self.running.get(run_id)
