@@ -458,7 +458,7 @@ export class CommerceClient {
       &&typeof p.payload.confirmation.confirmation_id==='string'?[p.payload.confirmation.confirmation_id]:[]));
     next.confirmationDecisions=mergeConfirmationDecisions(
       next.sessionId===this.snapshot.sessionId?this.snapshot.confirmationDecisions:[],
-      [...(patch.confirmationDecisions??[]),...readConfirmationDecisions(patch.confirmations)]
+      [...(patch.confirmationDecisions??[]),...readConfirmationDecisions(next.confirmations)]
         .filter(c=>c.buyer_id===this.buyerId&&c.session_id===next.sessionId)
     ).filter(c=>c.buyer_id===this.buyerId&&c.session_id===next.sessionId&&references.has(c.confirmation_id));
     this.snapshot = next;
@@ -766,6 +766,7 @@ export class CommerceClient {
 
   private async loadSession(id: string) {
     const revision = ++this.historyRevision;
+    const confirmationRevision = this.confirmationRevision;
     try {
       const data = await this.journalRequest(`/sessions/${encodeURIComponent(id)}`);
       if (revision !== this.historyRevision || id !== this.snapshot.sessionId || this.active) return;
@@ -774,6 +775,7 @@ export class CommerceClient {
       this.update({
         ...(Array.isArray(data.messages) ? {messages: readMessages(data.messages)} : {}),
         ...presentationViews(readPresentations(data.presentations)),
+        ...(confirmationRevision===this.confirmationRevision?{confirmations:this.ownedConfirmations(data.confirmations)}:{}),
         confirmationDecisions:readConfirmationDecisions(data.confirmationDecisions),
         processes:readProcesses(data.processes),
         events: Array.isArray(data.events) ? data.events.filter(isRecord).flatMap(item =>

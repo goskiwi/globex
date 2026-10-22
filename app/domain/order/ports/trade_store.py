@@ -58,10 +58,6 @@ class TradeStore(ABC):
         """同一快照恢复有效操作、最近历史与被引用的决议；有效操作不占历史配额。"""
 
     @abstractmethod
-    async def confirmation_decisions(self, confirmation_ids: list[str], *, buyer_id: str, session_id: str) -> list[dict]:
-        """一次读取已授权引用的精简决议，不查订单，不受最近列表配额影响。"""
-
-    @abstractmethod
     async def resolve_confirmation(
         self, confirmation_id: str, *, buyer_id: str, session_id: str,
         snapshot_hash: str, approved: bool,

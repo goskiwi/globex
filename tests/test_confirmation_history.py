@@ -28,7 +28,7 @@ async def test_session_restores_referenced_decision_after_history_limit(confirma
     journal=AGUIJournal(tmp_path/'history.db');request=body('history');request['threadId']='session'
     saved,_=await journal.reserve(request,'buyer','owner')
     await journal.append('history','owner',[{'type':'STATE_SNAPSHOT','snapshot':{'presentations':[
-        {'id':'p','runId':'history','kind':'order','status':'completed','payload':outcome}]}},
+        {'id':'p','runId':'history','kind':'order','status':'completed','payload':outcome}], 'confirmations':[card]}},
         {'type':'RUN_FINISHED','runId':'history','threadId':'session'}])
     reads=[]
     def measured(_c,_cu,statement,_pa,_co,_many):
@@ -37,14 +37,16 @@ async def test_session_restores_referenced_decision_after_history_limit(confirma
     event.listen(e.engine.sync_engine,'before_cursor_execute',measured)
     try:restored=await RunService(journal,SimpleNamespace(),e.service).session('session','buyer')
     finally:event.remove(e.engine.sync_engine,'before_cursor_execute',measured)
-    values=restored['confirmationDecisions'];assert len(values)==1 and len(reads)==1
+    values=restored['confirmationDecisions'];assert len(values)==1 and len(reads)==3 # 列表2查询、全部引用1查询，均在同一快照
     assert values[0]['confirmation_id']==card['confirmation_id']
     assert values[0]['status']==('pending' if decision=='expired' else decision)
     assert values[0]['expired'] is (decision=='expired')
     assert set(values[0])=={'confirmation_id','buyer_id','session_id','action','status','expires_at','expired'}
     assert restored['presentations'][0]['payload']==outcome, '历史快照不因新决议被改写'
-    assert not await e.service.decisions('other','session',[card['confirmation_id']])
-    assert not await e.service.decisions('buyer','other',[card['confirmation_id']])
+    assert restored['run']['state']['confirmations'][0]['status']=='pending'
+    assert len(restored['confirmations'])==20 and all(x['confirmation_id']!=card['confirmation_id'] for x in restored['confirmations'])
+    assert not (await e.service.restore('other','session',[card['confirmation_id']]))['confirmationDecisions']
+    assert not (await e.service.restore('buyer','other',[card['confirmation_id']]))['confirmationDecisions']
     with pytest.raises(JournalForbidden):await RunService(journal,None,e.service).session('session','other')
 
 

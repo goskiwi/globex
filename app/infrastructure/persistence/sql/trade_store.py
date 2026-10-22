@@ -336,12 +336,6 @@ class SqlTradeStore(TradeStore):
             return {'confirmations': sorted(values, key=lambda value: (value['created_at'], value['confirmation_id']), reverse=True),
                     'confirmationDecisions': await self._confirmation_decisions(db, confirmation_ids, buyer_id, session_id)}
 
-    async def confirmation_decisions(self, confirmation_ids: list[str], *, buyer_id: str, session_id: str) -> list[dict]:
-        _string(buyer_id, 'buyer_id', 64)
-        _string(session_id, 'session_id', 64)
-        async with self._read_snapshot() as db:
-            return await self._confirmation_decisions(db, confirmation_ids, buyer_id, session_id)
-
     async def _confirmation_decisions(self, db, confirmation_ids, buyer_id, session_id):
         identifiers = list(dict.fromkeys(_string(i, 'confirmation_id', 64) for i in confirmation_ids))
         if not identifiers:

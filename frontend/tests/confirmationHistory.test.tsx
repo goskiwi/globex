@@ -19,7 +19,7 @@ const recent=Array.from({length:20},(_,i)=>({...card,confirmation_id:`new-${Stri
 const presentation={id:'p',runId:'r',kind:'order',status:'completed',payload:outcome};
 const json=(data:unknown)=>new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
 const html=(client:CommerceClient)=>renderToStaticMarkup(<OrderOutcomeCard outcome={outcome} decision={client.getSnapshot().confirmationDecisions.find(d=>d.confirmation_id===card.confirmation_id)}/>);
-function history(decision:TradeConfirmation){return {presentations:[presentation],confirmationDecisions:readConfirmationDecisions([decision]),
+function history(decision:TradeConfirmation){return {presentations:[presentation],confirmations:recent,confirmationDecisions:readConfirmationDecisions([decision]),
  messages:[{id:'r:final:answer',role:'assistant',content:'合成历史'}],run:{runId:'r',threadId:'s',status:'completed',messages:[],state:{confirmations:recent}}};}
 
 it('历史完整任务按批量决议恢复，原快照保留且不逐订单补读',async()=>{
@@ -30,6 +30,28 @@ it('历史完整任务按批量决议恢复，原快照保留且不逐订单补�
  expect(client.getSnapshot().confirmations.some(c=>c.confirmation_id===card.confirmation_id)).toBe(false);
  expect(html(client)).toContain('取消已确认执行');expect(html(client)).toContain('查看时：已确认');
  expect(outcome.confirmation!.status).toBe('pending');expect(paths.some(p=>p.includes('/orders/')||p.includes('/confirmations/'))).toBe(false);
+});
+
+it('重开历史使用当前确认列表，冻结的旧run pending不能恢复确认按钮',async()=>{
+ const data={...history(approved),confirmations:[approved],run:{...history(approved).run,state:{confirmations:[card]}}};
+ const client=new CommerceClient({buyerId:'b1',url:'/commerce/ag-ui/run',fetch:async(url)=>String(url).includes('/sessions?')
+  ?json({sessions:[{id:'s',title:'合成',updatedAt:1}]}):json(data)});
+ await client.initialize();expect(client.getSnapshot().confirmations[0].status).toBe('approved');
+ expect(html(client)).toContain('取消已确认执行');expect(data.run.state.confirmations[0].status).toBe('pending');
+});
+
+it('历史读取期间用户已批准时，迟到历史响应不能恢复pending按钮或脚注',async()=>{
+ let finish!:(r:Response)=>void,started!:(v:void)=>void;
+ const entered=new Promise<void>(resolve=>{started=resolve;});
+ const data={...history(card),confirmations:[card]};
+ const client=new CommerceClient({buyerId:'b1',url:'/commerce/ag-ui/run',fetch:async(url,init)=>{
+  if(init?.method==='POST')return json({confirmation:approved});
+  if(String(url).includes('/sessions?'))return json({sessions:[{id:'s',title:'合成',updatedAt:1}]});
+  started();return new Promise<Response>(resolve=>{finish=resolve;});
+ }});
+ const loading=client.initialize();await entered;
+ await client.resolveConfirmation(card,true);finish(json(data));await loading;
+ expect(client.getSnapshot().confirmations[0].status).toBe('approved');expect(html(client)).toContain('取消已确认执行');
 });
 
 it('刷新在同一次请求带上引用ID，获取列表之外的决议',async()=>{

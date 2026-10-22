@@ -171,8 +171,10 @@ class RunService:
         history = await self.journal.session(session_id, buyer_id)
         from app.application.usecases.confirmation_views import confirmation_references
         references = confirmation_references(history['presentations'])
-        history['confirmationDecisions'] = (await self.confirmations.decisions(buyer_id, session_id, references)
-                                           if self.confirmations is not None else [])
+        current = (await self.confirmations.restore(buyer_id, session_id, references) if self.confirmations is not None
+                   else {'confirmations': [], 'confirmationDecisions': []})
+        # 原始运行快照保持历史语义；当前按钮与成果决议共用一次权威恢复。
+        history.update(current)
         return self.journal.projection.session(history)
 
     async def cancel(self, run_id, buyer_id):
