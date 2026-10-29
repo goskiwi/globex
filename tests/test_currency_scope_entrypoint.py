@@ -34,8 +34,7 @@ async def test_bundle_currency_through_http_model_and_real_compiler(tmp_path,dis
     requests=[]
     search={'sku_id':'P1003-S1'}
     if filters:search['conditions']={'filters':filters}
-    bundle={'picks':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'合成已核验候选'}],
-            'guidance':'合成组合报价','ship_to':'CN','currency':quote_currency,'landed_budget_major':budget,'turn_action':'finish'}
+    bundle={'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'focus': [], 'ship_to': 'CN', 'currency': quote_currency, 'landed_budget_major': budget, 'turn_action': 'finish'}
     def handler(request):
         requests.append(json.loads(request.content));raw=completion()
         index=len(requests)-1
@@ -97,12 +96,12 @@ def test_explicit_currency_requires_domain_code_or_null(value):
 
 async def test_currency_clear_across_http_turns_preserves_unknown_budget_units(tmp_path):
     calls=[]
-    picks=[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'合成已核验候选'}]
+    picks=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}]
     responses=[
         ('product_search_tool',{'sku_id':'P1003-S1','conditions':{'filters':{'target_currency':'USD','landed_budget_major':100}}}),
-        ('recommend_bundle',{'picks':picks,'guidance':'明确美元预算内的报价','ship_to':'CN','currency':'USD','landed_budget_major':100,'turn_action':'finish'}),
+        ('recommend_bundle',{'picks': picks, 'focus': [], 'ship_to': 'CN', 'currency': 'USD', 'landed_budget_major': 100, 'turn_action': 'finish'}),
         ('product_search_tool',{'sku_id':'P1003-S1','conditions':{'filters':{'target_currency':None}}}),
-        ('recommend_bundle',{'picks':picks,'guidance':'未重新解释旧预算币种，只展示这次人民币报价','ship_to':'CN','currency':'CNY','landed_budget_major':None,'turn_action':'finish'}),
+        ('recommend_bundle',{'picks': picks, 'focus': [], 'ship_to': 'CN', 'currency': 'CNY', 'landed_budget_major': None, 'turn_action': 'finish'}),
     ]
     def handler(request):
         calls.append(json.loads(request.content));name,args=responses[len(calls)-1];raw=completion()

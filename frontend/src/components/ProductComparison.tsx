@@ -20,7 +20,7 @@ export default function ProductComparison({products, preferredSkuId = null, dime
     {label:"规格", value:p=>p.skus.find(s=>s.sku_id === p.default_sku_id)?.spec ?? "未指定"},
     {label:"库存", value:p=>{const sku=p.skus.find(s=>s.sku_id===p.default_sku_id);return sku?(sku.stock>0?"有货":"缺货"):"未提供";}},
     {label:"价格", value:p=>{const q=comparisonQuote(p);return q?`${money(q.total_amount_minor/100,q.currency)}（${(p.quantity??1)>1?`${p.quantity}件`:''}到手价）`:`${money(p.price_major,p.currency)}（商品价）`;}},
-    {label:"适合与理由", value:p=>p.recommendation_reason ?? "未提供"},
+    {label:"目录依据", value:p=>p.recommendation_reason ?? "未提供"},
     ...products.some(p=>p.highlights.length)?[{label:'已知特点',value:(p:ProductCard)=>p.highlights.join('；')||'—'}]:[],
     ...products.some(p=>p.weight_kg!=null)?[{label:'重量',value:(p:ProductCard)=>p.weight_kg!=null?`${p.weight_kg} kg`:'—'}]:[],
     ...products.some(p=>(p.quantity??1)>1)?[{label:'数量',value:(p:ProductCard)=>String(p.quantity??1)}]:[],
@@ -33,7 +33,7 @@ export default function ProductComparison({products, preferredSkuId = null, dime
     <div className="comparison-scroll"><table className="compare-table">
       <thead><tr><th>比较项</th>{products.map(p=><th key={comparisonKey(p)}>
         {p.image_url&&<ProductImage product={p}/>}<strong>{p.title}</strong><small>{p.source_platform?platformLabel(p.source_platform):p.skus.find(s=>s.sku_id===p.default_sku_id)?.spec}</small>
-        {preferredSkuId === p.default_sku_id && <p>更推荐这款</p>}
+        {preferredSkuId === p.default_sku_id && <p>{p.requirement_checks?.length?'优先核实这款':'更推荐这款'}</p>}
       </th>)}</tr></thead>
       <tbody>{rows.map(row=><tr key={row.label}><td>{row.label}</td>{products.map(p=><td key={comparisonKey(p)}>{row.value(p)}</td>)}</tr>)}</tbody>
     </table></div>

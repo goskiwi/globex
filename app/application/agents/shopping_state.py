@@ -27,7 +27,7 @@ class PlanStep(StrictModel):
     filters: Filters = Field(default_factory=Filters)
     requirements: list[str] = Field(default_factory=list)
     preferences: list[str] | None = Field(default=None,
-        description="本步骤的明确软偏好；省略继承当前偏好，[]清空局部偏好，不写长期记忆")
+        description="本步骤的买家软偏好原文；省略继承当前偏好，[]清空局部偏好，检索推断不属于偏好")
     depends_on: list[str] = Field(default_factory=list)
 
     @model_serializer(mode='wrap')
@@ -44,6 +44,18 @@ def validate_plan(steps):
             raise ValueError("计划步骤ID必须唯一；依赖必须引用排在前面的步骤，不能有循环")
         seen.add(step.id)
     return steps
+
+
+def sourced_preferences(values, work):
+    """偏好值就是买家原文，来源用于继承；检索猜测不进入该集合。"""
+    sources={}
+    for text in values:
+        if text and text in work.latest_request:
+            sources[text]=work.source_message_id
+        elif text in work.preferences and text in work.preference_sources:
+            sources[text]=work.preference_sources[text]
+        else:raise ValueError('软偏好需要买家原文；搜索假设只用于normalized_query，不写入买家偏好')
+    return sources
 
 
 class Choice(StrictModel):
@@ -63,6 +75,7 @@ class ShoppingWork(StrictModel):
     goal: str = ""
     plan: list[PlanStep] = Field(default_factory=list)
     preferences: list[str] = Field(default_factory=list)
+    preference_sources: dict[str,str] = Field(default_factory=dict)
     sort: str | None = None
     ignored_preferences: list[str] = Field(default_factory=list)
     requirements: list[str] = Field(default_factory=list)
@@ -79,7 +92,8 @@ class RequirementChange(StrictModel):
     reset: bool = Field(default=False, description="明确开始新的选购任务才清空当前条件及选择")
     goal: str | None = Field(default=None, description="本轮选购目标，不填则保留；不是检索词或商品事实")
     filters: Filters | None = Field(default=None, description="只更新提供的字段；null 清空全部过滤，空列表清空该材质条件")
-    preferences: list[str] | None = Field(default=None, description="用户表达的软偏好，不作为硬过滤；空列表清空")
+    preferences: list[str] | None = Field(default=None,
+        description="用户表达的软偏好，填写当前买家消息的连续原文或保留已有偏好原文；不填推断和检索词，[]清空")
     sort: str | None = None
     ignored_preferences: list[str] | None = Field(default=None, description="仅填写memory_hint中已有长期偏好的完整原文，表示本次不采用；[]恢复全部。当前会话需求变更用requirements/preferences替换，不在此填写旧需求；不修改长期记忆")
     requirements: list[str] | None = Field(default=None, description="当前完整的明确要求列表；提供时替换旧列表，省略保留，[]清除。用于变更用途等结构化过滤无法表达的需求；不是查询词，也不是核验结论")
@@ -100,10 +114,14 @@ def apply_update(previous: ShoppingWork, update: ShoppingUpdate, source_message_
         raise ValueError("购物状态修改没有绑定当前买家输入")
     work = ShoppingWork(filters=Filters(), latest_request=previous.latest_request,
                         source_message_id=previous.source_message_id) if update.reset else previous.model_copy(deep=True)
+    if 'preferences' in update.model_fields_set:
+        work.preference_sources=sourced_preferences(update.preferences or [],work)
     if 'filters' in update.model_fields_set:
         work.filters = Filters() if update.filters is None else Filters.model_validate({
             **work.filters.model_dump(), **update.filters.model_dump(exclude_unset=True)})
     if 'plan' in update.model_fields_set:
+        for step in update.plan or []:
+            if step.preferences is not None:sourced_preferences(step.preferences,work)
         work.plan = validate_plan(update.plan or [])
     for key in ('goal', 'preferences', 'sort', 'ignored_preferences', 'requirements',
                 'comparisons', 'excluded_products', 'excluded_skus'):

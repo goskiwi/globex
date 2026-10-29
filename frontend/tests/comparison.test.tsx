@@ -45,6 +45,19 @@ it("比较表展示完整费用、SKU 和理由，差价来自结构化报价",(
   expect(html).toContain("更推荐这款");expect(html).toContain("颜色不同");
 });
 
+it('实际未核验要求经过解析后仍展示为候选，不标成已经满足需求',()=>{
+  const pending={...card('P1001-S1'),recommendation_reason:'目录尺寸：外形长32厘米。',
+    requirement_checks:[{requirement:'能装16寸笔记本',status:'unverified' as const}],
+    decision_evidence:[{field:'dimensions_cm',label:'商品尺寸',value:{length:32}}]};
+  const result=readComparison({guidance:'以下要求尚未核实。',hits:[pending,card('P1001-S2')],
+    preferred_sku_id:'P1001-S1',dimensions:['需求核验'],max_items:12,result_ref:'ctx',unverified_requirements:['能装16寸笔记本']});
+  expect(result?.hits[0].requirement_checks).toEqual(pending.requirement_checks);
+  expect(result?.hits[0].decision_evidence).toEqual(pending.decision_evidence);
+  const html=renderToStaticMarkup(<ProductComparison products={result!.hits} preferredSkuId={result!.preferred_sku_id} unverified={result!.unverified_requirements}/>);
+  expect(html).toContain('优先核实这款');expect(html).toContain('尚未核验');
+  expect(html).not.toContain('更推荐这款');expect(html).toContain('目录依据');
+});
+
 it.each([
   card("P1001-S2",19900,1),card("P1001-S2",19900,2,"JP"),card("P1001-S2",19900,2,"CN","USD"),
   {...card("P1001-S2"),landed_price:undefined}, {...card("P1001-S2"),default_sku_id:"P1001-S3"},

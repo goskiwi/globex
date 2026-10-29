@@ -32,11 +32,11 @@ def build_update_preference_tool(store, bus):
             else:updated=await store.replace(snapshot.buyer_id,previous_statement,preference)
             if not updated:
                 remaining=await store.list_by_buyer(snapshot.buyer_id)
-                text="原偏好未找到，没有修改。请按当前原文重试："+ "\n".join(p.statement for p in remaining)
+                from app.application.memory.outcomes import memory_outcome
+                return memory_outcome('update','not_found',remaining=remaining)
             else:
-                current=await store.list_by_buyer(snapshot.buyer_id)
-                text="已更新长期偏好，当前保存的规范化记忆："+ "；".join(p.statement for p in current)
-            return ToolResult(data=text, state=ToolResultState.SUCCESS)
+                from app.application.memory.outcomes import memory_outcome
+                return memory_outcome('update','updated',facts=(updated,))
         except ValueError as error:
             return ToolResult(data=f"[error] 偏好修改未保存：{error}", state=ToolResultState.ERROR,
                               error_code="unavailable" if isinstance(error, MemoryUnavailable) else "business_rejected",

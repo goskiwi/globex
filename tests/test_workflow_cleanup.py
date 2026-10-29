@@ -164,8 +164,7 @@ async def test_existing_delivery_and_independent_research_can_progress_in_same_b
     from langchain_core.messages import AIMessage
     dispatch={'name':'task_dispatch','id':'research','args':{'subagent_type':'search_agent',
         'task':{'step_id':'cup'}}}
-    deliver={'name':'recommend_products','id':'cards','args':{'picks':[{'product_id':'P1003',
-        'sku_id':'P1003-S1','quantity':1,'reason':'已读背包候选'}],'guidance':'先交付已读背包。','turn_action':'continue'}}
+    deliver={'name': 'recommend_products', 'id': 'cards', 'args': {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'focus': [], 'turn_action': 'continue'}}
     parent=ScriptedModel(responses=[call('set_research_plan',{'plan':[{'id':'cup','goal':'水杯研究'}]}),
         call('product_search_tool',{'product_id':'P1003'}),AIMessage(content='',tool_calls=[dispatch,deliver]),
         call('present_research',{'reports':[{'task_id':'cup','title':'水杯研究'}]}, turn_action='finish')])

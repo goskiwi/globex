@@ -49,6 +49,8 @@ export interface ProductCard {
   recommendation_reason?: string;
   constraint_issues?: string[];
   tradeoffs?: string[];
+  decision_evidence?: {field:string;label:string;value:unknown}[];
+  requirement_checks?: {requirement:string;status:'unverified'}[];
   landed_price?: LandedPrice;
   description?: string;
   rating_summary?: { average: number; review_count: number } | null;

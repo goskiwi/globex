@@ -26,7 +26,7 @@ async def test_concurrent_edit_only_one_version_wins(tmp_path):
     store=make(tmp_path);await store.append(BuyerPreference('a','like','喜欢裙子'))
     p=(await store.list_by_buyer('a'))[0]
     results=await asyncio.gather(*[store.replace_by_id('a',p.memory_id,p.version,BuyerPreference('a','like',text)) for text in ('喜欢咖啡','喜欢茶')],return_exceptions=True)
-    assert sum(r is True for r in results)==1
+    assert sum(isinstance(r,BuyerPreference) for r in results)==1
     assert sum(isinstance(r,MemoryConflict) for r in results)==1
     assert (await make(tmp_path).list_by_buyer('a'))[0].version==2
 

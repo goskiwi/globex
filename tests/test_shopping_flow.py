@@ -71,7 +71,7 @@ async def test_landed_budget_without_country_can_deliver_without_claiming_verifi
         'parameters':{'landed_budget_major':300,'target_currency':'CNY','ship_to':None}})
     token=ShoppingContext.set(context)
     try:
-        result=await build_recommendation_tool(catalog, env.evidence, env.bus)([Pick(product_id='P1001', sku_id='P1001-S1', quantity=1, reason='适合旅行')], '先看商品特点')
+        result=await build_recommendation_tool(catalog, env.evidence, env.bus)([Pick(product_id='P1001', sku_id='P1001-S1', quantity=1)], [])
         assert result.ok and result.data['hits'] and result.data['quote'] is None
         assert 'landed_price' not in result.data['hits'][0]
         assert any('到手预算尚未核验' in value for value in result.data['unverified_requirements'])

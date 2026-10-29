@@ -43,9 +43,7 @@ async def test_readonly_display_accepts_correct_identifier_in_explanation(tmp_pa
 
 
 async def test_failed_independent_lookup_does_not_erase_successful_card(tmp_path,monkeypatch):
-    calls=AIMessage(content='',tool_calls=[
-        {'id':'show','name':'recommend_products','args':{'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1, 'reason': '依据目录核对当前规格'}], 'guidance': '这款背包的目录资料已核对。','turn_action':'finish'}},
-        {'id':'bad-order','name':'handle_order','args':{'order_id': 'synthetic-missing-order', 'turn_action': 'continue'}}])
+    calls=AIMessage(content='', tool_calls=[{'id': 'show', 'name': 'recommend_products', 'args': {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'focus': [], 'turn_action': 'finish'}}, {'id': 'bad-order', 'name': 'handle_order', 'args': {'order_id': 'synthetic-missing-order', 'turn_action': 'continue'}}])
     model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),calls,AIMessage(content='背包已核对；该订单未找到。')])
     c=await _container(tmp_path,monkeypatch,model)
     try:

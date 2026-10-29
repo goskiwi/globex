@@ -158,7 +158,8 @@ class SqlPreferenceStore(PreferenceStore):
     def __init__(self, engine: AsyncEngine) -> None:
         self._session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
-    async def append(self, preference: BuyerPreference) -> None:
+    async def append(self, preference: BuyerPreference):
+        from app.domain.buyer.preference import PreferenceWriteResult
         async with self._session_factory() as db:
             db.add(
                 BuyerPreferenceRow(
@@ -171,9 +172,18 @@ class SqlPreferenceStore(PreferenceStore):
             )
             try:
                 await db.commit()
+                created=True
             except IntegrityError:
                 # 唯一约束命中 = 该偏好已存在，幂等语义下静默跳过
                 await db.rollback()
+                created=False
+            row=await db.scalar(select(BuyerPreferenceRow).where(
+                BuyerPreferenceRow.buyer_id==preference.buyer_id,
+                BuyerPreferenceRow.kind==preference.kind,
+                BuyerPreferenceRow.statement==preference.statement))
+            fact=BuyerPreference(row.buyer_id,row.kind,row.statement,row.created_at,
+                memory_id=str(row.id),constraint=row.constraint_json,evidence=row.evidence)
+            return PreferenceWriteResult((fact,),(fact.memory_id,) if created else ())
 
     async def list_by_buyer(self, buyer_id: str) -> list[BuyerPreference]:
         async with self._session_factory() as db:
@@ -195,7 +205,7 @@ class SqlPreferenceStore(PreferenceStore):
             for row in rows
         ]
 
-    async def replace(self, buyer_id: str, previous_statement: str, preference: BuyerPreference) -> bool:
+    async def replace(self, buyer_id: str, previous_statement: str, preference: BuyerPreference) -> BuyerPreference | None:
         if buyer_id != preference.buyer_id:
             raise ValueError("偏好归属不一致")
         async with self._session_factory() as db:
@@ -204,7 +214,7 @@ class SqlPreferenceStore(PreferenceStore):
                     BuyerPreferenceRow.buyer_id == buyer_id,
                     BuyerPreferenceRow.statement == previous_statement))
                 if not result.rowcount:
-                    return False
+                    return None
                 existing = await db.scalar(select(BuyerPreferenceRow.id).where(
                     BuyerPreferenceRow.buyer_id == buyer_id,
                     BuyerPreferenceRow.kind == preference.kind,
@@ -213,7 +223,13 @@ class SqlPreferenceStore(PreferenceStore):
                     db.add(BuyerPreferenceRow(buyer_id=buyer_id,kind=preference.kind,
                         statement=preference.statement,created_at=preference.created_at,
                         constraint_json=asdict(preference.constraint) if preference.constraint else None, evidence=preference.evidence))
-        return True
+                await db.flush()
+                row=await db.scalar(select(BuyerPreferenceRow).where(
+                    BuyerPreferenceRow.buyer_id==buyer_id,BuyerPreferenceRow.kind==preference.kind,
+                    BuyerPreferenceRow.statement==preference.statement))
+                actual=BuyerPreference(row.buyer_id,row.kind,row.statement,row.created_at,
+                    memory_id=str(row.id),constraint=row.constraint_json,evidence=row.evidence)
+        return actual
 
     async def delete(self, buyer_id: str, statement: str) -> bool:
         """精确匹配 statement 删除；返回是否真的删到了行。"""

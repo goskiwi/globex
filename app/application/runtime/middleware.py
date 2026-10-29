@@ -195,7 +195,7 @@ class MemoryApprovalMiddleware(AgentMiddleware):
                         + render_preference_lines(facts), code='stale_memory'))
                     continue
             response = interrupt({"action_id": call["id"], "action_requests": [{
-                "name": call["name"], "args": call["args"],
+                "name": call["name"], "args": {k:v for k,v in call["args"].items() if k!='turn_action'},
                 "description": "请确认或拒绝本次长期记忆变更",
             }], "review_configs": [{
                 "action_name": call["name"], "allowed_decisions": ["approve", "reject"],

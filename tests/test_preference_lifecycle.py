@@ -64,7 +64,7 @@ async def test_memory_decision_refreshes_search_and_hint(tmp_path, monkeypatch, 
         else:
             args.update(previous_statement=saved.statement, kind='like', statement='喜欢轻便设计')
     model = ScriptedModel(responses=[
-        call('product_search_tool', {'product_id': 'P1001'}), call(name, args),
+        call('product_search_tool', {'product_id': 'P1001'}), call(name, args, turn_action='continue'),
         call('product_search_tool', {'product_id': 'P1001'}), AIMessage(content='核验完毕'),
         call('product_search_tool', {'product_id': 'P1001', 'sku_id': 'P1001-S1'}), AIMessage(content='核验完毕')])
     container = await _container(tmp_path, monkeypatch, model)
@@ -154,12 +154,7 @@ async def test_resumed_preferences_reach_child_search_and_final_recommendation(t
     store = SemanticPreferenceStore(tmp_path/'memory.db', Extract(), Embed(), 'test', .5)
     child = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1001'}),
         submission(unmet_requirements=['材质不符合'])])
-    model = ScriptedModel(responses=[
-        call('product_search_tool', {'product_id': 'P1001'}),
-        call('remember_preference_tool', {'kind': 'dislike', 'statement': '不要合成聚合物'}),
-        call('task_dispatch', {'subagent_type': 'search_agent', 'task': {'goal': '核验P1001'}}),
-        call('recommend_products', {'picks': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'quantity': 1, 'reason': '旅行收纳'}], 'guidance': '旅行收纳选择'}, turn_action='finish'),
-        AIMessage(content='该商品不符合材质要求')])
+    model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1001'}), call('remember_preference_tool', {'kind': 'dislike', 'statement': '不要合成聚合物'}, turn_action='continue'), call('task_dispatch', {'subagent_type': 'search_agent', 'task': {'goal': '核验P1001'}}), call('recommend_products', {'picks': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'quantity': 1}], 'focus': []}, turn_action='finish'), AIMessage(content='该商品不符合材质要求')])
     container = await _container(tmp_path, monkeypatch, model)
     bind(container, store)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model', lambda *a, **kw: child)

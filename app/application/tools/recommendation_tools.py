@@ -10,6 +10,8 @@ from app.domain.catalog.product_search_spec import ProductSearchSpec
 from app.domain.catalog.money import CurrencyCode
 from app.application.runtime.request_scope import ShoppingContext
 from app.application.agents.shopping_state import Choice
+from app.application.research_evidence import ResearchEvidenceField
+from app.application.usecases.decision_evidence import DecisionDimension, DIMENSION_LABELS, attach_decision_evidence, decision_guidance
 
 MAX_DECISION_ITEMS = 12
 
@@ -20,23 +22,22 @@ class Pick(BaseModel):
     product_id: str = Field(min_length=1)
     sku_id: str = Field(min_length=1)
     quantity: StrictInt = Field(gt=0, title="购买数量")
-    reason: str = Field(min_length=1, max_length=240, description="依据已读特点解释这款与本次需要的联系和关键取舍；不重复组件已有的数据")
-    tradeoffs: list[str] = Field(default_factory=list, max_length=3, description="影响本次选择的实际局限或资料缺口；未知不等于没有，无必要取舍时为空")
+    evidence_fields: list[ResearchEvidenceField] = Field(default_factory=lambda:['description'], max_length=7,
+        description="选择支持本次比较的已读目录字段；实际值和资料缺口由程序装配，不填写能力或适配结论")
 
 
 class RecommendationInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     picks: list[Pick] = Field(min_length=1, max_length=MAX_DECISION_ITEMS, title="推荐商品", description="本轮选择的商品，按希望展示的顺序排列")
-    guidance: str = Field(min_length=1, max_length=1200, description="面向买家说明本次选择依据与必要取舍，不重复卡片数值或内部过程")
+    focus: list[DecisionDimension] = Field(max_length=6,
+        description="本次选择关注的实际比较项；候选顺序表达推荐倾向，依据和费用说明由业务结果生成")
 
 
 class ComparisonInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     entries: list[Pick] = Field(min_length=2, max_length=MAX_DECISION_ITEMS, title="比较商品")
-    guidance: str = Field(min_length=1, max_length=1200, description="解释候选之间与本次需求有关的差异和取舍")
     preferred_sku_id: str | None = Field(description="比较中的推荐倾向；必须属于本次集合，不能据此替买家选购或交易")
-    dimensions: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(max_length=6,
-        description="本次比较关注点，不要求逐维填表；不适用时为空")
+    dimensions: list[DecisionDimension] = Field(max_length=6,description="选择实际比较字段；用途或兼容性要求使用requirements展示未核验情况")
 
 
 def _decision(request: ComparisonInput, cards: list[dict]) -> dict:
@@ -48,7 +49,8 @@ def _decision(request: ComparisonInput, cards: list[dict]) -> dict:
         if card['constraint_issues']:
             raise ValueError("首选不满足当前条件，只能作为对照展示")
         cards.sort(key=lambda card: card['default_sku_id'] != preferred)
-    return {'guidance': request.guidance, 'preferred_sku_id': preferred, 'dimensions': request.dimensions,
+    return {'guidance': decision_guidance(cards,dimensions=request.dimensions,preferred=preferred),
+            'preferred_sku_id': preferred, 'dimensions': [DIMENSION_LABELS[d] for d in request.dimensions],
             'max_items': MAX_DECISION_ITEMS}
 
 
@@ -109,7 +111,7 @@ async def _recommend(catalog, evidence_store, request, *, bundle):
         if budget is not None and ship_to and any(q["total_amount_minor"] > round(budget * 100) for q in checked):
             return _fail("推荐到手总额超过当前预算，请调整选项或明确交回预算缺口。报价：" + str(checked))
         mode = 'bundle' if bundle else 'individual'
-        result = {"guidance":request.guidance, "mode":mode, "hits":cards, "quote":combined,
+        result = {"guidance":decision_guidance(cards,dimensions=request.focus,bundle=bundle), "mode":mode, "hits":cards, "quote":combined,
                   "unverified_requirements":unverified}
         _attach_plan_outcome(result, context, request.picks)
         result["result_ref"] = await evidence_store.save(context.buyer_id, context.shopping_session_id, "recommendation", result)
@@ -119,37 +121,36 @@ async def _recommend(catalog, evidence_store, request, *, bundle):
 
 
 def build_recommendation_tool(catalog, evidence_store, bus):
-    async def recommend_products(picks: list[Pick], guidance: str):
+    async def recommend_products(picks: list[Pick], focus: list[DecisionDimension]):
         """交付本轮选定商品与建议，顺序即展示顺序。事实与金额由目录和计价服务提供。
 
-        按买家本轮需要确定选择项，reason说明每项与实际需求的联系，guidance说明整体选择依据。
+        按买家本轮需要确定候选顺序，evidence_fields选择目录依据，focus选择比较项。
         各选择独立报价；一起购买的整套组合使用recommend_bundle。仅交付建议，不选购或交易。
         """
-        return await _recommend(catalog, evidence_store, RecommendationInput(picks=picks,guidance=guidance),bundle=False)
+        return await _recommend(catalog, evidence_store, RecommendationInput(picks=picks,focus=focus),bundle=False)
     return recommend_products
 
 
 def build_bundle_tool(catalog, evidence_store, bus):
-    async def recommend_bundle(picks: list[Pick], guidance: str, ship_to: str, currency: str, landed_budget_major: float | None):
+    async def recommend_bundle(picks: list[Pick], focus: list[DecisionDimension], ship_to: str, currency: str, landed_budget_major: float | None):
         """交付一起购买的整套商品组合；按全部规格和数量合计检查到手预算。
 
-        reason说明每件在本次组合中的作用，guidance解释组合取舍。事实和组合总价由代码装配。
+        evidence_fields选择每件商品的目录依据，focus选择组合比较项。事实、缺口和组合总价由代码装配。
         必须提交本次目的国、币种和总预算；无需先调用quote_products，前次只读报价不会修改购物状态。
         互相替代的选择使用recommend_products。此调用不选购、不准备订单、不代表买家批准。
         """
-        return await _recommend(catalog, evidence_store, BundleInput(picks=picks,guidance=guidance,
+        return await _recommend(catalog, evidence_store, BundleInput(picks=picks,focus=focus,
             ship_to=ship_to,currency=currency,landed_budget_major=landed_budget_major),bundle=True)
     recommend_bundle.input_model = BundleInput
     return recommend_bundle
 
 
 def build_comparison_tool(catalog, evidence_store, bus):
-    async def compare_products(entries: list[Pick], preferred_sku_id: str | None, dimensions: list[str], guidance: str):
+    async def compare_products(entries: list[Pick], preferred_sku_id: str | None, dimensions: list[DecisionDimension]):
         """比较本次候选集合，至少两个 SKU；比较建议与商品一次交付，不再另调模型总结。
 
-        reason 说明每款什么时候值得选，tradeoffs 展开这次真正影响选择的局限。
-        dimensions 只标记本次权衡的关注点；费用由代码装配，不重复写一份参数报告。
-        guidance 解释这次关键差异怎样影响选择，不逐行复述比较表或金额。
+        evidence_fields选择各商品的目录依据，dimensions选择比较项；程序展示原始事实与未核验要求。
+        preferred_sku_id表达候选优先顺序，不代表未核验的用途或兼容性已经满足。费用由代码装配。
         数量按用户需求填写。同一商品不同规格可同时比较。不选购、不准备订单。
         条件不满足的选项可作为对照展示，但不能标为推荐倾向。
         """
@@ -157,7 +158,7 @@ def build_comparison_tool(catalog, evidence_store, bus):
         if context is None:
             return _fail("缺少买家会话")
         try:
-            request = ComparisonInput(entries=entries, preferred_sku_id=preferred_sku_id, dimensions=dimensions, guidance=guidance)
+            request = ComparisonInput(entries=entries, preferred_sku_id=preferred_sku_id, dimensions=dimensions)
             cards, _, budget, ship_to, _, unverified = await _assemble_choices(catalog, evidence_store, context, request.entries, require_qualified=False)
             result = {**_decision(request, cards), "hits": cards,
                       "unverified_requirements": unverified}
@@ -223,7 +224,11 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
             issues = list(dict.fromkeys([*issues, *task_issues]))
 
         card = catalog.product_card(0, product, spec, primary=sku, skus=[sku]).to_dict()
-        card.update(recommendation_reason=pick.reason, tradeoffs=pick.tradeoffs, quantity=pick.quantity)
+        card.update(quantity=pick.quantity)
+        requirements=list(policy.get('requirements',[]))+list(policy.get('unverified_requirements',[]))
+        if task_policy is not None:
+            requirements+=list(task_policy.get('requirements',[]))+list(task_policy.get('unverified_requirements',[]))
+        attach_decision_evidence(card,pick.evidence_fields,requirements)
         if ship_to:
             quote = catalog.pricing.quote_observed([QuoteItem(pick.product_id, pick.sku_id, pick.quantity)], products, ship_to, currency)
             card["landed_price"] = quote
@@ -235,7 +240,7 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
 
     if bundle:
         _check_task_bundle_budgets(catalog.pricing, products, context, picks)
-    unverified = list(policy.get("unverified_requirements", []))
+    unverified = list(dict.fromkeys(check['requirement'] for card in cards for check in card['requirement_checks']))
     if budget is not None and not ship_to:
         unverified.append("到手预算尚未核验，当前展示商品价")
     return cards, quotes, budget, ship_to, currency, unverified

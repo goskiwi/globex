@@ -22,11 +22,7 @@ async def test_delivery_with_unresolved_notice_does_not_stop_the_model():
 
 
 async def test_three_turns_need_no_model_after_authoritative_confirmation(tmp_path, monkeypatch):
-    model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}),
-        call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1',
-            'quantity': 1, 'reason': '轻便', 'tradeoffs': []}], 'guidance': '这款适合随身携带。'}, turn_action='finish'),
-        call('create_order_tool', {'items': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}],
-            'shipping_address': asdict(sample_address())}, turn_action='finish')])
+    model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}), call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'focus': []}, turn_action='finish'), call('create_order_tool', {'items': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'shipping_address': asdict(sample_address())}, turn_action='finish')])
     c = await _container(tmp_path, monkeypatch, model)
     try:
         before = await c.trade_store.get_inventory()

@@ -92,7 +92,7 @@ async def test_followup_carries_committed_cards_and_replacement_archives_once(tm
 @pytest.mark.parametrize('complete',[True,False])
 async def test_display_batch_requires_successful_final_delivery(tmp_path,monkeypatch,complete):
     from tests.test_execution_stop import StopModel
-    presentation=call('recommend_products', {'guidance': '首选满足这次用途，商品资料与单款理由见卡片。', 'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1, 'reason': '满足用途', 'tradeoffs': []}]}, 'deliver', turn_action='finish')
+    presentation=call('recommend_products', {'focus': [], 'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}]}, 'deliver', turn_action='finish')
     if not complete:
         presentation.tool_calls.append({'id':'missing-order','name':'handle_order','args':{'order_id': 'GBX-NOT-FOUND', 'turn_action': 'continue'},'type':'tool_call'})
     model=StopModel(responses=[call('product_search_tool',{'product_id':'P1003'}),presentation])
@@ -113,7 +113,7 @@ async def test_limited_main_can_deliver_three_verified_cards_and_preserve_partia
     identifiers=['P1003','P1018','P1049']
     reads=AIMessage(content='',tool_calls=[{'id':pid,'name':'product_search_tool',
         'args':{'product_id':pid}} for pid in identifiers])
-    delivery=call('recommend_products', {'guidance': '已确认这三款，可先比较；第四款尚未确认，没有凑数。', 'picks': [{'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1, 'reason': '本次已确认候选', 'tradeoffs': []} for pid in identifiers]}, turn_action='finish')
+    delivery=call('recommend_products', {'focus': [], 'picks': [{'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1} for pid in identifiers]}, turn_action='finish')
     container=await _container(tmp_path,monkeypatch,ScriptedModel(responses=[reads,delivery]))
     factory=container.orchestrator._sessions._main_factory
     factory._settings=replace(factory._settings,agent_max_model_rounds=2)
@@ -121,7 +121,7 @@ async def test_limited_main_can_deliver_three_verified_cards_and_preserve_partia
         result=await container.orchestrator.handle_intent(SubmitIntentInput('s','b','zh-CN','CNY',
             '请推荐四款通勤背包，找不齐就说明缺口，不下单。'))
         assert result.status=='partial' and result.stop_reason=='model_call_limit'
-        assert result.presentations[-1]["kind"]=="recommendation" and '第四款尚未确认' in result.final_text
+        assert result.presentations[-1]["kind"]=="recommendation" and '尚未完成的部分未继续处理' in result.final_text
         delivered=await container.orchestrator._evidence_store.search('b','s',kind='display_batch')
         assert len(delivered)==1 and len(delivered[0]['data']['hits'])==3
     finally:

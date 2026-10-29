@@ -10,9 +10,7 @@ from scripts.run_stream import submit_stream,read_stream
 from scripts.smoke_e2e import validate_smoke_result
 
 async def test_scripts_consume_persisted_public_run_without_side_subscription(tmp_path,monkeypatch):
-    model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),call('recommend_products',{
-        'picks':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'依据已读资料'}],
-        'guidance':'查看这款背包。'},turn_action='finish')])
+    model=ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}), call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'focus': []}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,model)
     catalog=c.orchestrator._sessions._main_factory._search_factory._catalog_search
     catalog._embedder=catalog._vector_index=catalog._reranker=None

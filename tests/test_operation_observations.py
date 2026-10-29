@@ -24,8 +24,7 @@ async def test_operation_inventory_reads(confirmation_env):
         result=await catalog.execute(ProductSearchSpec(product_id='P1003',target_currency='CNY',ship_to='CN'))
         await e.evidence.save('audit-buyer','read-scope','products',result)
         reads.clear()
-        returned=await build_recommendation_tool(catalog,e.evidence,e.bus)(
-            [Pick(product_id='P1003',sku_id='P1003-S1',quantity=1,reason='合成测试')],'查看这款候选。')
+        returned=await build_recommendation_tool(catalog, e.evidence, e.bus)([Pick(product_id='P1003', sku_id='P1003-S1', quantity=1)], [])
         assert returned.ok
         recommendation=list(reads)
         assert len(recommendation)==1

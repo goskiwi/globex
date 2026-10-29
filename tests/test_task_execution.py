@@ -116,11 +116,11 @@ async def test_research_report_requires_existing_current_task(source):
 
 
 def pick(sku='P1003-S1',task_id='bag'):
-    return {'product_id':'P1003','sku_id':sku,'quantity':1,'reason':'旅行收纳','task_id':task_id}
+    return {'product_id': 'P1003', 'sku_id': sku, 'quantity': 1, 'task_id': task_id}
 
 
 def recommend(picks=None,*,bundle=False):
-    return call('recommend_bundle' if bundle else 'recommend_products', {'picks': picks or [pick()], 'guidance': '可考虑这款旅行背包。', **({'ship_to':'CN','currency':'CNY','landed_budget_major':500} if bundle else {})}, turn_action='continue')
+    return call('recommend_bundle' if bundle else 'recommend_products', {'picks': picks or [pick()], 'focus': [], **({'ship_to': 'CN', 'currency': 'CNY', 'landed_budget_major': 500} if bundle else {})}, turn_action='continue')
 
 
 @pytest.mark.parametrize('budget,extra_goal',[(100,False),(150,False),(150,True)])
@@ -291,10 +291,7 @@ async def test_partial_research_can_be_compared_but_not_claimed_complete(tmp_pat
         submission(candidates=[
             {'product_id': 'P1003', 'sku_id': sku, 'evidence_fields': ['description', 'weight_kg']}
             for sku in ['P1003-S1','P1003-S2']])])
-    model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major':300,'target_currency':'CNY'}}}), call('set_research_plan', {'plan': [{'id':'bag','goal':'100元内的背包','filters':{'price_max_major':150 if within_budget else 100}}]})],
-        call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),
-        call('compare_products',{'entries':[pick(),pick('P1003-S2')],'preferred_sku_id':None,
-                                 'dimensions':[],'guidance':'这两种颜色仅作为对照，研究尚未完成。'}, turn_action='finish'),AIMessage(content='研究仍有缺口')])
+    model=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'price_max_major': 300, 'target_currency': 'CNY'}}}), call('set_research_plan', {'plan': [{'id': 'bag', 'goal': '100元内的背包', 'filters': {'price_max_major': 150 if within_budget else 100}}]})], call('task_dispatch', {'subagent_type': 'search_agent', 'task': {'step_id': 'bag'}}), call('compare_products', {'entries': [pick(), pick('P1003-S2')], 'preferred_sku_id': None, 'dimensions': ['spec']}, turn_action='finish'), AIMessage(content='研究仍有缺口')])
     c=await _container(tmp_path,monkeypatch,model)
     expose_unfiltered_research_source(c, monkeypatch)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)

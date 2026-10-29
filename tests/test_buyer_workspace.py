@@ -192,7 +192,7 @@ async def test_atomic_tool_update_delete_and_optimistic_conflict(tmp_path):
             results=await asyncio.gather(
                 store.replace("alice","喜欢蓝色",BuyerPreference("alice","like","喜欢红色")),
                 store.replace("alice","喜欢蓝色",BuyerPreference("alice","like","喜欢白色")))
-            assert sorted(results)==[False,True]
+            assert sorted(bool(r) for r in results)==[False,True]
             remaining=await store.list_by_buyer("alice")
             forget=build_forget_preference_tool(store,TradeEventBus())
             assert "已撤回" in (await forget(remaining[0].statement)).text

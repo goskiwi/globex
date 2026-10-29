@@ -45,12 +45,13 @@ def build_remember_preference_tool(store: PreferenceStore, bus: TradeEventBus):
             {"tool": "remember_preference_tool", "args": {"kind": kind, "statement": statement}},
         )
         try:
-            normalized = await store.append(BuyerPreference(buyer_id=buyer_id, kind=kind, statement=statement, source_kind="agent", source_ref=session_id))
+            outcome = await store.append(BuyerPreference(buyer_id=buyer_id, kind=kind, statement=statement, source_kind="agent", source_ref=session_id))
         except ValueError as err:
             return ToolResult(data=f"[error] {err}", state=ToolResultState.ERROR,
                               error_code="unavailable" if isinstance(err, MemoryUnavailable) else "business_rejected",
                               error_reason="记忆服务不可用，保存结果未确认" if isinstance(err,MemoryUnavailable) else "偏好未满足保存条件")
-        statement = "；".join(p.statement for p in normalized) if normalized is not None else statement
-        return ToolResult(data=f"已记住买家偏好：[{kind}] {statement}", state=ToolResultState.SUCCESS)
+        from app.application.memory.outcomes import memory_outcome
+        return memory_outcome('save','created' if outcome.created_ids else 'unchanged',
+                              facts=outcome.facts,created_ids=outcome.created_ids)
 
     return remember_preference_tool

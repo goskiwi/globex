@@ -26,7 +26,7 @@ def make(tmp_path,embed=None):return SemanticPreferenceStore(tmp_path/'memory.db
 async def test_clean_atomic_vector_persistence_and_semantic_search(tmp_path):
     store=make(tmp_path)
     saved=await store.append(BuyerPreference('a','like','你好啊，我一直喜欢小香风连衣裙！谢谢'))
-    assert saved[0].statement=='喜欢小香风连衣裙'
+    assert saved.facts[0].statement=='喜欢小香风连衣裙'
     await store.append(BuyerPreference('a','like','喜欢咖啡'))
     await store.append(BuyerPreference('a','dislike','不要塑料'))
     assert len(await make(tmp_path).list_by_buyer('a'))==3

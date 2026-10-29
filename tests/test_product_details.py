@@ -52,8 +52,7 @@ async def test_complete_blocked_details_are_displayed_without_changing_filters(c
         assert await e.evidence.find_product('buyer', 'detail-test', product_id='P3021', sku_id='P3021-S2') is None
         with pytest.raises(ValueError):
             await _verified_order_items(e.evidence, 'buyer', 'detail-test', [{'product_id': 'P3021', 'sku_id': 'P3021-S2', 'quantity': 1}])
-        refused = await build_recommendation_tool(catalog, e.evidence, e.bus)(
-            [Pick(product_id='P3021', sku_id='P3021-S2', quantity=1, reason='想查看这款')], '这款只供查看。')
+        refused = await build_recommendation_tool(catalog, e.evidence, e.bus)([Pick(product_id='P3021', sku_id='P3021-S2', quantity=1)], [])
         assert not refused.ok
         assert len(await e.evidence.search('buyer', 'detail-test', kind='product_view')) == 2
     finally:
@@ -100,12 +99,7 @@ async def test_native_search_supplies_recommendation_facts_without_another_catal
     from tests.test_langgraph_runtime import _container
     from app.application.usecases.intents import SubmitIntentInput
 
-    model = ScriptedModel(responses=[
-        call('product_search_tool', {'product_id': 'P1003', 'conditions': {'filters': {
-            'price_max_major': 200, 'target_currency': 'CNY', 'ship_to': 'CN'}}}),
-        call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S2',
-            'quantity': 1, 'reason': '轻便、可折叠，适合看重收纳便利性的需求。'}],
-            'guidance': '可以考虑这款背包。'}, turn_action='finish')])
+    model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003', 'conditions': {'filters': {'price_max_major': 200, 'target_currency': 'CNY', 'ship_to': 'CN'}}}), call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S2', 'quantity': 1}], 'focus': []}, turn_action='finish')])
     container = await _container(tmp_path, monkeypatch, model)
     try:
         result = await container.orchestrator.handle_intent(SubmitIntentInput('s', 'b', 'zh-CN', 'CNY',

@@ -54,12 +54,12 @@ async def test_recommendation_uses_evidence_current_constraints_and_actual_quant
     result = await catalog.execute(ProductSearchSpec(product_id="P1001", ship_to="CN"))
     await env.evidence.save("buyer-1", "session-1", "products", result)
     tool = build_bundle_tool(catalog, env.evidence, env.bus)
-    pick = Pick(product_id="P1001", sku_id="P1001-S1", quantity=2, reason="适合旅行")
+    pick = Pick(product_id='P1001', sku_id='P1001-S1', quantity=2)
     context = ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 400})), currency='CNY'))
     token = ShoppingContext.set(context)
     try:
-        rejected = await tool([pick], '两件搭配用于旅行。', 'CN', 'CNY', None)
+        rejected = await tool([pick], [], 'CN', 'CNY', None)
         assert not rejected.ok and "超过当前预算" in str(rejected)
         assert not await env.evidence.search("buyer-1", "session-1", kind="recommendation")
     finally:
@@ -68,7 +68,7 @@ async def test_recommendation_uses_evidence_current_constraints_and_actual_quant
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 450})), currency='CNY')))
     try:
-        accepted = await tool([pick], '两件搭配用于旅行。', 'CN', 'CNY', None)
+        accepted = await tool([pick], [], 'CN', 'CNY', None)
         assert accepted.ok
         saved = (await env.evidence.search("buyer-1", "session-1", kind="recommendation"))[0]["data"]
         assert saved["quote"]["total_amount_minor"] == 41800
@@ -121,8 +121,7 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs):
             return self
-    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_bundle", "args": {"ship_to":"CN", "currency":"CNY", "landed_budget_major":None, "turn_action":"finish", "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
-        AIMessage(content="两件合计418元")])
+    model = Model(responses=[AIMessage(content='', tool_calls=[{'id': 'recommend-1', 'name': 'recommend_bundle', 'args': {'ship_to': 'CN', 'currency': 'CNY', 'landed_budget_major': None, 'turn_action': 'finish', 'focus': [], 'picks': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'quantity': 2}]}}]), AIMessage(content='两件合计418元')])
     tool = as_langchain_tool(build_bundle_tool(catalog, env.evidence, env.bus), args_schema=BundleInput, turn_delivery=True)
     graph = create_agent(model, tools=[tool], middleware=delivery_middlewares())
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
@@ -134,7 +133,7 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
         assert outputs[0].artifact['data']['quote']['total_amount_minor'] == 41800
         assert json.loads(outputs[0].content)['displayed']
         assert model.i == 1  # 推荐后没有第二次模型调用。
-        assert result["messages"][-1].content == "两件用于分开收纳旅行用品，费用请查看具体报价。"
+        assert result["messages"][-1].content == outputs[0].artifact['data']['guidance']
     finally:
         ShoppingContext.reset(token)
 
@@ -183,7 +182,7 @@ async def test_bundle_owns_quote_terms_without_saved_requirements_or_historical_
     env=confirmation_env;catalog=CatalogSearchUseCase(env.products,pricing=env.service._pricing)
     for pid in ('P1003','P1008'):
         await env.evidence.save('buyer-1','session-1','products',await catalog.execute(ProductSearchSpec(product_id=pid)))
-    picks=[Pick(product_id=pid,sku_id=pid+'-S1',quantity=1,reason='适合本次组合') for pid in ('P1003','P1008')]
+    picks=[Pick(product_id=pid, sku_id=pid + '-S1', quantity=1) for pid in ('P1003','P1008')]
     context=ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search=compile_search(ShoppingWork(filters=Filters(**{})), currency='CNY'))
     token=ShoppingContext.set(context)
     before=deepcopy(context)
@@ -193,17 +192,17 @@ async def test_bundle_owns_quote_terms_without_saved_requirements_or_historical_
             [Choice(product_id=p.product_id,sku_id=p.sku_id,quantity=p.quantity) for p in picks],'CN','USD')
         assert earlier.ok
         bundle=build_bundle_tool(catalog,env.evidence,env.bus)
-        result=await bundle(picks,'组合说明','CN','CNY',300)
+        result=await bundle(picks,[],'CN','CNY',300)
         assert result.ok and result.data['quote']['total_amount_minor']==26800
         assert result.data['quote']['ship_to']=='CN' and result.data['quote']['currency']=='CNY'
         assert [h['landed_price']['total_amount_minor'] for h in result.data['hits']]==[15400,11400]
         assert ShoppingContext.current()==before
         assert (await env.store.list_orders(buyer_id='buyer-1'))['total']==0
         assert not await env.store.list_confirmations(buyer_id='buyer-1',session_id='session-1')
-        assert not (await bundle(picks,'预算不足','CN','CNY',250)).ok
+        assert not (await bundle(picks,[],'CN','CNY',250)).ok
         ShoppingContext.set(replace(context,effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 250})), currency='CNY')))
-        assert not (await bundle(picks,'不得放宽原预算','CN','CNY',1000)).ok
-        assert not (await bundle(picks,'不同目的地','JP','CNY',1000)).ok
-        assert not (await bundle(picks,'不同币种','CN','USD',1000)).ok
-        with pytest.raises(ValidationError):BundleInput(picks=picks,guidance='缺报价范围')
+        assert not (await bundle(picks,[],'CN','CNY',1000)).ok
+        assert not (await bundle(picks,[],'JP','CNY',1000)).ok
+        assert not (await bundle(picks,[],'CN','USD',1000)).ok
+        with pytest.raises(ValidationError):BundleInput(picks=picks, focus=[])
     finally:ShoppingContext.reset(token)

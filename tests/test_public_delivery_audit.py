@@ -35,12 +35,11 @@ def test_public_event_projection_does_not_replace_internal_evidence():
 async def test_component_and_lifecycle_cannot_bypass_configured_output_policy(tmp_path,monkeypatch,enabled):
     monkeypatch.setenv('OUTPUT_GUARD_ENABLED','1' if enabled else '0')
     marker='sk-'+'SYNTHETICONLY'*3
-    model=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),call('recommend_products',
-        {'picks':[{'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'依据目录选择'}],
-         'guidance':'合成审查标记：'+marker},turn_action='finish')])
+    model=ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}), call('recommend_products', {'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}], 'focus': []}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,model)
     catalog=c.orchestrator._sessions._main_factory._search_factory._catalog_search
     catalog._embedder=catalog._vector_index=catalog._reranker=None
+    catalog.pricing.product_repo._products['P1003'].title+=' '+marker
     target,frames=adapter()
     target.projection=c.bus.projection
     try:

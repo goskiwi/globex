@@ -64,14 +64,7 @@ def test_historical_query_currencies_remain_separate_when_no_landed_quote_exists
 
 
 async def test_delivered_card_stays_complete_while_next_model_receives_only_receipt(tmp_path, monkeypatch):
-    model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}),
-        AIMessage(content='', tool_calls=[
-            {'id': 'present', 'name': 'recommend_products', 'args': {
-                    'guidance': '这款适合随身携带，详细资料在卡片。', 'turn_action':'finish',
-                'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1,
-                           'reason': '重量轻且可折叠', 'tradeoffs': ['未标注电脑隔层']}]}},
-            {'id': 'read', 'name': 'handle_order', 'args': {'order_id': 'UNKNOWN', 'turn_action': 'continue'}}]),
-        AIMessage(content='卡片已展示，订单号未找到。')])
+    model = ScriptedModel(responses=[call('product_search_tool', {'product_id': 'P1003'}), AIMessage(content='', tool_calls=[{'id': 'present', 'name': 'recommend_products', 'args': {'focus': [], 'turn_action': 'finish', 'picks': [{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}]}}, {'id': 'read', 'name': 'handle_order', 'args': {'order_id': 'UNKNOWN', 'turn_action': 'continue'}}]), AIMessage(content='卡片已展示，订单号未找到。')])
     container = await _container(tmp_path, monkeypatch, model)
     catalog = container.orchestrator._sessions._main_factory._search_factory._catalog_search
     catalog._embedder = catalog._vector_index = catalog._reranker = None
@@ -80,7 +73,7 @@ async def test_delivered_card_stays_complete_while_next_model_receives_only_rece
             SubmitIntentInput('s', 'b', 'zh-CN', 'CNY', '推荐背包，同时查询订单UNKNOWN'))
         card = result.presentations[0]['payload']['hits'][0]
         assert card['title'] and card['skus'] and card['description']
-        assert card['recommendation_reason'] == '重量轻且可折叠'
+        assert card['recommendation_reason'] == '目录描述：'+card['description']
         receipt = next(m for m in model.seen[-1] if isinstance(m, ToolMessage) and m.name == 'recommend_products')
         data = json.loads(receipt.content)
         assert data['displayed'] and data['sku_ids'] == ['P1003-S1'] and 'hits' not in data

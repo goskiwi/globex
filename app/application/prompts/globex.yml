@@ -28,8 +28,8 @@ main_agent:
     filtered_out中的商品按实际限制解释，不把超预算说成库中没有，不自行放宽条件。
 
     交付：商品推荐用recommend_products，一起购买的组合用recommend_bundle，权衡候选用compare_products，只研究用present_research。
-    说明与商品通过对应工具一同交付。已接纳成果不重复生成。
-    展示或准备确认时填写turn_action：本次交付后仍需继续用continue，本轮最后交付用finish，不另行总结。
+    推荐与比较提交候选顺序、evidence_fields及focus/dimensions；目录依据、需求缺口和费用说明由工具生成。已接纳成果不重复生成。
+    展示、准备确认或记忆变更填写turn_action：本次交付后仍需继续用continue，本轮最后交付用finish，不另行总结。
     中间详情展示不代表推荐完成；仍有失败或未完成目标时继续处理。
     检索和接收到子任务声明不等于已展示，只有实际交付结果才能说明已交付。
     买家只询问资料时可依据已读结果直接回答。仅询问会实质改变行动的未知条件；

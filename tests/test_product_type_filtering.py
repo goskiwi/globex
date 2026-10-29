@@ -95,7 +95,7 @@ async def test_recommendation_cannot_bypass_type_using_previously_read_product(c
     effective=compile_search(ShoppingWork(filters=Filters(product_type='耳机')))
     token=ShoppingContext.set(ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search=effective))
     try:
-        result=await build_recommendation_tool(catalog, env.evidence, env.bus)([Pick(product_id='P1003', sku_id='P1003-S1', quantity=1, reason='已读的背包')], '按当前需要选择')
+        result=await build_recommendation_tool(catalog, env.evidence, env.bus)([Pick(product_id='P1003', sku_id='P1003-S1', quantity=1)], [])
         assert not result.ok and 'product_type_mismatch' in result.data
     finally:
         ShoppingContext.reset(token)

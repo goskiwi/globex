@@ -67,10 +67,15 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         for message in reversed(state['messages']):
             if not isinstance(message,ToolMessage):break
             receipts.append(message)
-        if not receipts or any(r.status!='success' or (r.artifact or {}).get('notices') for r in receipts):return None
+        if not receipts or any((r.artifact or {}).get('notices') for r in receipts):return None
         index=len(state['messages'])-len(receipts)-1
         call=state['messages'][index] if index>=0 else None
         if not isinstance(call,AIMessage) or {c['id'] for c in call.tool_calls}!={r.tool_call_id for r in receipts}:return None
+        from app.application.memory.outcomes import memory_completion
+        completed=memory_completion(list(reversed(receipts)))
+        if completed is not None and any(c['args'].get('turn_action')=='finish' for c in call.tool_calls):
+            return {'messages':[AIMessage(content=completed)],'jump_to':'end'}
+        if any(r.status!='success' for r in receipts):return None
         accepted={p['id']:p for p in state.get('presentations',[])}
         operations={p['id']:p for p in state.get('operation_receipts',[])}
         accepted.update(operations)
@@ -89,4 +94,6 @@ class FinalDeliveryMiddleware(AgentMiddleware):
         remaining=pending_plan_goals(state.get('task_plan',{}),request_id)
         if remaining and not any(p['id'] not in operations and p['status'] in {'partial','needs_input'} for p in values):return None
         if remaining:lines.append(f'还有{len(remaining)}项计划任务尚未完成。')
+        if state.get('execution_stop'):
+            lines.append('本轮执行已停止，以上为已取得的结果；尚未完成的部分未继续处理。')
         return {'messages':[AIMessage(content='\n\n'.join(lines))],'jump_to':'end'}

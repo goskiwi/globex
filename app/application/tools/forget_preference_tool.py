@@ -56,18 +56,13 @@ def build_forget_preference_tool(store: PreferenceStore, bus: TradeEventBus):
                               error_code="unavailable" if isinstance(err, MemoryUnavailable) else "business_rejected",
                               error_reason="记忆服务不可用，撤回结果未确认" if isinstance(err,MemoryUnavailable) else "偏好撤回条件未满足，请核对当前记忆和版本")
 
+        from app.application.memory.outcomes import memory_outcome
         if deleted:
-            return ToolResult(data=f"已撤回买家偏好：{statement}", state=ToolResultState.SUCCESS)
+            return memory_outcome('delete','deleted',statement=statement)
 
         # 未命中不算错误：把现存偏好回给模型，让它用原文重试，而不是让它以为删成功了
         remaining = await store.list_by_buyer(buyer_id)
-        listing = (
-            "\n".join(f"- [{p.kind}] {p.statement}" for p in remaining)
-            if remaining
-            else "（该买家当前没有任何长期偏好）"
-        )
-        return ToolResult(data=f"未找到偏好「{statement}」，没有删除任何内容。"
-                        f"现存偏好如下，如需撤回请用其中一行的原文重试：\n{listing}", state=ToolResultState.SUCCESS)
+        return memory_outcome('delete','not_found',remaining=remaining)
 
     if getattr(store,"semantic_memory",False):
         implementation=forget_preference_tool

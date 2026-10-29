@@ -28,16 +28,16 @@ async def test_actual_nested_validation_then_corrected_call_retains_two_receipts
     bus = TradeEventBus()
     adapter = AGUIRunAdapter(RunAgentInput.model_validate(body('validation')),lambda event:None)
     executions = []
-    async def recommend_products(picks:list, guidance:str):
+    async def recommend_products(picks:list, focus:list):
         """交付合成商品，不连接订单或目录。"""
         executions.append(picks)
-        payload = {'guidance':guidance,'hits':[{'product_id':p.product_id,'default_sku_id':p.sku_id,'title':'合成颈枕'} for p in picks]}
+        payload = {'guidance':'已交付合成商品','hits':[{'product_id':p.product_id,'default_sku_id':p.sku_id,'title':'合成颈枕'} for p in picks]}
         return ToolResult(payload)
     tool = as_langchain_tool(recommend_products,args_schema=RecommendationInput)
     graph = tool_graph(tool,middlewares=[BusinessToolMiddleware(None,bus),ToolResilienceMiddleware(CircuitBreakerRegistry())])
-    picks=[{'product_id':'P1','sku_id':'P1-S1','quantity':1,'reason':'便携'},
-           {'product_id':'P2','sku_id':'P2-S1','reason':'收纳'}]
-    arguments={'picks':picks,'guidance':'按需要选择'}
+    picks=[{'product_id': 'P1', 'sku_id': 'P1-S1', 'quantity': 1},
+           {'product_id':'P2','sku_id':'P2-S1'}]
+    arguments={'picks': picks, 'focus': []}
     with observe_tool_facts(adapter.on_agent_event), observe_run_events(adapter.on_trade_event):
         failed = await call_tool(graph,**arguments)
         assert failed.status == 'error' and not executions

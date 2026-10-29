@@ -57,6 +57,8 @@ def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
 def render_preference_lines(preferences: Sequence[BuyerPreference]) -> str:
     """渲染偏好正文行。主 Agent 与子 Agent 共用同一个实现，避免两处格式漂。"""
     return "\n".join(f"- [{p.kind}] {p.statement}" + (f" (memory_id={p.memory_id}, version={p.version})" if p.memory_id else "")
+        + (f"；来源会话：{p.source_ref}" if p.source_ref else "")
+        + f"；创建时间：{p.created_at}"
         + ("；可执行条件：" + json.dumps(asdict(p.constraint), ensure_ascii=False) if p.constraint else "；未转换为硬过滤条件") for p in preferences)
 
 
@@ -67,7 +69,7 @@ def render_preference_hint(preferences: Sequence[BuyerPreference]) -> str:
     的稳定前缀，把因人而异的偏好拼进去等于每个买家的前缀都不一样，命中率直接崩。
     """
     return (
-        "<buyer-preferences>\n以下是该买家的长期偏好（来自历史会话，供个性化推荐参考，"
+        "<buyer-preferences>\n以下是该买家当前有效的长期偏好（含本轮已完成的变更，"
         "like=喜好，dislike=忌口/黑名单）：\n"
         + render_preference_lines(preferences)
         + "\n</buyer-preferences>"

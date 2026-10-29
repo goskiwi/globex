@@ -61,9 +61,16 @@ class BuyerPreference:
             object.__setattr__(self, "created_at", datetime.now(timezone.utc).isoformat())
 
 
+@dataclass(frozen=True)
+class PreferenceWriteResult:
+    """同一写事务实际命中的记录；新增与复用由存储判断。"""
+    facts: tuple[BuyerPreference, ...]
+    created_ids: tuple[str, ...]
+
+
 class PreferenceStore(ABC):
     @abstractmethod
-    async def append(self, preference: BuyerPreference) -> None:
+    async def append(self, preference: BuyerPreference) -> PreferenceWriteResult:
         """追加偏好；同 buyer 同 statement 幂等去重。"""
 
     @abstractmethod
@@ -81,8 +88,8 @@ class PreferenceStore(ABC):
         不按 kind 区分：同 statement 的 like 与 dislike 条目会一并清除。
         """
 
-    async def replace(self, buyer_id: str, previous_statement: str, preference: BuyerPreference) -> bool:
-        """原子替换原文匹配的偏好，未命中不写入新值。"""
+    async def replace(self, buyer_id: str, previous_statement: str, preference: BuyerPreference) -> BuyerPreference | None:
+        """返回同一事务实际保存的记录；未命中返回None，不写入新值。"""
         raise NotImplementedError("当前偏好存储不支持原子替换")
 
 

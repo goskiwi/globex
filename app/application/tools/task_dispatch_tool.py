@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.errors import GraphRecursionError
 
 from app.application.agents.handoff import DelegatedTask, PlannedTask, SubagentResult
-from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
+from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search, sourced_preferences
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.runtime.handoff import TaskEvidence, HandoffContext, issue
 from app.application.runtime.errors import ExecutionStopped, ContextCapacityError
@@ -117,6 +117,8 @@ def build_task_dispatch_tool(search_factory, trade_factory, bus, *, model_token_
                     if task.requirements is not None:
                         scoped.requirements = list(dict.fromkeys([*scoped.requirements, *task.requirements]))
                     if task.preferences is not None:
+                        try:sourced_preferences(task.preferences,scoped)
+                        except ValueError as error:raise DelegationInputError(str(error)) from error
                         scoped.preferences = task.preferences
                 if filters is not None:
                     changes = filters.model_dump(exclude_unset=True)

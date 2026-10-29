@@ -7,9 +7,9 @@ from tests.test_langgraph_runtime import _container
 from app.application.usecases.intents import SubmitIntentInput
 
 def rec(guidance='依据已读资料选择',task_id=None):
-    pick={'product_id':'P1003','sku_id':'P1003-S1','quantity':1,'reason':'依据目录候选'}
+    pick={'product_id': 'P1003', 'sku_id': 'P1003-S1', 'quantity': 1}
     if task_id:pick['task_id']=task_id
-    return call('recommend_products', {'picks': [pick], 'guidance': guidance}, turn_action='finish')
+    return call('recommend_products', {'picks': [pick], 'focus': []}, turn_action='finish')
 
 
 async def ask(c,text):
@@ -20,7 +20,7 @@ async def ask(c,text):
 
 async def test_parallel_presentations_through_full_production_factory(tmp_path,monkeypatch):
     recommend=rec().tool_calls[0]
-    compare={'name':'compare_products','id':'compare','args':{'entries':[{'product_id':pid,'sku_id':pid+'-S1','quantity':1,'reason':'已读候选'} for pid in ['P1003','P1049']], 'preferred_sku_id':None,'dimensions':[],'guidance':'两款按已读资料比较','turn_action':'continue'}}
+    compare={'name': 'compare_products', 'id': 'compare', 'args': {'entries': [{'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1} for pid in ['P1003', 'P1049']], 'preferred_sku_id': None, 'dimensions': ['spec'], 'turn_action': 'continue'}}
     model=ScriptedModel(responses=[AIMessage(content='',tool_calls=[{'name':'product_search_tool','id':pid,'args':{'product_id':pid}} for pid in ['P1003','P1049']]),AIMessage(content='',tool_calls=[recommend,compare]),AIMessage(content='结束')])
     c=await _container(tmp_path,monkeypatch,model)
     try:
@@ -117,7 +117,7 @@ async def test_stale_dependent_research_is_not_reused_in_same_request(tmp_path,m
 async def test_parallel_presentations_complete_both_referenced_plan_steps(tmp_path,monkeypatch):
     children=iter([ScriptedModel(responses=[call('product_search_tool',{'product_id':pid,'sku_id':pid+'-S1'}),submission(candidates=[{'product_id': pid, 'sku_id': pid + '-S1', 'evidence_fields': ['description', 'weight_kg']}])]) for pid in ['P1003','P1008']])
     steps=[{'id':'bag','goal':'研究背包'},{'id':'cup','goal':'研究水杯'}]
-    parent=ScriptedModel(responses=[call('set_research_plan',{'plan': steps}),AIMessage(content='',tool_calls=[{'name':'task_dispatch','id':step['id'],'args':{'subagent_type':'search_agent','task':{'step_id':step['id']}}} for step in steps]),AIMessage(content='',tool_calls=[{'name':'recommend_products','id':step['id']+'-show','args':{'picks': [{'task_id': step['id'], 'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1, 'reason': '按本任务依据选择'}], 'guidance': step['goal'] + '结果。','turn_action':'finish'}} for step,pid in zip(steps,['P1003','P1008'])])])
+    parent=ScriptedModel(responses=[call('set_research_plan', {'plan': steps}), AIMessage(content='', tool_calls=[{'name': 'task_dispatch', 'id': step['id'], 'args': {'subagent_type': 'search_agent', 'task': {'step_id': step['id']}}} for step in steps]), AIMessage(content='', tool_calls=[{'name': 'recommend_products', 'id': step['id'] + '-show', 'args': {'picks': [{'task_id': step['id'], 'product_id': pid, 'sku_id': pid + '-S1', 'quantity': 1}], 'focus': [], 'turn_action': 'finish'}} for step, pid in zip(steps, ['P1003', 'P1008'])])])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:next(children))
     try:

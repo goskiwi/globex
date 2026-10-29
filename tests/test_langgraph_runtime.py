@@ -38,12 +38,12 @@ class ScriptedModel(BaseChatModel):
             message = AIMessage(content="", tool_calls=[{
                 "id": "remember-1",
                 "name": "remember_preference_tool",
-                "args": {"kind": "like", "statement": "喜欢轻便设计"},
+                "args": {"kind": "like", "statement": "喜欢轻便设计", "turn_action": "finish"},
             }])
             if self.mode == "batch":
                 message.tool_calls.append({
                     "id": "remember-2", "name": "remember_preference_tool",
-                    "args": {"kind": "like", "statement": "喜欢蓝色"},
+                    "args": {"kind": "like", "statement": "喜欢蓝色", "turn_action": "finish"},
                 })
         else:
             message = AIMessage(content="偏好已保存" if self.mode == "approval" else "LangGraph 运行正常")
@@ -60,8 +60,11 @@ class PreferenceStore:
         return list(self.items)
 
     async def append(self, preference):
+        from dataclasses import replace
+        from app.domain.buyer.preference import PreferenceWriteResult
+        preference=replace(preference,memory_id=str(len(self.items)+1))
         self.items.append(preference)
-        return [preference]
+        return PreferenceWriteResult((preference,),(preference.memory_id,))
 
 
 async def _container(tmp_path, monkeypatch, model):

@@ -276,6 +276,10 @@ export function readProducts(value: unknown): ProductCard[] {
     }
     if (typeof item.recommendation_reason === "string") card.recommendation_reason = item.recommendation_reason;
     if (Array.isArray(item.tradeoffs)) card.tradeoffs = item.tradeoffs.filter((v): v is string => typeof v === "string");
+    if (Array.isArray(item.requirement_checks)) card.requirement_checks = item.requirement_checks.filter(
+      (v): v is {requirement:string;status:'unverified'} => !!v && typeof v==='object' && typeof v.requirement==='string' && v.status==='unverified');
+    if (Array.isArray(item.decision_evidence)) card.decision_evidence = item.decision_evidence.filter(
+      (v): v is {field:string;label:string;value:unknown} => !!v && typeof v==='object' && typeof v.field==='string' && typeof v.label==='string' && 'value' in v);
     const landed = readLandedPrice(item.landed_price, card.currency);
     if (landed) card.landed_price = landed;
     return [card];

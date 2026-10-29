@@ -302,7 +302,9 @@ async def test_native_approval_resume_defers_catalog_change_until_next_buyer_tur
                 "interrupt_id":pending.reply_id+":"+pending.tool_calls[0].id,"approved":False},)),
             )
         assert result.error is None and store.items == []
-        # 审批只绑定原记忆操作；后续模型读取最新目录，不自动激活新增方案。
+        # 纯审批结果由回执结束，不额外调用模型；下一买家回合才读取最新目录。
+        assert len(model.seen)==1
+        await container.orchestrator.handle_intent(SubmitIntentInput('s','buyer','zh-CN','CNY','现在看看能用的方案'))
         assert "新方案" in next(m.content for m in model.seen[-1] if m.name == "skill_catalog")
     finally:
         await container.shutdown()

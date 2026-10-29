@@ -45,17 +45,17 @@ async def test_individual_choices_and_bundle_share_facts_but_apply_distinct_tota
     for pid in ['P1001','P1003']:
         await env.evidence.save('buyer-1','session-1','products',await catalog.execute(ProductSearchSpec(product_id=pid)))
     token=ShoppingContext.set(ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 300})), currency='CNY')))
-    selected=[Pick(product_id=pid,sku_id=pid+'-S1',quantity=1,reason='符合本次用途') for pid in ['P1001','P1003']]
+    selected=[Pick(product_id=pid, sku_id=pid + '-S1', quantity=1) for pid in ['P1001','P1003']]
     try:
-        individual=await build_recommendation_tool(catalog,env.evidence,env.bus)(selected,'分别考虑这两种选择')
+        individual=await build_recommendation_tool(catalog,env.evidence,env.bus)(selected,[])
         assert individual.ok and individual.data['mode']=='individual' and individual.data['quote'] is None
         assert not {'preferred_sku_id','dimensions','max_items'} & individual.data.keys()
-        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,'一起购买这两件','CN','CNY',None)
+        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,[],'CN','CNY',None)
         assert not bundle.ok and '超过当前预算' in bundle.text
         context=ShoppingContext.current()
         from dataclasses import replace
         ShoppingContext.set(replace(context,effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 400})), currency='CNY')))
-        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,'一起购买这两件','CN','CNY',None)
+        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,[],'CN','CNY',None)
         assert bundle.ok and bundle.data['quote']['total_amount_minor']==36800
         assert [h['default_sku_id'] for h in bundle.data['hits']]==['P1001-S1','P1003-S1']
         assert await env.store.list_confirmations(buyer_id='buyer-1',session_id='session-1')==[]

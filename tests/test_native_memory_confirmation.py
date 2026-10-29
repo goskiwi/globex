@@ -40,9 +40,9 @@ async def test_native_pause_persist_resume_and_no_replay(tmp_path, monkeypatch, 
         decision = SubmitIntentInput("s", "buyer", "zh-CN", "CNY", "确认",
             confirmations=({"interrupt_id": identifier, "approved": approved},))
         resolved = await container.orchestrator.handle_intent(decision)
-        assert resolved.error is None and len(store.items) == int(approved)
+        assert resolved.error is None and len(store.items) == int(approved), (await container.orchestrator._sessions._agents['s'].graph.aget_state(container.orchestrator._sessions._agents['s'].config)).values['messages']
         if approved:
-            assert resolved.final_text == "偏好已保存"
+            assert resolved.final_text == "已保存长期偏好：喜欢轻便设计。"
         restored = container.orchestrator._sessions._agents["s"]
         assert not (await restored.graph.aget_state(restored.config)).interrupts
         repeated = await container.orchestrator.handle_intent(decision)

@@ -21,7 +21,7 @@ async def comparison_env(confirmation_env):
     await env.evidence.save("buyer-1", "session-1", "products", await catalog.execute(ProductSearchSpec(product_id="P1001")))
     env.tool = build_comparison_tool(catalog, env.evidence, env.bus)
     env.guidance = "两款的用途相同，按颜色偏好选择即可。"
-    env.entries = [Pick(product_id="P1001", sku_id=sku, quantity=2, reason="颜色偏好", tradeoffs=["颜色不同"])
+    env.entries = [Pick(product_id='P1001', sku_id=sku, quantity=2)
                    for sku in ("P1001-S1", "P1001-S2")]
     return env
 
@@ -33,19 +33,18 @@ async def test_compare_sibling_skus_quotes_and_terminal_delivery(comparison_env)
         effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY"}}))
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs): return self
-    model = Model(responses=[AIMessage(content="", tool_calls=[{"id":"comparison", "name":"compare_products", "args":{
-        "entries":[p.model_dump() for p in env.entries], "guidance":env.guidance, "preferred_sku_id":"P1001-S1", "dimensions":["颜色偏好"], "turn_action":"finish"}}]), AIMessage(content="不该执行")])
+    model = Model(responses=[AIMessage(content='', tool_calls=[{'id': 'comparison', 'name': 'compare_products', 'args': {'entries': [p.model_dump() for p in env.entries], 'preferred_sku_id': 'P1001-S1', 'dimensions': ['spec'], 'turn_action': 'finish'}}]), AIMessage(content='不该执行')])
     graph = create_agent(model, tools=[as_langchain_tool(env.tool, args_schema=ComparisonInput, turn_delivery=True)], middleware=delivery_middlewares())
     try:
         output = await graph.ainvoke({"messages":[HumanMessage(content="比较两种规格")]})
-        assert model.i == 1 and output["messages"][-1].content == env.guidance
+        assert model.i == 1 and "包含本次报价中的运费与税费" in output["messages"][-1].content
         receipt = next(m for m in output["messages"] if isinstance(m, ToolMessage))
         assert receipt.status == "success"
         result = receipt.artifact['data']
         assert json.loads(receipt.content)['displayed']
         assert [c["default_sku_id"] for c in result["hits"]] == ["P1001-S1", "P1001-S2"]
         assert [c["landed_price"]["total_amount_minor"] for c in result["hits"]] == [41800,43800]
-        assert result['dimensions'] == ['颜色偏好']
+        assert result['dimensions'] == ['规格']
         assert result['max_items'] == 12
         assert ShoppingContext.current().selected_lines == ()
         assert await env.store.list_confirmations(buyer_id="buyer-1", session_id="session-1") == []
@@ -59,7 +58,7 @@ async def test_unknown_destination_does_not_invent_quote(comparison_env):
     env = comparison_env
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY"))
     try:
-        result = json.loads((await env.tool(env.entries, None, [], env.guidance)).text)
+        result = json.loads((await env.tool(env.entries, None, [])).text)
         assert result["preferred_sku_id"] is None
         assert all("landed_price" not in c for c in result["hits"])
     finally:
@@ -72,11 +71,11 @@ async def test_over_budget_is_visible_but_not_preferred(comparison_env):
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
         effective_search={"parameters": {"ship_to":"CN", "landed_budget_major":430, "target_currency":"CNY"}}))
     try:
-        result = json.loads((await env.tool(env.entries, "P1001-S1", ["颜色偏好"], env.guidance)).text)
+        result = json.loads((await env.tool(env.entries, "P1001-S1", ["spec"])).text)
         assert result["hits"][1]["constraint_issues"] == ["over_landed_budget"]
-        assert not (await env.tool(env.entries, "P1001-S2", ["颜色偏好"], env.guidance)).ok
-        assert not (await env.tool(env.entries, "P9999-S1", [], env.guidance)).ok
-        assert not (await env.tool([env.entries[0], env.entries[0]], None, [], env.guidance)).ok
+        assert not (await env.tool(env.entries, "P1001-S2", ["spec"])).ok
+        assert not (await env.tool(env.entries, "P9999-S1", [])).ok
+        assert not (await env.tool([env.entries[0], env.entries[0]], None, [])).ok
     finally:
         ShoppingContext.reset(token)
 
@@ -85,7 +84,7 @@ async def test_over_budget_is_visible_but_not_preferred(comparison_env):
 async def test_comparison_requires_current_buyer_evidence(comparison_env):
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "other-buyer", "zh-CN", "CNY"))
     try:
-        assert not (await comparison_env.tool(comparison_env.entries, None, [], comparison_env.guidance)).ok
+        assert not (await comparison_env.tool(comparison_env.entries, None, [])).ok
     finally:
         ShoppingContext.reset(token)
 

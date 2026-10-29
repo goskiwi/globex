@@ -125,7 +125,9 @@ class MainAgentFactory:
             from app.infrastructure.shopping_forms import ClarificationRequest
             tools.append(as_langchain_tool(build_shopping_form_tool(self.shopping_form_store,self._bus),
                                            args_schema=ClarificationRequest, turn_delivery=True))
-        tools.extend(as_langchain_tool(function) for function in functions)
+        from app.application.agents.tool_confirmation import MEMORY_WRITE_TOOLS
+        tools.extend(as_langchain_tool(function, turn_delivery=function.__name__ in MEMORY_WRITE_TOOLS)
+                     for function in functions)
 
         system_prompt = prompts["system_prompt"]
         if self._capability_registry is not None:

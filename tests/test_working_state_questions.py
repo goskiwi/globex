@@ -38,7 +38,7 @@ def call(name, args, id='call'):
 
 
 def test_filters_absent_clear_soft_and_reset_are_distinct():
-    work=ShoppingWork(filters=Filters(price_max_major=300,target_currency='CNY',excluded_material_tags=['金属']))
+    work=ShoppingWork(filters=Filters(price_max_major=300,target_currency='CNY',excluded_material_tags=['金属']),latest_request='金属更好')
     work=change(work,preferences=['金属更好'],sort='价格升序')
     assert work.filters.excluded_material_tags==['金属']
     assert work.filters.price_max_major==300
