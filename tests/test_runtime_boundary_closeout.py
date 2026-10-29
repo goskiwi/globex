@@ -26,7 +26,7 @@ from app.application.runtime.request_scope import ShoppingContext, ShoppingConte
 from app.infrastructure.eventbus import TradeEventBus, observe_run_events
 from app.infrastructure.operational_metrics import begin_request, finish_request
 from app.presentation.ag_ui import parse_intent
-from scripts.eval.interview_runtime import isolated_runtime
+from scripts.eval.agent_runtime import isolated_runtime
 from tests.native_model_helpers import client_model, completion
 from tests.native_tool_helpers import tool_graph, call_tool, observe_tool_facts
 from tests.test_ag_ui_journal import body

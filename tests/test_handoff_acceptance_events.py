@@ -8,8 +8,8 @@ from tests.native_tool_helpers import observe_tool_facts
 from dataclasses import asdict
 
 async def test_rejected_submission_is_not_reported_completed(tmp_path,monkeypatch,context):
- invalid=submission(candidates=[{'product_id':'invented','assessment':'合成错误候选。'}])
- valid=submission(candidates=[{'product_id':'P1001','assessment':'依据已读资料提交。'}])
+ invalid=submission(candidates=[{'product_id': 'invented', 'evidence_fields': ['description', 'weight_kg']}])
+ valid=submission(candidates=[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}])
  _,model,dispatch,bus=factories(tmp_path,monkeypatch,[call('read_candidates',{}),invalid,valid])
  body=RunAgentInput.model_validate({'threadId':'handoff','runId':'review','state':{},'messages':[{'id':'u','role':'user','content':'合成研究请求'}],'tools':[],'context':[],'forwardedProps':{}})
  adapter=AGUIRunAdapter(body,lambda event:None);adapter.start()

@@ -7,7 +7,7 @@ from tests.test_task_execution import ask
 
 async def test_verified_requirement_can_complete_delivery(tmp_path,monkeypatch):
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P3008','sku_id':'P3008-S1'}),
-        submission(candidates=[{'product_id':'P3008','sku_id':'P3008-S1','assessment':'目录明确记载配防雨罩，符合本次明确要求。'}])])
+        submission(candidates=[{'product_id': 'P3008', 'sku_id': 'P3008-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     model=ScriptedModel(responses=[call('set_research_plan',{'plan': [{
         'id':'bag','goal':'找一款配防雨罩的背包','filters':{'product_type':'背包','price_max_major':300,'target_currency':'CNY','ship_to':'CN'},
         'requirements':['必须明确配防雨罩']} ]}),

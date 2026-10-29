@@ -103,7 +103,7 @@ class MainAgentFactory:
         tools.append(as_langchain_tool(build_recommendation_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=RecommendationInput, turn_delivery=True))
         tools.append(as_langchain_tool(build_bundle_tool(self._search_factory.catalog_search,
-            self._search_factory.evidence_store, self._bus), args_schema=RecommendationInput, turn_delivery=True))
+            self._search_factory.evidence_store, self._bus), turn_delivery=True))
         tools.append(as_langchain_tool(build_comparison_tool(self._search_factory.catalog_search,
             self._search_factory.evidence_store, self._bus), args_schema=ComparisonInput, turn_delivery=True))
         from app.application.tools.research_delivery_tool import build_research_delivery_tool

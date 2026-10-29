@@ -29,6 +29,8 @@ class TaskEvidence:
         self.session_id = session_id
         self.refs = set()
         self.facts = {}
+        # result_ref 是不可变观察的主键；facts 仅选择交付时使用的观察。
+        self._product_observations = {}
         self.qualification = {}
         self.quotes = {}
         self.identifiers = set()
@@ -57,21 +59,35 @@ class TaskEvidence:
         for card in cards:
             product_id = card["product_id"]
             common = {key:deepcopy(value) for key,value in card.items() if key in product_fields}
+            observation = (self._product_observations.setdefault((result_ref, product_id),
+                {'product': {}, 'facts': {}}) if result_ref else {'product': {}, 'facts': {}})
+            # 同一来源的字段页是同一观察的片段：未返回不删除已读值，null/空值仍是实际值。
+            # 只合并顶层字段，不能把显式空对象与旧对象的成员拼成另一份资料。
+            observation['product'].update(common)
             # 商品级资料不承载任何默认 SKU 的金额或库存。
             for sku in [None, *card.get("skus", [])]:
-                key = (product_id, sku["sku_id"] if sku else None)
-                old = self.facts.get(key)
-                if old and not old["historical"] and historical:
-                    continue
-                facts = {"result_ref":result_ref, "historical":historical,
-                         "observed_at":observed_at, "product":common,
-                         "sku":deepcopy(sku)}
+                sku_id = sku["sku_id"] if sku else None
+                key = (product_id, sku_id)
+                facts = observation['facts'].get(sku_id)
+                if facts is None:
+                    facts = {"result_ref":result_ref, "historical":historical,
+                             "observed_at":observed_at, "product":observation['product'],
+                             "sku":{} if sku else None}
+                    observation['facts'][sku_id] = facts
+                else:
+                    facts['historical'] = facts['historical'] and historical
+                    if facts['observed_at'] is None:
+                        facts['observed_at'] = observed_at
                 if sku:
-                    facts['sku'].pop('landed_price', None)
+                    facts['sku'].update({k:deepcopy(v) for k,v in sku.items() if k != 'landed_price'})
+                old = self.facts.get(key)
+                if old and not old["historical"] and historical and old is not facts:
+                    continue
                 self.facts[key] = facts
                 if sku:
-                    issues = list(sku.get('constraint_issues', []))
-                    stock, price = sku.get('stock'), sku.get('price_major')
+                    observed_sku = facts['sku']
+                    issues = list(observed_sku.get('constraint_issues', []))
+                    stock, price = observed_sku.get('stock'), observed_sku.get('price_major')
                     if type(stock) is int and stock <= 0:
                         issues.append('out_of_stock')
                     if stock is not None and type(stock) is not int:
@@ -79,10 +95,10 @@ class TaskEvidence:
                     valid_price = type(price) in (int, float) and math.isfinite(price) and price >= 0
                     if price is not None and not valid_price:
                         issues.append('invalid_price')
-                    self.qualification[key] = {'historical': historical, 'issues': issues,
-                        'verified': (not historical and not issues and type(sku.get('stock')) is int
-                                     and sku['stock'] > 0 and valid_price
-                                     and isinstance(sku.get('currency'), str))}
+                    self.qualification[key] = {'historical': facts['historical'], 'issues': issues,
+                        'verified': (not facts['historical'] and not issues and type(stock) is int
+                                     and stock > 0 and valid_price
+                                     and isinstance(observed_sku.get('currency'), str))}
                 self.identifiers.add(product_id)
                 if sku:
                     self.identifiers.add(sku["sku_id"])
@@ -239,7 +255,7 @@ class TaskEvidence:
         if isinstance(result,ResearchSubmission):
             for value in result.unmet_requirements:
                 if value not in self.requirements:
-                    errors.append(issue('requirement_unbound','unmet_requirements','只能引用本任务已有明确要求；其他局限写caveats'))
+                    errors.append(issue('requirement_unbound','unmet_requirements','只能引用本任务已有明确要求；资料字段缺口由程序生成'))
         if not self.successful_tools and (isinstance(result,ResearchSubmission) or result.status=='completed'):
             errors.append(issue('completion_without_evidence','submission','没有实际业务证据，不能提交研究或交易成果'))
         return errors

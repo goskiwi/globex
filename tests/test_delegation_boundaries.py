@@ -57,7 +57,7 @@ async def test_plan_scope_comes_from_saved_definition_and_keeps_parent_state(pre
 
 def research():
     return {'agent':'search_agent','status':'completed','scope':{'task_id':'bag','goal':'背包研究','parent_conditions':{},'definition':{}},
-            'candidates':[{'product_id':'P1003','sku_id':'P1003-S1','assessment':'已选候选','facts':{'result_ref':'source-ref','product':{'title':'合成背包'},'sku':{'sku_id':'P1003-S1'}}}],
+            'candidates':[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'evidence_fields': ['description', 'weight_kg'], 'facts': {'result_ref': 'source-ref', 'product': {'title': '合成背包'}, 'sku': {'sku_id': 'P1003-S1'}}}],
             'observed_products':[f'P{i}' for i in range(1000,1272)],'observed_skus':{f'P{i}':[f'P{i}-S{j}' for j in range(1,9)] for i in range(1000,1272)},'evidence_refs':['source-ref']}
 
 

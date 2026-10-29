@@ -21,3 +21,7 @@
 
 .research-analysis { font-size:14px;line-height:1.85;margin:12px 0 18px; }
 .research-analysis p { margin:10px 0; }
+.research-evidence { font-size:13px;line-height:1.8;margin:10px 0 20px; }
+.research-evidence>div { display:grid;grid-template-columns:minmax(100px,140px) 1fr;gap:12px;margin:8px 0; }
+.research-evidence dt { color:var(--muted); }
+.research-evidence dd { margin:0;overflow-wrap:anywhere;white-space:pre-wrap; }

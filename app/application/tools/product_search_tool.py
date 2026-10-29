@@ -20,7 +20,8 @@ from app.domain.catalog.exchange_rate import ExchangeRateTable
 from app.domain.shipping.tariff_schedule import TariffSchedule
 from app.application.runtime.request_scope import ShoppingContext
 from app.infrastructure.eventbus import TradeEventBus
-from app.application.tools.shopping_operations import RequirementChange, search_requirements
+from app.application.tools.shopping_operations import search_requirements
+from app.application.agents.shopping_state import RequirementChange
 
 
 class SearchQuery(BaseModel):
@@ -32,7 +33,7 @@ class SearchQuery(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50, strict=True, description="候选数量，1 到 50")
     product_id: str | None = Field(default=None, pattern=r"^P\d{4,}$", description="精确商品 ID")
     sku_id: str | None = Field(default=None, pattern=r"^P\d{4,}-S\d+$", description="精确 SKU；与商品 ID 同传时须属于同一商品")
-    conditions: RequirementChange | None = Field(default=None, description='本轮买家明确的需求变化；省略继承。字段省略保留，null清除。子任务省略此项')
+    conditions: RequirementChange | None = Field(default=None, description='本轮买家明确的需求变化，不含检索词；normalized_query放顶层。省略继承、null清除。并行检索各自携带相同的本轮变化，不能让另一查询依赖本调用尚未提交的状态。子任务省略此项')
 
     @model_validator(mode="after")
     def query_or_identity(self):

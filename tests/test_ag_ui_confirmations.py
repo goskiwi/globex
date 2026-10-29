@@ -147,7 +147,10 @@ async def test_orchestrator_passes_historical_order_references_without_current_s
     body = RunAgentInput.model_validate(request_data())
     result = await orchestrator.handle_intent(parse_intent(body))
     assert result.final_text == "这笔意向单已取消"
-    messages = orchestrator._reply.call_args.args[2]
+    from langgraph.types import Overwrite
+    updated = orchestrator._reply.call_args.args[2]
+    assert isinstance(updated, Overwrite)
+    messages = updated.value
     assert "order-test" in str(messages[0].content)
     assert "CANCELLED" not in str(messages[0].content)
     assert "历史订单引用" in str(messages[0].content)

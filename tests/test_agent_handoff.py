@@ -107,7 +107,7 @@ def factories(tmp_path, monkeypatch, responses, role="search", tools=None):
 
 
 async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_path, monkeypatch):
-    candidate = {"product_id": "P1001", "sku_id": "P1001-S1", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
+    candidate = {'product_id': 'P1001', 'sku_id': 'P1001-S1', 'evidence_fields': ['description', 'weight_kg']}
     search, child, dispatch, bus = factories(tmp_path, monkeypatch, [call("read_candidates", {}),
         submission(candidates=[candidate])])
     parent = ScriptedModel(responses=[call('set_shopping_requirements', {'changes': {
@@ -128,7 +128,7 @@ async def test_parent_graph_injects_state_and_keeps_child_history_isolated(tmp_p
     assert "无关旧话题" not in json.dumps(sent, ensure_ascii=False)
     result = next(m for m in state["messages"] if isinstance(m, ToolMessage) and m.name == "task_dispatch")
     delivered = json.loads(result.content)["candidates"][0]
-    assert {k:v for k,v in delivered.items() if k != "facts"} == {**candidate,"caveats":[]}
+    assert {k:v for k,v in delivered.items() if k != "facts"} == candidate
     assert delivered["facts"]["result_ref"] == "ctx_demo"
     assert json.loads(result.content)["status"] == "completed"
     assert not any(isinstance(m, ToolMessage) and m.name == "read_candidates" for m in state["messages"])
@@ -147,8 +147,8 @@ async def test_invalid_or_unsupported_completion_is_failed(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("updates", [
-    {"candidates": [{"product_id": "NOT-IN-CATALOG", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]},
-    {"candidates": [{"product_id": "P1001", "sku_id": "P1002-S1", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]},
+    {"candidates": [{'product_id': 'NOT-IN-CATALOG', 'evidence_fields': ['description', 'weight_kg']}]},
+    {"candidates": [{'product_id': 'P1001', 'sku_id': 'P1002-S1', 'evidence_fields': ['description', 'weight_kg']}]},
     {"evidence_refs": ["ctx_invented"]},
 ])
 async def test_result_must_match_actual_child_evidence(tmp_path, monkeypatch, updates):
@@ -160,11 +160,10 @@ async def test_result_must_match_actual_child_evidence(tmp_path, monkeypatch, up
 
 async def test_nonblocking_notes_do_not_turn_completed_task_into_failure(tmp_path, monkeypatch):
     _, _, dispatch, _ = factories(tmp_path, monkeypatch, [call("read_candidates", {}),
-        submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。',
-                                "caveats": ["容量数据？"]}])])
+        submission(candidates=[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}])])
     result = (await dispatch("search_agent", task())).data
     assert result["status"] == "completed"
-    assert result["candidates"][0]["caveats"] == ["容量数据？"]
+    assert result["candidates"][0]["evidence_fields"] == ["description","weight_kg"]
     assert "1款商品" in result["summary"]
 
 
@@ -249,7 +248,7 @@ async def test_parallel_results_do_not_share_evidence_and_failure_keeps_other_re
 
     class Factory:
         def build(self):
-            answer = submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
+            answer = submission(candidates=[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}])
             return create_agent(ScriptedModel(responses=[call("read_scope", {}), answer, answer, answer]),
                 tools=[read_scope, build_submission_tool(ResearchSubmission)], middleware=[HandoffMiddleware()],
                 context_schema=HandoffContext)
@@ -269,7 +268,7 @@ async def test_historical_lookup_is_valid_but_labelled_historical(tmp_path, monk
     ref = await factory.evidence_store.save("buyer", "handoff", kind, {
         "hits": [{"product_id": "P1001", "title": "合成背包", "skus": [{"sku_id": "P1001-S1"}]}]})
     model = ScriptedModel(responses=[call("conversation_fact_lookup", {"result_ref": ref}),
-        submission(candidates=[{"product_id": "P1001", 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])])
+        submission(candidates=[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}])])
     monkeypatch.setattr("app.application.agents.search_agent.create_chat_model", lambda *a, **kw: model)
     factory.build_tools = lambda: [as_langchain_tool(build_conversation_fact_lookup(factory.evidence_store))]
     result = (await dispatch("search_agent", task(evidence_refs=[ref]))).data

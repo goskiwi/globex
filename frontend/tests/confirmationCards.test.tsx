@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ConfirmationCards, {
-  isConfirmationExpired,
-} from "../src/components/ConfirmationCards";
+import ConfirmationCards from "../src/components/ConfirmationCards";
+import {isConfirmationExpired} from "../src/lib/confirmationTime";
 import OrderIntentForm from "../src/components/OrderIntentForm";
 import type { ProductCard, TradeConfirmation } from "../src/types";
 

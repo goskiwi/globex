@@ -191,3 +191,18 @@ def test_factory_hint_reads_metadata_with_same_pinned_digest(tmp_path):
             registry.metadata(available_tools={"product_search_tool"},expected_digest=pinned)
     finally:
         ShoppingContext.reset(token)
+
+async def test_strategy_scope_constraint_is_the_actual_model_input_and_storage_rule(tmp_path):
+    from app.application.runtime.tools import as_langchain_tool
+    from app.infrastructure.capability_registry import CAPABILITY_SCOPE_PATTERN
+    from pydantic import ValidationError
+    registry=CapabilityRegistry(tmp_path/'scopes.db')
+    function=next(f for f in build_capability_tools(registry,{'product_search_tool'},TradeEventBus())
+                  if f.__name__=='lookup_strategy_memory_tool')
+    tool=as_langchain_tool(function)
+    schema=tool.tool_call_schema
+    assert schema.model_json_schema()['properties']['scope']['pattern']==CAPABILITY_SCOPE_PATTERN
+    assert schema.model_validate({'query':'通勤','scope':'shopping:headphones'}).scope=='shopping:headphones'
+    with pytest.raises(ValidationError):schema.model_validate({'query':'通勤','scope':'shopping:耳机'})
+    with pytest.raises(CapabilityError):registry.lookup_strategies('通勤','shopping:耳机')
+    with pytest.raises(ValidationError):schema.model_validate({'query':'x'*2001})

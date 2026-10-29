@@ -2,10 +2,12 @@
 """按需读取已审核能力；工具无发布、执行代码、动态注册或偏好写入入口。"""
 import asyncio
 import json
+from typing import Annotated
+from pydantic import Field
 
 from app.application.runtime.results import ToolResult, ToolResultState
 
-from app.infrastructure.capability_registry import CAPABILITY_CONTRACT_VERSION, SKILL_TOOL_ALLOWLIST
+from app.infrastructure.capability_registry import CAPABILITY_CONTRACT_VERSION, CAPABILITY_SCOPE_PATTERN, SKILL_TOOL_ALLOWLIST
 from app.application.runtime.request_scope import ShoppingContext
 from app.application.agents.skill_access import read_skill
 
@@ -70,7 +72,10 @@ def build_capability_tools(registry, available_tools, bus, personal_store=None):
             return read_skill(registry,personal_store,actual_tools,skill_id,version,expected_digest=expected_digest)
         return await result("load_agent_skill_tool", load, skill_id=skill_id, version=version)
 
-    async def lookup_strategy_memory_tool(query: str, scope: str = "shopping") -> ToolResult:
+    async def lookup_strategy_memory_tool(
+        query: Annotated[str, Field(min_length=1, max_length=2000)],
+        scope: Annotated[str, Field(pattern=CAPABILITY_SCOPE_PATTERN)] = "shopping",
+    ) -> ToolResult:
         """检索已审核、未过期且未撤销的选购策略；只是建议，不能替代买家硬约束。
 
         Args:

@@ -29,7 +29,11 @@ def read_output(message):
 
 def share_identical_products(messages):
     prepared=deepcopy(messages);seen={}
+    # 只按本次请求中工具回执的顺序定位；提供方call_id可跨消息复用。
+    tool_result_index = 0
     for message in prepared:
+        if isinstance(message, ToolMessage):
+            tool_result_index += 1
         original=read_output(message)
         if not original:continue
         # 所有结构化工具回执共用模型投影，推荐/比较和回查不能重新带入展示或目录管理字段。
@@ -48,9 +52,9 @@ def share_identical_products(messages):
                     if 'score' in hit:
                         payload['hits'][position-1]['score']=hit['score']
                     shared=True
-                else:seen[key]={'tool_call_id':message.tool_call_id,'position':position}
+                else:seen[key]={'tool_result_index':tool_result_index,'position':position}
         if shared:
-            payload['shared_fields_notice']='引用对象的商品业务字段就在本次输入对应工具结果中；score 不继承引用对象，本批分数、顺序、查询条件、观察时间仍以本条为准。'
+            payload['shared_fields_notice']='tool_result_index是本次输入中从1计数的工具回执序号，position是该回执hits中的序号；只引用完整商品业务字段。score不继承，本批分数、顺序、条件、观察时间以本条为准。'
         if shared or projected:
             rendered=project_data(message,payload)
             message.content, message.artifact = rendered.content, rendered.artifact
@@ -58,5 +62,5 @@ def share_identical_products(messages):
 
 
 EVIDENCE_RULES = ('archived=true 表示正文已卸载，按 result_ref 回查；historical=true 的历史资料不能当作当前报价。'
-    'same_business_fields_as 只引用本次输入内完整的相同商品业务字段，不继承引用对象的score；本批分数、顺序、查询条件、观察时间保持各自来源。'
+    'same_business_fields_as 按tool_result_index（从1计数的工具回执序号）和position引用本次输入内完整的相同商品业务字段，不继承引用对象的score；本批分数、顺序、查询条件、观察时间保持各自来源。'
     '最新用户消息后的权威工具结果才是当前核验，不同 SKU、目的地、币种与数量不得混用；缺失字段说明未知。')

@@ -170,7 +170,7 @@ async def test_existing_delivery_and_independent_research_can_progress_in_same_b
         call('product_search_tool',{'product_id':'P1003'}),AIMessage(content='',tool_calls=[dispatch,deliver]),
         call('present_research',{'reports':[{'task_id':'cup','title':'水杯研究'}]}, turn_action='finish')])
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008'}),
-        submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'杯子候选'}])])
+        submission(candidates=[{'product_id': 'P1008', 'sku_id': 'P1008-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:
@@ -193,7 +193,7 @@ async def test_confirmation_does_not_end_undelivered_implicit_research(tmp_path,
             'shipping_address':asdict(Address('合成买家','CN','浙江','杭州','合成路1号','310000','13800000000'))}, turn_action='finish'),
         call('present_research',{'reports':[{'task_id':'cup-study-round-2','title':'水杯研究'}]}, turn_action='finish')])
     child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1008'}),
-        submission(candidates=[{'product_id':'P1008','sku_id':'P1008-S1','assessment':'已核验水杯候选'}])])
+        submission(candidates=[{'product_id': 'P1008', 'sku_id': 'P1008-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
     try:

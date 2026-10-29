@@ -29,7 +29,7 @@ def card():
 
 def deliver(evidence, sku='P1003-S2'):
     submission=ResearchSubmission(candidates=[
-        {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
+        {'product_id': 'P1003', 'sku_id': sku, 'evidence_fields': ['description', 'weight_kg']}])
     assert not evidence.validate(submission)
     return evidence.delivered(submission).candidates[0].facts
 
@@ -121,9 +121,9 @@ def test_optional_phone_is_plain_optional_text_without_format_conversion():
 
 
 def test_unknown_research_attributes_are_not_unmet_user_constraints():
-    result=ResearchSubmission(candidates=[{'product_id':'P1003','assessment':'依据已读资料','caveats':['电脑隔层未知']}])
+    result=ResearchSubmission(candidates=[{'product_id': 'P1003', 'evidence_fields': ['description', 'weight_kg']}])
     assert not result.unmet_requirements and 'status' not in ResearchSubmission.model_fields
-    assert result.candidates[0].caveats==['电脑隔层未知']
+    assert result.candidates[0].evidence_fields==['description','weight_kg']
 
 
 
@@ -159,7 +159,7 @@ def test_delegation_rejects_removed_research_dimensions_without_alias():
 def test_blank_sku_is_rejected_not_converted_to_product_only(sku):
     with pytest.raises(ValidationError):
         ResearchSubmission(candidates=[
-            {'product_id':'P1003','sku_id':sku,'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])
+            {'product_id': 'P1003', 'sku_id': sku, 'evidence_fields': ['description', 'weight_kg']}])
 
 
 def test_known_sku_and_product_only_candidates_have_real_facts():
@@ -177,7 +177,7 @@ def test_known_sku_and_product_only_candidates_have_real_facts():
 async def test_production_tool_inventory_has_no_opaque_objects(tmp_path, monkeypatch):
     from tests.test_retrieval import _settings
     from tests.test_langgraph_runtime import ScriptedModel
-    from scripts.eval.interview_runtime import isolated_runtime
+    from scripts.eval.agent_runtime import isolated_runtime
     import app.application.agents.main_agent as main_module
     original=main_module.create_agent
     observed=[]

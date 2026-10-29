@@ -84,7 +84,7 @@ async def test_real_child_factory_checks_skill_body_before_model(env,monkeypatch
     factory,model,dispatch,_=factories(env.path,monkeypatch,[
         call('load_agent_skill_tool',{'skill_id':skill['id'],'version':'1'}),
         call('read_candidates',{}),
-        submission(**({'candidates':[{'product_id':'P1001','assessment':'依据已读资料。'}]} if role=='search' else {'status':'completed'}))],role=role)
+        submission(**({'candidates':[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}]} if role=='search' else {'status':'completed'}))],role=role)
     factory._settings=replace(factory._settings,context_size=28000)
     factory.capability_registry=env.registry;factory.buyer_skill_store=env.personal
     result=(await dispatch(role+'_agent',task(skill_refs=[{'id':skill['id'],'version':'1'}]))).data

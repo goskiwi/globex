@@ -126,3 +126,16 @@ async def test_all_stores_preserve_constraint_scope_and_evidence(tmp_path):
 async def test_unknown_material_does_not_silently_become_a_noop_filter():
     with pytest.raises(ValueError,match="材质条件"):
         ProductSearchSpec(product_id="P1003",excluded_material_tags=["尼龙"])
+
+def test_search_and_requirement_operation_share_the_domain_field_contract():
+    from app.application.agents.shopping_state import ShoppingUpdate,RequirementChange
+    from app.application.tools.product_search_tool import SearchQuery
+    from app.application.tools.shopping_operations import build_shopping_operations
+    from pydantic import ValidationError
+    search=SearchQuery.model_json_schema()['$defs']['RequirementChange']['properties']
+    operation=build_shopping_operations(None)[0].tool_call_schema.model_json_schema()['$defs']['RequirementChange']['properties']
+    assert search==operation
+    assert all(RequirementChange.model_fields[k].description==ShoppingUpdate.model_fields[k].description for k in search)
+    assert '长期偏好' in search['ignored_preferences']['description']
+    assert '替换旧列表' in search['requirements']['description']
+    with pytest.raises(ValidationError):SearchQuery(normalized_query='背包',conditions={'normalized_query':'背包'})

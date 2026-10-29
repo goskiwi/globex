@@ -37,31 +37,29 @@ def test_report_ignores_model_summary_and_computes_cross_currency_ranking():
     assert unit['spread_minor'] == 782 and unit['lowest'][0]['sku_id'] == 'P40018-S1'
     assert landed['minimum_minor'] == 31618 and landed['maximum_minor'] == 32400
     assert 'summary' not in result
-    assert result['items'][0]['caveats'] == ['是否有电脑仓？']
+    assert result['items'][0]['evidence'][0]['value'] == '支持蓝牙和降噪，未提供佩戴形式'
     assert data == before, '事实投影不能改写原始回执'
 
 
-def test_assessment_is_presented_separately_without_replacing_facts_or_price_comparisons():
-    data = report_pair()
-    candidate = data['candidates'][0]
-    candidate['assessment'] = '适合优先减轻随身负担的人；背负舒适度尚未核验。'
-    before = deepcopy(candidate['facts'])
-    result = project_research_report(data, RATES, title='研究结果')
-    assert result['items'][0]['assessment'] == candidate['assessment']
-    assert result['items'][0]['facts'] == before
-    assert result['items'][0]['facts']['product']['description'] == '支持蓝牙和降噪，未提供佩戴形式'
-    assert result['items'][0]['facts']['sku']['price_major'] == 299
-    assert result['price_comparisons'][0]['minimum_minor'] == 29118
-    assert (result['product_count'], result['sku_count']) == (2, 2)
+def test_evidence_fields_resolve_values_and_missing_fields_without_model_prose():
+    data=report_pair()
+    candidate=data['candidates'][0]
+    candidate['evidence_fields']=['weight_kg','dimensions_cm','package_dimensions_cm','description']
+    before=deepcopy(candidate['facts'])
+    result=project_research_report(data,RATES,title='研究结果')
+    item=result['items'][0]
+    assert item['facts']==before and item['evidence'][0]['value']==.38
+    assert item['evidence'][1]['label']=='商品尺寸（cm）'
+    assert item['missing_fields']==[{'field':'package_dimensions_cm','label':'包装尺寸（cm）'}]
+    assert 'assessment' not in item and 'caveats' not in item
+    assert result['price_comparisons'][0]['minimum_minor']==29118
 
 
-def test_submission_requires_current_assessment_without_filling_old_payload():
-    schema = convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
-    assert 'assessment' in schema['properties']['candidates']['items']['required']
-    with pytest.raises(ValidationError) as failure:
-        ResearchSubmission(candidates=[{'product_id': 'P1022'}])
-    assert any(e['loc'] == ('candidates', 0, 'assessment') and e['type'] == 'missing'
-               for e in failure.value.errors())
+def test_submission_requires_field_selection_without_old_prose_compatibility():
+    schema=convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
+    assert 'evidence_fields' in schema['properties']['candidates']['items']['required']
+    with pytest.raises(ValidationError):ResearchSubmission(candidates=[{'product_id':'P1022'}])
+    with pytest.raises(ValidationError):ResearchSubmission(candidates=[{'product_id':'P1022','evidence_fields':['invented']}])
 
 
 def test_counts_distinguish_canonical_products_and_explicit_skus():
@@ -120,30 +118,50 @@ def test_tied_prices_keep_all_lowest_candidates_and_full_read_facts():
     assert unit['spread_minor'] == 0 and len(unit['lowest']) == len(unit['highest']) == 2
     assert result['items'][0]['facts']['product'] == before
     assert result['items'][0]['facts']['product']['weight_kg'] == .38
-    assert 'evidence' not in result['items'][0]
+    assert result['items'][0]['evidence'][1]['value']==.38
 
 
-@pytest.mark.parametrize('field,value', [('summary', '最便宜'), ('unknowns', ['没电脑仓']),
-                                         ('reason', '头戴式'), ('evidence_fields', ['weight_kg'])])
-def test_removed_prose_inputs_are_absent_from_native_schema(field, value):
-    schema = convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
-    assert 'summary' not in schema['properties'] and 'unknowns' not in schema['properties']
-    properties = schema['properties']['candidates']['items']['properties']
-    assert 'reason' not in properties and 'evidence_fields' not in properties
-    payload = {'status': 'completed', 'candidates': [
-        {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]}
-    if field in {'reason', 'evidence_fields'}:
-        payload['candidates'][0][field] = value
-    else:
-        payload[field] = value
-    with pytest.raises(ValidationError):
-        ResearchSubmission.model_validate(payload)
+@pytest.mark.parametrize('field,value',[('summary','最便宜'),('unknowns',['没电脑仓']),
+    ('assessment','54g，评价数最多'),('caveats',['没有电脑仓']),('reason','头戴式')])
+def test_removed_prose_inputs_are_absent_from_native_schema(field,value):
+    schema=convert_to_openai_tool(build_submission_tool(ResearchSubmission))['function']['parameters']
+    candidate={'product_id':'P1022','evidence_fields':['weight_kg']}
+    payload={'candidates':[candidate]}
+    if field in {'assessment','reason'}:candidate[field]=value
+    else:payload[field]=value
+    assert 'assessment' not in schema['properties']['candidates']['items']['properties']
+    assert 'caveats' not in schema['properties']
+    with pytest.raises(ValidationError):ResearchSubmission.model_validate(payload)
 
 
 def test_model_cannot_inject_facts_or_duplicate_candidate():
-    candidate = {'product_id': 'P1022', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}
+    candidate = {'product_id': 'P1022', 'evidence_fields':['description','weight_kg']}
     with pytest.raises(ValidationError):
         ResearchSubmission(candidates=[{**candidate, 'facts': {'product': {'weight_kg': .01}}}])
     assert ResearchSubmission(candidates=[candidate]).candidates[0].product_id == 'P1022'
     with pytest.raises(ValidationError, match='不能重复'):
         ResearchSubmission(candidates=[candidate, candidate])
+
+
+def test_metric_rankings_compute_349_over_287_and_never_mix_missing_or_historical():
+    data=report_pair()
+    first,second=data['candidates']
+    first['facts']['product']['rating_summary']={'average':4.8,'review_count':287}
+    first['facts']['product']['weight_kg']=.055
+    second['facts']['product']['rating_summary']={'average':4.2,'review_count':349}
+    second['facts']['product']['weight_kg']=.04
+    metrics={m['field']:m for m in project_research_report(data,RATES,title='证据')['metric_comparisons']}
+    assert metrics['review_count']['maximum']==349
+    assert metrics['review_count']['highest'][0]['product_id']==second['product_id']
+    assert metrics['weight_kg']['maximum']==.055
+    assert metrics['rating_average']['highest'][0]['product_id']==first['product_id']
+    missing=deepcopy(second);missing['product_id']='missing';missing['facts']['product']={}
+    data['candidates'].append(missing)
+    metric=next(m for m in project_research_report(data,RATES,title='证据')['metric_comparisons'] if m['field']=='review_count')
+    assert metric['compared_product_count']==2 and metric['excluded_products']==[{'product_id':'missing','reason':'missing_value'}]
+    second['facts']['historical']=True
+    unavailable=project_research_report(data,RATES,title='证据')['metric_comparisons']
+    assert all(m['compared_product_count']==1 and m['minimum'] is m['maximum'] is None
+               and m['lowest']==m['highest']==[] for m in unavailable)
+    assert all(m['excluded_products']==[{'product_id':'P40018','reason':'historical_only'},
+                                        {'product_id':'missing','reason':'missing_value'}] for m in unavailable)

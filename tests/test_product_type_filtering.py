@@ -108,7 +108,7 @@ async def test_parallel_research_keeps_type_in_each_scope_and_candidate_facts(tm
     steps=[{'id':'bag','goal':'找背包','filters':{'product_type':'背包','price_max_major':300}},
            {'id':'ear','goal':'找耳机','filters':{'product_type':'耳机','price_max_major':600}}]
     children=iter([ScriptedModel(responses=[call('product_search_tool',{'product_id':pid}),
-        submission(candidates=[{'product_id':pid,'sku_id':pid+'-S1','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}])])
+        submission(candidates=[{'product_id': pid, 'sku_id': pid + '-S1', 'evidence_fields': ['description', 'weight_kg']}])])
         for pid in ('P1003','P1022')])
     main=ScriptedModel(responses=[*[call('set_shopping_requirements', {'changes': {'filters': {'ship_to':'CN','target_currency':'CNY'}}}), call('set_research_plan', {'plan': steps})],
         AIMessage(content='',tool_calls=[{'id':s['id'],'name':'task_dispatch','args':{

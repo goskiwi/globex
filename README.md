@@ -396,19 +396,22 @@ uv run python -m scripts.eval.retrieval_v2 --split holdout --live --output .pyte
 
 `--live` 遇到模型不可用会退出非零，并保留阻塞报告，不能把词项降级算作 Hybrid 成功。不加 `--live` 只做词项对照。当前报告包含原始金标、四条错标修正及同批输出重算；重算不是新一轮独立验证。54 条留出场景的纠错重算中 Recall@5 为 98.96%、NDCG@5 为 0.9682，仍存在口语需求误排；具体基线、置信区间、约 0.91 秒 P95 和失败样本见专项报告。在线默认开关未因这批合成数据自动推广。
 
-离线优化单独安装 GEPA，不增加正常网页运行依赖：
+离线改进使用测试镜像中的 GEPA 和真实应用装配。候选通过 API、会话版本分配、主子图及业务交付执行；公共 Skill 通过隔离目录和实际工具加载。使用已启动的商品检索服务，交易与买家数据在临时目录中隔离：
 
 ```bash
-uv sync --locked --extra optimization
-uv run --extra optimization python -m scripts.optimize_prompts \
-  --output .pytest_cache/gepa-new-run --max-calls 24
-# 可选：使用既有公共 Skill 草案，仅优化 body，权限、作用域保持不变
-uv run --extra optimization python -m scripts.optimize_prompts \
-  --public-skill docs/capabilities/backpack-skill.draft.json \
-  --output .pytest_cache/gepa-skill-new-run --max-calls 24
+make improve-agent IMPROVEMENT_NETWORK=globex_default \
+  IMPROVEMENT_DIR=eval/verification/improvement-new-run IMPROVEMENT_CALLS=8
+# 若上一轮产生经验草稿，可继续优化其正文；仍经真实目录加载
+make improve-agent IMPROVEMENT_NETWORK=globex_default \
+  IMPROVEMENT_DIR=eval/verification/improvement-skill-new-run \
+  IMPROVEMENT_ARGS="--public-skill eval/verification/improvement-new-run/experience-1.json"
 ```
 
-每次使用新的输出目录。预算单位是场景评估次数，不是 API 请求次数；一个场景最多执行 3 轮工具循环，框架还可能追加收尾调用或重试；留出复测和反思额外计入报告。生成的 `candidate.yml` 或 `candidate-skill.json` **不会自动发布**。Prompt 仍走 `scripts.prompt_release` 的注册、成对评测和人工发布；Skill 仍走 `scripts.capabilities` 的 draft → review → publish。本次真实实验没有得到优于基线的候选。
+网络名取现有 Compose 网络；自定义项目名时显式修改 `IMPROVEMENT_NETWORK`。每次使用新的输出目录。预算单位是任务评估次数，不是 API 请求次数；每项运行完整角色和交付，留出对照、反思、经验提炼及复用另计。当前默认数据用于 Search 研究改进；改用其他角色时同步指定对应任务集。模型服务故障保留证据并中止优化，不当作候选质量反馈。
+
+`report.json` 包含训练/选择与留出结果，`executions/` 保存各次实际事件和版本；临时数据库在执行后清理。经验只从训练/选择任务的不同候选对照提炼，写为 `experience-*.json` 草稿，再用原始 Prompt 在留出任务交错比较有/无经验，记录实际加载和业务结果到 `experience-reuse.json`。证据不足可不产生经验；加载成功不等于效果提升。输入用例应为合成或人工脱敏材料，不自动导入真实买家原文。
+
+生成的 `candidate.yml`、`candidate-skill.json` 与经验草稿均不自动正式发布。Prompt 沿用 `scripts.prompt_release`，Skill 沿用 `scripts.capabilities` 的 draft → review → publish；正常网页不新增 GEPA 依赖或反思调用。本轮验证阶段见[改动记录](docs/改动记录/2026-10-28/真实执行离线改进与经验复用.md)。
 
 ACP 采用独立的本地商家沙箱，固定两件合成商品、CNY、每 SKU 一件；库存和订单写入独立目录，不接触页面的真实使用数据。启动商家：
 

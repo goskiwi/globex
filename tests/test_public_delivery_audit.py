@@ -64,7 +64,16 @@ async def test_component_and_lifecycle_cannot_bypass_configured_output_policy(tm
 async def test_handoff_events_keep_internal_reasons_and_publish_audited_results(tmp_path,monkeypatch):
     from tests.test_agent_handoff import factories,task,submission
     marker='sk-'+'SYNTHETICONLY'*3
-    factory,model,dispatch,bus=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id':'P1001','sku_id':'P1001-S1','assessment':marker}])])
+    factory,model,dispatch,bus=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'evidence_fields': ['description', 'weight_kg']}])])
+    from langchain_core.tools import tool
+    @tool
+    def read_candidates() -> str:
+        """读取含合成敏感片段的目录证据。"""
+        payload={'tool':'product_search_tool','result_ref':'ctx_demo','hits':[
+            {'product_id':'P1001','description':marker,'skus':[{'sku_id':'P1001-S1'}]}]}
+        bus.publish('handoff','tool.result',payload)
+        return json.dumps(payload)
+    factory.build_tools=lambda:[read_candidates]
     from app.application.runtime.request_scope import ShoppingContext,ShoppingContextSnapshot
     token=ShoppingContext.set(ShoppingContextSnapshot('handoff','buyer','zh-CN','CNY'))
     events=[]
@@ -72,5 +81,5 @@ async def test_handoff_events_keep_internal_reasons_and_publish_audited_results(
         with observe_run_events(events.append):result=await dispatch('search_agent',task())
         accepted=next(e for e in events if e.type=='handoff.result' and e.payload['decision']=='accepted')
         assert marker in json.dumps(accepted.payload) and marker not in json.dumps(accepted.to_dict())
-        assert result.data['candidates'][0]['assessment']==marker
+        assert result.data['candidates'][0]['facts']['product']['description']==marker
     finally:ShoppingContext.reset(token)

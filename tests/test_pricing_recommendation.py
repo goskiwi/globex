@@ -1,3 +1,4 @@
+from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 import json
 from tests.presentation_helpers import delivery_middlewares
 """完整报价与推荐链：使用真实目录、证据库和 SQLite，不调用外部模型。"""
@@ -55,19 +56,19 @@ async def test_recommendation_uses_evidence_current_constraints_and_actual_quant
     tool = build_bundle_tool(catalog, env.evidence, env.bus)
     pick = Pick(product_id="P1001", sku_id="P1001-S1", quantity=2, reason="适合旅行")
     context = ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
-        effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY", "landed_budget_major": 400}})
+        effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 400})), currency='CNY'))
     token = ShoppingContext.set(context)
     try:
-        rejected = await tool([pick], '两件搭配用于旅行。')
+        rejected = await tool([pick], '两件搭配用于旅行。', 'CN', 'CNY', None)
         assert not rejected.ok and "超过当前预算" in str(rejected)
         assert not await env.evidence.search("buyer-1", "session-1", kind="recommendation")
     finally:
         ShoppingContext.reset(token)
 
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
-        effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY", "landed_budget_major": 450}}))
+        effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 450})), currency='CNY')))
     try:
-        accepted = await tool([pick], '两件搭配用于旅行。')
+        accepted = await tool([pick], '两件搭配用于旅行。', 'CN', 'CNY', None)
         assert accepted.ok
         saved = (await env.evidence.search("buyer-1", "session-1", kind="recommendation"))[0]["data"]
         assert saved["quote"]["total_amount_minor"] == 41800
@@ -111,7 +112,7 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
     from app.application.runtime.tools import as_langchain_tool
-    from app.application.tools.recommendation_tools import RecommendationInput
+    from app.application.tools.recommendation_tools import BundleInput
     from app.application.runtime.delivery import FinalDeliveryMiddleware
     env = confirmation_env
     catalog = CatalogSearchUseCase(env.products, pricing=env.service._pricing)
@@ -120,12 +121,12 @@ async def test_native_tool_accepts_typed_picks_and_preserves_result(confirmation
     class Model(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs):
             return self
-    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_bundle", "args": {"turn_action":"finish", "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
+    model = Model(responses=[AIMessage(content="", tool_calls=[{"id": "recommend-1", "name": "recommend_bundle", "args": {"ship_to":"CN", "currency":"CNY", "landed_budget_major":None, "turn_action":"finish", "guidance":"两件用于分开收纳旅行用品，费用请查看具体报价。", "picks": [{"product_id": "P1001", "sku_id": "P1001-S1", "quantity": 2, "reason": "适合旅行"}]}}]),
         AIMessage(content="两件合计418元")])
-    tool = as_langchain_tool(build_bundle_tool(catalog, env.evidence, env.bus), args_schema=RecommendationInput, turn_delivery=True)
+    tool = as_langchain_tool(build_bundle_tool(catalog, env.evidence, env.bus), args_schema=BundleInput, turn_delivery=True)
     graph = create_agent(model, tools=[tool], middleware=delivery_middlewares())
     token = ShoppingContext.set(ShoppingContextSnapshot("session-1", "buyer-1", "zh-CN", "CNY",
-        effective_search={"parameters": {"ship_to": "CN", "target_currency": "CNY"}}))
+        effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY'})), currency='CNY')))
     try:
         result = await graph.ainvoke({"messages": [HumanMessage(content="推荐两件") ]})
         outputs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
@@ -172,3 +173,37 @@ async def test_different_skus_and_source_currencies_use_one_total():
     assert quote["total_amount_minor"] == 44900
     assert quote["items"][1]["source_currency"] == "USD"
     assert quote["items"][1]["unit_price_minor"] == 14200
+
+async def test_bundle_owns_quote_terms_without_saved_requirements_or_historical_quote_inference(confirmation_env):
+    from copy import deepcopy
+    from dataclasses import replace
+    from app.application.tools.recommendation_tools import build_quote_tool,BundleInput
+    from app.application.agents.shopping_state import Choice
+    from pydantic import ValidationError
+    env=confirmation_env;catalog=CatalogSearchUseCase(env.products,pricing=env.service._pricing)
+    for pid in ('P1003','P1008'):
+        await env.evidence.save('buyer-1','session-1','products',await catalog.execute(ProductSearchSpec(product_id=pid)))
+    picks=[Pick(product_id=pid,sku_id=pid+'-S1',quantity=1,reason='适合本次组合') for pid in ('P1003','P1008')]
+    context=ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search=compile_search(ShoppingWork(filters=Filters(**{})), currency='CNY'))
+    token=ShoppingContext.set(context)
+    before=deepcopy(context)
+    try:
+        # 先读另一个币种的报价；交付不选择“最近报价”作为隐藏条件。
+        earlier=await build_quote_tool(catalog.pricing,env.evidence,env.bus)(
+            [Choice(product_id=p.product_id,sku_id=p.sku_id,quantity=p.quantity) for p in picks],'CN','USD')
+        assert earlier.ok
+        bundle=build_bundle_tool(catalog,env.evidence,env.bus)
+        result=await bundle(picks,'组合说明','CN','CNY',300)
+        assert result.ok and result.data['quote']['total_amount_minor']==26800
+        assert result.data['quote']['ship_to']=='CN' and result.data['quote']['currency']=='CNY'
+        assert [h['landed_price']['total_amount_minor'] for h in result.data['hits']]==[15400,11400]
+        assert ShoppingContext.current()==before
+        assert (await env.store.list_orders(buyer_id='buyer-1'))['total']==0
+        assert not await env.store.list_confirmations(buyer_id='buyer-1',session_id='session-1')
+        assert not (await bundle(picks,'预算不足','CN','CNY',250)).ok
+        ShoppingContext.set(replace(context,effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 250})), currency='CNY')))
+        assert not (await bundle(picks,'不得放宽原预算','CN','CNY',1000)).ok
+        assert not (await bundle(picks,'不同目的地','JP','CNY',1000)).ok
+        assert not (await bundle(picks,'不同币种','CN','USD',1000)).ok
+        with pytest.raises(ValidationError):BundleInput(picks=picks,guidance='缺报价范围')
+    finally:ShoppingContext.reset(token)

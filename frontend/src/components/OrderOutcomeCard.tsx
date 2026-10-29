@@ -1,11 +1,13 @@
 import type {OrderOutcome,ConfirmationDecision} from '../types';
 import {money} from './ProductCards';
+import {isConfirmationExpired, useConfirmationTime} from '../lib/confirmationTime';
 import './myOrders.css';
 const statuses={DRAFT:'草稿',CONFIRMED:'已确认',CANCELLED:'已取消'};
 export default function OrderOutcomeCard({outcome,decision}:{outcome:OrderOutcome;decision?:ConfirmationDecision}){
  const o=outcome.order,a=outcome.operation,c=decision;
+ const now=useConfirmationTime(c?.status==='pending');
  const action=a.status==='awaiting_confirmation'
-  ?!c?'取消决议尚未核实，请刷新确认记录':c.status==='approved'?'取消已确认执行':c.status==='rejected'?'取消已拒绝':c.expired?'取消确认已过期，尚未执行':'取消待确认，尚未执行'
+  ?!c?'取消决议尚未核实，请刷新确认记录':c.status==='approved'?'取消已确认执行':c.status==='rejected'?'取消已拒绝':isConfirmationExpired(c,now)?'取消确认已过期，尚未执行':'取消待确认，尚未执行'
   :a.status==='rejected'?'取消未准备':'仅查看订单';
  return <section className="order-list" aria-label="订单查看结果"><article className="order-card">
   <header><div><small>查看快照 · {new Date(outcome.observed_at).toLocaleString('zh-CN')}</small><h2>{o.order_id}</h2></div>

@@ -1,4 +1,4 @@
-"""面试用例的隔离运行夹具；复用生产 API、主子图和交易账本，不是第二套 Agent。"""
+"""评测与离线改进共用真实应用装配；只隔离买家、账本和待试验版本。"""
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from app.infrastructure.context_usage import evaluation_evidence_sink
 from app.infrastructure.persistence.sql.repositories import bootstrap_schema
+# 应用日志属于整个进程，在GEPA临时接管输出流之前完成应用模块初始化。
+from app.presentation.server import build_app
 
 
 @contextmanager
@@ -20,15 +22,15 @@ def capture_evaluation(events):
 
 
 @asynccontextmanager
-async def isolated_runtime(folder: Path, settings, *, model_factory=None,isolated_knowledge=False):
+async def isolated_runtime(folder: Path, settings, *, model_factory=None, isolated_knowledge=False,
+                           prompt_path: Path | None = None, capabilities=()):
     """仅隔离交易与买家，商品检索始终保留项目真实配置。"""
     from app.composition import build_container
-    from app.presentation.server import build_app
     configuration = replace(settings, data_dir=folder, database_url=f"sqlite+aiosqlite:///{folder / 'globex.db'}",
         redis_url="", queue_enabled=False, tavily_api_key="",
         otlp_endpoint="", otlp_traces_endpoint="", langfuse_base_url="", langfuse_public_key="", langfuse_secret_key="",
         llm_fallback_model="", llm_max_retries=0, harness_enabled=True,
-        identity_mode="hmac")
+        identity_mode="hmac", prompt_pin_version="" if prompt_path is not None else settings.prompt_pin_version)
     folder.mkdir(parents=True)
     async with AsyncExitStack() as resources:
         if model_factory is not None:
@@ -42,8 +44,7 @@ async def isolated_runtime(folder: Path, settings, *, model_factory=None,isolate
             knowledge=VectorKnowledgeBase(configuration,client=AsyncQdrantClient(':memory:'))
             await bootstrap_category_knowledge(knowledge)
             resources.enter_context(patch('app.composition.build_category_knowledge_base',return_value=knowledge))
-        with patch("app.composition.load_settings", return_value=configuration):
-            container = await build_container()
+        container = await build_container(configuration)
         async def startup():
             # 仅初始化临时账本与会话，不调用生产建索引/知识库流程，避免写入共享Qdrant。
             await bootstrap_schema(container.db_engine)
@@ -57,6 +58,16 @@ async def isolated_runtime(folder: Path, settings, *, model_factory=None,isolate
         with patch("app.presentation.server.build_container", supplied_container):
             app = build_app()
             async with app.router.lifespan_context(app):
+                if prompt_path is not None:
+                    version = container.prompt_registry.import_version(prompt_path)
+                    container.prompt_registry.pinned_version = version['version_id']
+                registry = container.orchestrator._sessions._main_factory.capability_registry
+                for document in capabilities:
+                    registry.import_draft(document, author='isolated-experiment')
+                    registry.review(document['kind'], document['id'], document['version'],
+                                    reviewer='isolated-experiment', evidence='仅在隔离库验证真实加载与使用')
+                    registry.publish(document['kind'], document['id'], document['version'],
+                                     publisher='isolated-experiment', evidence='隔离试验，不是正式发布')
                 yield app, container
 
 

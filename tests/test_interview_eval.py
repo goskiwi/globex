@@ -121,7 +121,7 @@ async def test_isolated_production_api_fixture(tmp_path):
     from dataclasses import replace
     from tests.test_retrieval import _settings
     from tests.test_langgraph_runtime import ScriptedModel
-    from scripts.eval.interview_runtime import isolated_runtime, capture_evaluation
+    from scripts.eval.agent_runtime import isolated_runtime, capture_evaluation
     from scripts import eval_regression as runner
     from unittest.mock import patch
     import httpx
@@ -187,7 +187,7 @@ async def test_replay_verifies_actual_inventory_and_order_count(confirmation_env
 async def test_consecutive_real_factories_own_distinct_http_clients(tmp_path):
     from dataclasses import replace
     from tests.test_retrieval import _settings
-    from scripts.eval.interview_runtime import isolated_runtime
+    from scripts.eval.agent_runtime import isolated_runtime
     settings=replace(_settings(tmp_path),llm_api_key="test-key",embedding_api_key="test-key",llm_base_url="http://127.0.0.1:9/v1")
     clients=[]
     for index in range(2):

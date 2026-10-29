@@ -84,7 +84,7 @@ async def test_last_round_keeps_only_role_delivery_tools(tmp_path, main):
         requests.append(body)
         name = 'read' if len(requests) == 1 else delivery.name
         args = ({'turn_action':'finish'} if main and len(requests)>1 else {}) if main or len(requests) == 1 else {
-            'caveats': ['候选不足']}
+            'unmet_requirements': []}
         response = completion()
         response['choices'][0].update(message={'role': 'assistant', 'content': '', 'tool_calls': [
             {'id': f'c{len(requests)}', 'type': 'function',
@@ -161,12 +161,10 @@ def test_completed_status_alone_cannot_publish_an_unfinished_batch():
 
 async def test_large_selected_facts_use_source_refs_without_truncation():
     from app.application.runtime.tool_view import bounded_tool_view
-    decision = {'candidates': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'assessment': '适合优先考虑便携性的需求，实际适配仍需核验。',
-        'facts': {'result_ref': 'ctx_source', 'historical': False, 'observed_at': 'now',
-                  'product': {'description': '必须保留的长资料' * 10000}}}]}
+    decision = {'candidates': [{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'evidence_fields': ['description', 'weight_kg'], 'facts': {'result_ref': 'ctx_source', 'historical': False, 'observed_at': 'now', 'product': {'description': '必须保留的长资料' * 10000}}}]}
     before = json.dumps(decision, ensure_ascii=False)
     projected = await bounded_tool_view(decision, None, None, kind='handoff', token_limit=2000)
-    assert projected['candidates'][0]['assessment'] == decision['candidates'][0]['assessment']
+    assert projected['candidates'][0]['evidence_fields'] == decision['candidates'][0]['evidence_fields']
     assert projected['candidates'][0]['facts']['offloaded'] is True
     assert projected['candidates'][0]['facts']['result_ref'] == 'ctx_source'
     assert json.dumps(decision, ensure_ascii=False) == before
@@ -187,7 +185,7 @@ def research_receipt(identifier, *, description='目录明确记载防水卷口'
     return {'agent': 'search_agent', 'status': 'completed', 'summary': '该品类研究完成',
         'scope': {'task_id': identifier, 'goal': '通勤研究', 'effective_search': {'parameters': {'ship_to': 'CN', 'target_currency': 'CNY'}},
                   'parent_conditions': {'unused': '原始条件' * 100}},
-        'candidates': [{'product_id':identifier,'sku_id':identifier + '-S1','assessment':'适合优先考虑便携性的需求，实际适配仍需核验。','caveats':['是否有电脑仓？'],'facts':facts}],
+        'candidates': [{'product_id': identifier, 'sku_id': identifier + '-S1', 'evidence_fields': ['description', 'weight_kg'], 'facts': facts}],
         'evidence_refs': ['ctx_' + identifier], 'observed_products': ['仅观察未选中' * 200],
         'transaction_state': 'none', 'stop_reason': None, 'caveats': [], 'unmet_requirements': [], 'questions': [], 'issues': []}
 
@@ -212,7 +210,7 @@ async def test_current_research_keeps_facts_under_pressure_and_old_turn_can_arch
         shown = message_data(receipt)
         assert not shown.get('archived')
         assert shown['candidates'] == original['candidates']
-        assert shown['candidates'][0]['caveats'] == ['是否有电脑仓？']
+        assert shown['candidates'][0]['evidence_fields'] == ['description','weight_kg']
         assert shown['transaction_state'] == 'none'
         saved = await middleware.store.get('buyer', 'handoff', shown['result_ref'])
         assert saved['data'] == original
@@ -238,7 +236,7 @@ async def test_first_large_handoff_retains_identity_sku_and_quote_conditions():
     assert facts['quotes'] == original['candidates'][0]['facts']['quotes']
     assert facts['offloaded'] and facts['omitted_product_fields'] == ['description']
     assert 'description' not in facts['product']
-    assert view['candidates'][0]['caveats'] == ['是否有电脑仓？']
+    assert view['candidates'][0]['evidence_fields'] == ['description','weight_kg']
     assert json.dumps(original, ensure_ascii=False) == before
 
 

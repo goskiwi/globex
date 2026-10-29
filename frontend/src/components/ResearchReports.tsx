@@ -5,6 +5,7 @@ import Modal from './Modal';
 import './researchReports.css';
 
 const labels: Record<string,string> = {length:'长',width:'宽',height:'高',average:'评分',review_count:'评价数'};
+const exclusionLabels={historical_only:'只有历史资料，尚未重新核验',missing_value:'当前资料缺少该数值',conflicting_observations:'当前来源数值冲突，无法确定'};
 const detailFields: {field: keyof ProductCard; label: string}[] = [
   {field:'highlights',label:'目录亮点'}, {field:'dimensions_cm',label:'商品尺寸（厘米）'},
   {field:'material_tags',label:'目录材质'}, {field:'rating_summary',label:'目录评分'},
@@ -29,28 +30,29 @@ function card(candidate: ResearchCandidate): ProductCard {
     brand:product.brand ?? '',category:product.category ?? '',origin_country:product.origin_country ?? '',
     highlights:product.highlights ?? [],score:0,skus:sku?[sku]:[],default_sku_id:sku?.sku_id,
     price_major:sku?.display_price_major ?? Number.NaN,
-    currency,landed_price:quote,recommendation_reason:candidate.assessment};
+    currency,landed_price:quote};
 }
 
-function Questions({candidate}: {candidate: ResearchCandidate}) {
+function Evidence({candidate}: {candidate: ResearchCandidate}) {
   return <>
-    {!!candidate.caveats.length && <details className="research-questions"><summary>待核验事项 · {candidate.caveats.length}</summary>
-      <ul>{candidate.caveats.map((question,i)=><li key={i}>{question}</li>)}</ul></details>}
+    <dl className="research-evidence">{candidate.evidence.map(e=><div key={e.field}><dt>{e.label}</dt><dd>{factText(e.value)}</dd></div>)}</dl>
+    {!!candidate.missing_fields.length && <p>所选证据未提供：{candidate.missing_fields.map(e=>e.label).join('、')}。不能据此判断商品没有对应能力。</p>}
   </>;
 }
 
-/** 与推荐复用商品卡，研究候选不显示首选、选购、比较或下单操作。 */
+/** 模型选择已读商品和字段，程序生成事实、比较和资料缺口。 */
 export default function ResearchReports({delivery}: {delivery: ResearchDelivery}) {
   const [detail,setDetail]=useState<ResearchCandidate|null>(null);
-  return <section className="research-reports" aria-label="研究候选与取舍">
+  return <section className="research-reports" aria-label="研究候选与证据">
     {delivery.reports.map(report=><section className="research-category" key={report.task_id} aria-label={report.title}>
       <div className="research-heading"><h3>{report.title}</h3><span>{report.status==='completed'?'研究完成':report.status==='partial'?'部分完成':report.status==='needs_input'?'需要补充信息':'研究未完成'}</span></div>
       <p className="research-count">{report.product_count}款商品 · {report.sku_count}个明确规格</p>
       <ProductCards mode="research" products={report.items.map(card)}
         onDetail={group=>setDetail(report.items.find(c=>c.product_id===group.product.product_id && (c.sku_id ?? undefined)===group.initialSkuId)!)}/>
-      {!!report.items.length && <div className="research-analysis" aria-label="选择依据与取舍">
+      {!!report.items.length && <div className="research-analysis" aria-label="已读证据与资料缺口">
         {report.items.map(candidate=><div key={`${candidate.product_id}:${candidate.sku_id}`}>
-          <p><strong>{candidate.facts.product.title ?? candidate.product_id}：</strong>{candidate.assessment}</p>
+          <h4>{candidate.facts.product.title ?? candidate.product_id}</h4>
+          <Evidence candidate={candidate}/>
           {candidate.facts.historical && <p>历史资料，尚未重新核验。</p>}
         </div>)}
       </div>}
@@ -60,7 +62,7 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
       {!!report.issues.length && <p>未完成事项：{report.issues.join('；')}</p>}
       {report.transaction_state==='awaiting_confirmation' && <p>已有确认单等待页面批准，尚未执行交易。</p>}
       {!report.items.length && <p>本次没有交回符合要求的候选，未满足条件见上方说明。</p>}
-      {!!report.price_comparisons.length && <details className="research-prices"><summary>同口径价格比较</summary>
+      {!!report.price_comparisons.length && <details className="research-prices" open><summary>同口径价格比较</summary>
         {report.price_comparisons.map((price,i)=><div key={i}>
           <p>{price.kind==='unit_price'?'单件商品价，不含运税':`每个规格${price.quantity}件到手报价，配送至${price.ship_to}`} · 本次{price.compared_sku_count}个规格</p>
           <dl><div><dt>最低</dt><dd>{money(price.minimum_minor/100,price.currency)} · {price.lowest.map(p=>p.title).join('、')}</dd></div>
@@ -68,12 +70,23 @@ export default function ResearchReports({delivery}: {delivery: ResearchDelivery}
             <div><dt>差额</dt><dd>{money(price.spread_minor/100,price.currency)}</dd></div></dl>
         </div>)}
       </details>}
+      {!!report.metric_comparisons.length && <section className="research-prices" aria-label="候选参数比较">
+        <h4>已读参数比较</h4>
+        {report.metric_comparisons.map(metric=><div key={metric.field}>
+          <p>{metric.label} · 本报告{metric.compared_product_count}条有数据的目录记录</p>
+          {metric.minimum===null||metric.maximum===null?<p>不足两条可比较记录，未生成排名。</p>:<dl><div><dt>最低</dt><dd>{metric.minimum} {metric.unit} · {metric.lowest.map(p=>p.title).join('、')}</dd></div>
+            <div><dt>最高</dt><dd>{metric.maximum} {metric.unit} · {metric.highest.map(p=>p.title).join('、')}</dd></div></dl>
+          }
+          {!!metric.excluded_products.length&&<ul>{metric.excluded_products.map(excluded=><li key={excluded.product_id}>
+            {report.items.find(item=>item.product_id===excluded.product_id)?.facts.product.title??excluded.product_id}：{exclusionLabels[excluded.reason]}
+          </li>)}</ul>}
+        </div>)}
+      </section>}
     </section>)}
-    <p className="research-caption">以上为当时读取的资料与研究建议。价格、库存与未明确的适配能力，购买前仍需核验。</p>
+    <p className="research-caption">以上为当时读取的目录证据。价格、库存与未明确的适配能力，购买前仍需核验。</p>
     {detail && <Modal title={`${detail.facts.product.title ?? detail.product_id} 已读资料`} drawer onClose={()=>setDetail(null)}>
       <h2>{detail.facts.product.title ?? detail.product_id}</h2>
-      <p>{detail.assessment}</p>
-      <Questions candidate={detail}/>
+      <Evidence candidate={detail}/>
       <div className="research-source">
         {detail.facts.sku && <p>已读规格：{detail.facts.sku.spec} · 原币商品价 {money(detail.facts.sku.price_major,detail.facts.sku.currency)}</p>}
         {detail.facts.product.weight_kg != null && <p>重量：{detail.facts.product.weight_kg} kg</p>}

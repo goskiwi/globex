@@ -10,8 +10,8 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage, SystemMessage
-from langgraph.types import Command
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langgraph.types import Command, Overwrite
 
 from app.application.runtime.events import approval_event
 from app.infrastructure.budget import init_budget
@@ -228,8 +228,11 @@ class MainAgentOrchestrator:
                             "candidates": latest["data"]["display_groups"]}, ensure_ascii=False)
                     ), name="candidate_state"))
 
-            await self._remove_stale_runtime_hints(session, messages)
-            execution = await self._reply(session_id, session, inputs)
+            # 恢复快照可能包含尚未落入完整checkpoint的消息；在租约内直接提交
+            # 同一份已恢复历史和新输入，不按临时生成的ID删除，也不额外写图节点。
+            history = [message for message in messages if message.name not in {
+                'memory_hint','trade_state','candidate_state','selected_skill_reference'}]
+            execution = await self._reply(session_id, session, Overwrite([*history, *inputs]))
             final_text = execution.text
             final_text = self._guard_final_text(session_id, final_text)
             state_after = await session.graph.aget_state(session.config)
@@ -262,19 +265,9 @@ class MainAgentOrchestrator:
             self._bus.publish(session_id, "error", {"message": message})
             return SubmitIntentOutput(session_id, f"[error] {message}", message, status="failed", stop_reason="execution_error")
 
-    async def _remove_stale_runtime_hints(self, session, messages: list[BaseMessage]) -> None:
-        stale = [message for message in messages if getattr(message, "name", None) in {
-            "memory_hint", "trade_state", "candidate_state", "selected_skill_reference"
-        }]
-        if stale:
-            await session.graph.aupdate_state(
-                session.config,
-                {"messages": [RemoveMessage(id=message.id) for message in stale]},
-            )
-
     async def _invoke_graph(self, session_id: str, session, graph_input) -> ExecutionResult:
         return await execute_graph(session_id, session, graph_input, self._native_observer.get())
 
-    async def _reply(self, session_id: str, session, inputs: list[BaseMessage]) -> ExecutionResult:
+    async def _reply(self, session_id: str, session, inputs: list[BaseMessage] | Overwrite) -> ExecutionResult:
         # 模型故障只在模型中间件重试；不在外层自动重放整轮。
         return await self._invoke_graph(session_id, session, {"messages": inputs})

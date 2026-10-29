@@ -9,11 +9,13 @@ import ResearchReports from '../src/components/ResearchReports';
 import type {ResearchDelivery} from '../src/types';
 import {readResearchReports} from '../src/lib/research';
 
-const assessment='适合优先减轻随身负担的人，折叠后也方便收纳。若每天携带电脑，独立电脑仓和保护能力仍需核验。';
+const evidenceValue='完整目录原文仍保留，防泼水且可折叠。';
 const report={task_id:'bag',title:'通勤背包研究',status:'partial',product_count:1,sku_count:1,
   caveats:['目录未标明背板结构'],unmet_requirements:['电脑仓资料尚未核实'],questions:['需要放多大电脑？'],
-  issues:['补充来源暂不可用'],transaction_state:'awaiting_confirmation',price_comparisons:[],items:[{
-    product_id:'P1003',sku_id:'P1003-S1',assessment,caveats:['是否有独立电脑仓？'],
+  issues:['补充来源暂不可用'],transaction_state:'awaiting_confirmation',price_comparisons:[],metric_comparisons:[],items:[{
+    product_id:'P1003',sku_id:'P1003-S1',evidence_fields:['description','weight_kg','package_dimensions_cm'],
+    evidence:[{field:'description',label:'目录描述',value:evidenceValue},{field:'weight_kg',label:'重量（kg）',value:0.38}],
+    missing_fields:[{field:'package_dimensions_cm',label:'包装尺寸（cm）'}],
     facts:{product:{product_id:'P1003',title:'Wanderlite 折叠旅行双肩包 35L',weight_kg:0.38,
       description:'完整目录原文仍保留，防泼水且可折叠。',highlights:['支持折叠'],
       dimensions_cm:{length:50},material_tags:['尼龙'],rating_summary:{average:4.6,review_count:217},ships_to:['CN']},
@@ -30,12 +32,14 @@ it('研究组件完整展示缺口、问题、执行事项与确认状态，每�
 });
 
 it('只读取当前结构化研究，不从旧正文构造候选',()=>{
-  expect(readResearchReports([delivery])[0].reports[0].items[0].assessment).toBe(assessment);
+  expect(readResearchReports([delivery])[0].reports[0].items[0].evidence[0].value).toBe(evidenceValue);
   expect(readResearchReports([{runId:'r',summary:'旧报告',candidates:[]}])).toEqual([]);
+  const {evidence,evidence_fields,missing_fields,...old}=report.items[0];
+  expect(readResearchReports([{...delivery,reports:[{...report,items:[{...old,assessment:'旧评语',caveats:[]}]}]}])).toEqual([]);
   expect(readResearchReports([{...delivery,reports:[{...report,items:[{product_id:'P1003'}]}]}])).toEqual([]);
 });
 
-it('研究取舍完整可读，资料可展开，无购物动作，追问刷新后仍归属原回复',async()=>{
+it('结构化证据完整可读，资料可展开，无购物动作，追问刷新后仍归属原回复',async()=>{
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   localStorage.clear();sessionStorage.clear();vi.stubGlobal('scrollTo',vi.fn());Element.prototype.scrollIntoView=vi.fn();
   let firstRun='',lastRun='',session='',messages:any[]=[],saved:any=null,posts=0;
@@ -63,7 +67,7 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
     const section=host.querySelector<HTMLElement>('.research-reports')!;
     expect(section).not.toBeNull();
     expect(section.closest('.assistant-turn')?.getAttribute('data-message-id')).toBe(`${firstRun}:final:answer`);
-    expect(section.querySelector('.research-analysis')?.textContent).toContain(assessment);
+    expect(section.querySelector('.research-analysis')?.textContent).toContain(evidenceValue);
     const cards=section.querySelector('.product-grid')!;
     const analysis=section.querySelector('.research-analysis')!;
     expect(cards.compareDocumentPosition(analysis) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
@@ -74,7 +78,7 @@ it('研究取舍完整可读，资料可展开，无购物动作，追问刷新�
       expect(turn.textContent!.split(text)).toHaveLength(2);
       expect(turn.querySelector('.assistant-text')?.textContent).not.toContain(text);
     }
-    expect(section.querySelector('.product-card')?.textContent).not.toContain(assessment);
+    expect(section.querySelector('.product-card')?.textContent).not.toContain(evidenceValue);
     expect(section.textContent).toContain('¥574.00');
     expect(section.textContent).toContain('部分完成');
     expect(section.querySelector('.answer-collapsible')).toBeNull();
@@ -143,4 +147,26 @@ it('研究展示只消费Main交付的标题，不从旧goal或内部任务拼�
   expect(readResearchReports([{...delivery,reports:[{...withoutTitle,goal:'内部任务 description/highlights'}]}])).toEqual([]);
   expect(readResearchReports([{...delivery,reports:[{...report,title:'研究'.repeat(41)}]}])).toEqual([]);
   expect(readResearchReports([{...delivery,reports:[{...report,title:'🎒'.repeat(80)}]}])).toHaveLength(1);
+});
+
+
+it('参数排名按程序结果显示并列最高和缺失范围，不生成自由评语',()=>{
+ const data=structuredClone(delivery) as ResearchDelivery;
+ data.reports[0].metric_comparisons=[{field:'review_count',label:'目录评价数',unit:'条',compared_product_count:2,excluded_products:[{product_id:'P3000',reason:'missing_value'}],minimum:287,maximum:349,
+  lowest:[{product_id:'P1001',title:'候选甲',value:287}],highest:[{product_id:'P1002',title:'候选乙',value:349}]}];
+ const html=renderToStaticMarkup(<ResearchReports delivery={data}/>);
+ expect(html).toContain('349');expect(html).toContain('候选乙');expect(html).toContain('P3000：当前资料缺少该数值');
+ expect(html).toContain('所选证据未提供：包装尺寸');expect(html).not.toContain('assessment');
+});
+
+it('不足两条时仍展示具体排除原因，不把来源冲突显示成资料缺失',()=>{
+ const data=structuredClone(delivery) as ResearchDelivery;
+ data.reports[0].metric_comparisons=[{field:'weight_kg',label:'重量',unit:'kg',compared_product_count:1,
+  excluded_products:[{product_id:'P1003',reason:'conflicting_observations'},{product_id:'P3000',reason:'historical_only'}],
+  minimum:null,maximum:null,lowest:[],highest:[]}];
+ const accepted=readResearchReports([data]);expect(accepted).toHaveLength(1);
+ const html=renderToStaticMarkup(<ResearchReports delivery={accepted[0]}/>);
+ expect(html).toContain('不足两条可比较记录，未生成排名');
+ expect(html).toContain('当前来源数值冲突，无法确定');expect(html).toContain('只有历史资料，尚未重新核验');
+ expect(html).not.toContain('<dt>最低</dt>');expect(html).not.toContain('<dt>最高</dt>');
 });

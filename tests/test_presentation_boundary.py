@@ -1,3 +1,4 @@
+from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 """交付职责边界：内部任务不作标题，推荐与组合预算互不混淆。"""
 import json
 from copy import deepcopy
@@ -31,9 +32,11 @@ async def test_research_receipt_is_brief_and_report_keeps_all_completion_details
     assert result.ok
     assert result.data['guidance'] == '已交付1份研究报告。'
     report = result.data['reports'][0]
-    for field in ('caveats', 'unmet_requirements', 'questions', 'issues', 'transaction_state', 'status'):
+    for field in ('unmet_requirements', 'questions', 'issues', 'transaction_state', 'status'):
         assert report[field] == original[field]
-    assert report['items'] == original['candidates']
+    assert report['items'][0]['facts'] == original['candidates'][0]['facts']
+    assert report['items'][0]['evidence_fields'] == original['candidates'][0]['evidence_fields']
+    assert report['caveats'] != original['caveats']
     assert receipt == original
 
 
@@ -41,19 +44,18 @@ async def test_individual_choices_and_bundle_share_facts_but_apply_distinct_tota
     env=confirmation_env;catalog=CatalogSearchUseCase(env.products,pricing=env.service._pricing)
     for pid in ['P1001','P1003']:
         await env.evidence.save('buyer-1','session-1','products',await catalog.execute(ProductSearchSpec(product_id=pid)))
-    token=ShoppingContext.set(ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search={
-        'parameters':{'ship_to':'CN','target_currency':'CNY','landed_budget_major':300}}))
+    token=ShoppingContext.set(ShoppingContextSnapshot('session-1','buyer-1','zh-CN','CNY',effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 300})), currency='CNY')))
     selected=[Pick(product_id=pid,sku_id=pid+'-S1',quantity=1,reason='符合本次用途') for pid in ['P1001','P1003']]
     try:
         individual=await build_recommendation_tool(catalog,env.evidence,env.bus)(selected,'分别考虑这两种选择')
         assert individual.ok and individual.data['mode']=='individual' and individual.data['quote'] is None
         assert not {'preferred_sku_id','dimensions','max_items'} & individual.data.keys()
-        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,'一起购买这两件')
+        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,'一起购买这两件','CN','CNY',None)
         assert not bundle.ok and '超过当前预算' in bundle.text
         context=ShoppingContext.current()
         from dataclasses import replace
-        ShoppingContext.set(replace(context,effective_search={'parameters':{'ship_to':'CN','target_currency':'CNY','landed_budget_major':400}}))
-        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,'一起购买这两件')
+        ShoppingContext.set(replace(context,effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 400})), currency='CNY')))
+        bundle=await build_bundle_tool(catalog,env.evidence,env.bus)(selected,'一起购买这两件','CN','CNY',None)
         assert bundle.ok and bundle.data['quote']['total_amount_minor']==36800
         assert [h['default_sku_id'] for h in bundle.data['hits']]==['P1001-S1','P1003-S1']
         assert await env.store.list_confirmations(buyer_id='buyer-1',session_id='session-1')==[]
@@ -66,8 +68,7 @@ async def test_main_supplies_public_title_without_copying_internal_goal(tmp_path
     from tests.test_task_execution import ask
     internal='内部执行指令：检查description/highlights与SKU来源，逐项记录不可推断的结构；'*3
     title='通勤背包研究'
-    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),submission(candidates=[{
-        'product_id':'P1003','sku_id':'P1003-S1','assessment':'根据已读目录比较收纳需求'}])])
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003'}),submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     main=ScriptedModel(responses=[
         call('set_research_plan',{'plan': [{'id':'bag','goal':internal}]}),
         call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),

@@ -1,3 +1,4 @@
+from app.application.agents.shopping_state import ShoppingWork, Filters, compile_search
 """共同交付语义、容量、首选与业务事实，不将自然语言选择变成规则评分。"""
 import json
 import pytest
@@ -47,7 +48,7 @@ async def test_four_choices_share_facts_preference_focus_and_capacity(confirmati
         await env.evidence.save('buyer-1', 'session-1', 'products',
             await catalog.execute(ProductSearchSpec(product_id=pick.product_id)))
     token = ShoppingContext.set(ShoppingContextSnapshot('session-1', 'buyer-1', 'zh-CN', 'CNY',
-        effective_search={'parameters':{'ship_to':'CN','target_currency':'CNY','landed_budget_major':300}}))
+        effective_search=compile_search(ShoppingWork(filters=Filters(**{'ship_to': 'CN', 'target_currency': 'CNY', 'landed_budget_major': 300})), currency='CNY')))
     try:
         recommend = build_recommendation_tool(catalog, env.evidence, env.bus)
         compare = build_comparison_tool(catalog, env.evidence, env.bus)
@@ -64,7 +65,7 @@ async def test_four_choices_share_facts_preference_focus_and_capacity(confirmati
         totals={p['default_sku_id']:p['landed_price']['total_amount_minor'] for p in comparison['hits']}
         assert totals['P1003-S1']==15400 and totals['P1018-S1']==24400 and totals['P1049-S1']==6400
         assert not (await compare(picks(),'P9999-S1',focus,guidance)).ok
-        assert not (await build_bundle_tool(catalog,env.evidence,env.bus)(picks(),guidance)).ok
+        assert not (await build_bundle_tool(catalog,env.evidence,env.bus)(picks(),guidance,'CN','CNY',None)).ok
         assert ShoppingContext.current().selected_lines == ()
         assert await env.store.list_confirmations(buyer_id='buyer-1',session_id='session-1') == []
     finally:

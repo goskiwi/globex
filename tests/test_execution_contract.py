@@ -136,7 +136,7 @@ def test_shopping_schema_rejects_model_supplied_source_quote():
 
 async def test_timeout_retains_collected_diagnostic_events():
     import asyncio
-    from scripts.eval.interview_runtime import capture_evaluation
+    from scripts.eval.agent_runtime import capture_evaluation
     from app.infrastructure.context_usage import record_evaluation_evidence
     events=[]
     with pytest.raises(TimeoutError):

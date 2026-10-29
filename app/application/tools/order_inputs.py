@@ -8,8 +8,8 @@ class ShippingAddressInput(BaseModel):
     recipient_name: str = Field(min_length=1, max_length=100)
     country: str = Field(min_length=2, max_length=2, description="国家二位码，如 CN")
     state: str = Field(default="", max_length=100, description="省/州，未提供时省略，不填写说明文字")
-    city: str = Field(min_length=1, max_length=100)
-    address_line: str = Field(min_length=1, max_length=300)
+    city: str = Field(min_length=1, max_length=100, description='城市名称；省/州单独填入state')
+    address_line: str = Field(min_length=1, max_length=300, description='城市以下的详细地址：区县、街道、门牌、楼栋和房间；不重复country/state/city中已单独填写的部分，按买家提供的信息填写')
     postal_code: str = Field(default="", max_length=30, description="邮编，未提供时省略或传空字符串")
     phone: str = Field(default="", max_length=40,
                        description="可选联系电话；未提供或要求不填写时省略或传空字符串，不填说明文字")

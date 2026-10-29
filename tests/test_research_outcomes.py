@@ -3,19 +3,19 @@ from langchain_core.messages import AIMessage
 from tests.test_agent_handoff import call,submission,factories,task,context
 
 async def test_optional_unknown_is_delivered_without_research_failure(tmp_path,monkeypatch,context):
-    _,model,dispatch,_=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id':'P1001','sku_id':'P1001-S1','assessment':'根据已读资料比较','caveats':['目录未标注可选属性']}],caveats=['资料未涵盖可选信息'])])
+    _,model,dispatch,_=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id': 'P1001', 'sku_id': 'P1001-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     output=(await dispatch('search_agent',task())).data
     assert output['status']=='completed' and output['execution_status']=='completed'
-    assert output['caveats']==['资料未涵盖可选信息'] and output['unmet_requirements']==[] and model.cursor==2
+    assert 'caveats' not in output and output['unmet_requirements']==[] and model.cursor==2
 
 async def test_unmet_requirements_must_reference_buyer_scope(tmp_path,monkeypatch,context):
-    valid={'product_id':'P1001','sku_id':'P1001-S1','assessment':'依据已读资料'}
-    _,model,dispatch,_=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[valid],unmet_requirements=['研究者自行增加的条件']),submission(candidates=[valid],caveats=['可选资料未知'])])
+    valid={'product_id': 'P1001', 'sku_id': 'P1001-S1', 'evidence_fields': ['description', 'weight_kg']}
+    _,model,dispatch,_=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[valid],unmet_requirements=['研究者自行增加的条件']),submission(candidates=[valid])])
     output=(await dispatch('search_agent',task())).data
     assert output['status']=='completed' and model.cursor==3 and not output['unmet_requirements']
 
 async def test_explicit_unmet_requirement_remains_partial(tmp_path,monkeypatch,context):
-    _,_,dispatch,_=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id':'P1001','assessment':'没有对应证明'}],unmet_requirements=['必须明确提供防雨证明'])])
+    _,_,dispatch,_=factories(tmp_path,monkeypatch,[call('read_candidates',{}),submission(candidates=[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}],unmet_requirements=['必须明确提供防雨证明'])])
     output=(await dispatch('search_agent',task(requirements=['必须明确提供防雨证明']))).data
     assert output['status']=='partial' and output['unmet_requirements']==['必须明确提供防雨证明']
 
@@ -23,7 +23,7 @@ async def test_saved_report_is_presented_by_reference_without_dispatching_again(
     from tests.test_agent_handoff import ScriptedModel
     from tests.test_langgraph_runtime import _container
     from tests.test_task_execution import ask
-    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment':'依据目录提供候选'}])])
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'比较背包候选'}]}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag']]}, turn_action='finish')])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
@@ -39,7 +39,7 @@ async def test_one_report_does_not_complete_two_goal_plan(tmp_path,monkeypatch):
     from tests.test_agent_handoff import ScriptedModel
     from tests.test_langgraph_runtime import _container
     from tests.test_task_execution import ask
-    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id':'P1003','sku_id':'P1003-S1','assessment':'已核验背包'}])])
+    child=ScriptedModel(responses=[call('product_search_tool',{'product_id':'P1003','sku_id':'P1003-S1'}),submission(candidates=[{'product_id': 'P1003', 'sku_id': 'P1003-S1', 'evidence_fields': ['description', 'weight_kg']}])])
     parent=ScriptedModel(responses=[call('set_research_plan',{'plan': [{'id':'bag','goal':'研究背包'},{'id':'ear','goal':'研究耳机'}]}),call('task_dispatch',{'subagent_type':'search_agent','task':{'step_id':'bag'}}),call('present_research',{'reports': [{'task_id': task_id, 'title': task_id} for task_id in ['bag']]}, turn_action='finish'),AIMessage(content='还有1项计划任务尚未完成，耳机研究尚未执行。')])
     c=await _container(tmp_path,monkeypatch,parent)
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:child)
@@ -76,7 +76,7 @@ async def test_one_catalog_read_carries_distinct_sku_quotes_and_canonical_resear
     evidence.capture(SimpleNamespace(shopping_session_id='s', type='tool.result', payload={
         'tool': 'product_search_tool', 'result_ref': 'ctx_catalog', 'observed_at': '2026-10-19T08:00:00+00:00', **result}))
     research = evidence.delivered(ResearchSubmission(candidates=[
-        {'product_id': 'P9000', 'sku_id': s['sku_id'], 'assessment': '依据同次目录观察比较'} for s in rows]))
+        {'product_id': 'P9000', 'sku_id': s['sku_id'], 'evidence_fields': ['description', 'weight_kg']} for s in rows]))
     for candidate in research.candidates:
         facts = candidate.facts
         assert len(facts['quotes']) == 1

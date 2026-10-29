@@ -31,7 +31,7 @@ def build_research_delivery_tool(rates: ExchangeRateTable):
 
         用户本轮只要研究结果、暂不最终推荐或组合时使用。reports每项提供task_dispatch的
         scope.task_id与面向买家的title，可一次交付多个品类。标题由Main决定，内部goal不进入展示。
-        系统填充事实和价格比较，分别展示专家的取舍建议与待核验问题，
+        系统从所选证据填充事实、比较结论和资料缺口，不生成专家自由评语，
         已交付的研究不再重写；不调用推荐/比较，不下单。
         """
         request=ResearchDeliveryInput(reports=reports)

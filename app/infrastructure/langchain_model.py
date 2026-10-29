@@ -125,6 +125,7 @@ class ChatModelAdapter(BaseChatModel):
         started = first = usage = None
         content, reasoning, calls, finish = [], [], {}, None
         refused = False
+        failure = None
         try:
             async with AsyncExitStack() as stack:
                 if self.gateway: await stack.enter_async_context(self.gateway.slot())
@@ -213,6 +214,7 @@ class ChatModelAdapter(BaseChatModel):
                         return ChatResult(generations=[ChatGeneration(message=message,generation_info={'finish_reason':finish})],
                                           llm_output={'model_name':protocol['response_model'],'token_usage':usage})
                     except BaseException as error:
+                        failure = {'type':type(error).__name__, 'http_status':getattr(error,'status_code',None)}
                         if isinstance(error,ModelProtocolViolation):protocol['protocol_status']=error.code
                         span.set_attribute('error.type',type(error).__name__);span.set_status(Status(StatusCode.ERROR))
                         raise
@@ -241,7 +243,8 @@ class ChatModelAdapter(BaseChatModel):
                             if not propagating: raise
                         record_evaluation_evidence('model_response_contract',{'response_model':protocol['response_model'],
                                                                             'protocol_status':protocol['protocol_status'],
-                                                                            'finish_reason':finish})
+                                                                            'finish_reason':finish,
+                                                                            'failure':failure})
         finally:
             if reservation and not reservation.settled:reservation.settle(0 if started is None else None)
 

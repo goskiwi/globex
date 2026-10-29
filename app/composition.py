@@ -148,9 +148,9 @@ class Container:
             await self.model_client.close()
 
 
-async def build_container() -> Container:
+async def build_container(settings: Settings | None = None) -> Container:
     source_fingerprint = app_source_fingerprint()
-    settings = load_settings()
+    settings = settings if settings is not None else load_settings()
     identity_policy = IdentityPolicy.from_settings(settings)
     project_root = Path(__file__).resolve().parent.parent
     prompt_registry = PromptRegistry(settings.data_dir / "prompts" / "registry.sqlite3",

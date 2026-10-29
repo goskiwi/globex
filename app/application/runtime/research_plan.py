@@ -24,7 +24,6 @@ class ResearchTask(TypedDict):
     observed_skus: dict[str, list[str]]
     evidence_refs: list[str]
     unmet_requirements: list[str]
-    caveats: list[str]
     stale: NotRequired[bool]
     delivery: NotRequired[Literal["research", "products"]]
 
@@ -37,7 +36,7 @@ class ResearchPlan(TypedDict, total=False):
 
 
 def condition_identity(policy):
-    return {k: policy.get(k) for k in ('parameters', 'requirements', 'unverified_requirements', 'excluded_products', 'excluded_skus')}
+    return {k: policy.get(k) for k in ('parameters', 'currency_constraint', 'requirements', 'unverified_requirements', 'excluded_products', 'excluded_skus')}
 
 
 def dependent_steps(steps, changed):

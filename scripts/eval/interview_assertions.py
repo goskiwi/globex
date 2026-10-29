@@ -4,7 +4,7 @@
 from scripts.eval.trace import tool_observations, presentations, final_results, model_starts
 
 KINDS = {"answer_present", "confirmation_prepared", "presentation_matches", "presentation_terminal", "business_recovered", "delegation_delivered",
-         "skill_loaded", "no_skill_load", "context_compacted", "no_execution_error", "vector_rerank_executed"}
+         "skill_loaded", "no_skill_load", "context_compacted", "no_execution_error", "vector_rerank_executed", "search_conditions"}
 
 
 def tool_results(events, name):
@@ -28,8 +28,19 @@ def candidate_identity(candidate):
 
 def check(assertion, events):
     kind = assertion["kind"]
+    if kind == 'search_conditions':
+        # 只看已执行成功的业务结果；精确ID与自然语言检索共享同一事实口径。
+        rows = [r['data'] for r in tool_results(events,'product_search_tool')
+                if r['status'] == 'success' and isinstance(r['data'],dict)]
+        expected = assertion['expected']
+        if not isinstance(expected,dict) or not expected:
+            raise ValueError('search_conditions 需要非空 expected')
+        mismatches = [{key:{'expected':value,'actual':row.get('query_conditions',{}).get(key)}
+                       for key,value in expected.items() if row.get('query_conditions',{}).get(key) != value}
+                      for row in rows]
+        return bool(rows) and not any(mismatches), f'成功查询{len(rows)}次；条件差异{mismatches}'
     if kind == 'vector_rerank_executed':
-        from scripts.eval.interview_runtime import retrieval_evidence
+        from scripts.eval.agent_runtime import retrieval_evidence
         data = retrieval_evidence(events)
         return data['external_pipeline_verified'], f"语义查询{data['semantic_searches']}次；向量+rerank成功{data['vector_rerank_searches']}次；降级{data['degraded_searches']}次（精确ID查询不要求rerank）"
     if kind == "answer_present":

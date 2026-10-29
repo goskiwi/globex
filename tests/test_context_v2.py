@@ -83,7 +83,7 @@ def test_shared_objects_round_trip_without_changing_order_or_quote_scope():
         for i, hit in enumerate(restored['hits']):
             if 'same_business_fields_as' in hit:
                 ref = hit['same_business_fields_as']
-                restored['hits'][i] = outputs[ref['tool_call_id']]['hits'][ref['position'] - 1]
+                restored['hits'][i] = read_output(shared[ref['tool_result_index']-1])['hits'][ref['position'] - 1]
         assert restored == originals[call]
     assert [m.model_dump() for m in messages] == [m.model_dump() for m in original]
     # 去掉旧消息重新准备时不能产生悬空引用。
@@ -97,11 +97,43 @@ async def test_summary_sharing_never_references_outside_its_input():
             m.artifact={'data':json.loads(m.content)}
     original=copy.deepcopy(state)
     head=share_identical_products(state['messages'][:15])
-    ids={m.tool_call_id for m in head if isinstance(m,ToolMessage)}
+    receipts=[m for m in head if isinstance(m,ToolMessage)]
     refs=[h['same_business_fields_as'] for m in head if isinstance(m,ToolMessage)
           for h in read_output(m)['hits'] if 'same_business_fields_as' in h]
-    assert refs and all(r['tool_call_id'] in ids for r in refs)
+    assert refs and all(1 <= r['tool_result_index'] <= len(receipts) and 'same_business_fields_as' not in read_output(receipts[r['tool_result_index']-1])['hits'][r['position']-1] for r in refs)
     assert state==original
+
+
+async def test_shared_reference_survives_reused_call_ids_on_actual_http_wire(tmp_path):
+    import httpx
+    from langchain_core.messages import HumanMessage
+    from tests.native_model_helpers import client_model, completion
+    rows = [HumanMessage(content='比较已读资料')]
+    for i, price in enumerate((213, 999, 213)):
+        hit=product();hit['skus'][0]['price_major']=price
+        payload={'hits':[hit], 'query_conditions':{'ship_to':'CN'}}
+        rows += [AIMessage(content='', id=f'm{i}', tool_calls=[{'id':'reused','name':'search','args':{}}]),
+                 ToolMessage(content=json.dumps(payload), name='search', tool_call_id='reused', artifact={'data':payload})]
+    original=copy.deepcopy(rows)
+    captured=[]
+    def response(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200,json=completion())
+    model=await client_model(tmp_path,response)
+    try:
+        await model.ainvoke(share_identical_products(rows))
+    finally:
+        await model.aclose()
+    receipts=[json.loads(m['content']) for m in captured[0]['messages'] if m['role']=='tool']
+    # 本夹具的裸JSON输出保持可直接读；若原生回执包装，使用其data。
+    receipts=[r.get('data',r) for r in receipts]
+    ref=receipts[-1]['hits'][0]['same_business_fields_as']
+    assert ref=={'tool_result_index':1,'position':1}
+    assert receipts[ref['tool_result_index']-1]['hits'][ref['position']-1]['skus'][0]['price_major']==213
+    assert receipts[1]['hits'][0]['skus'][0]['price_major']==999
+    assert rows==original
+    fresh=share_identical_products(rows[3:])
+    assert all('same_business_fields_as' not in read_output(m)['hits'][0] for m in fresh if isinstance(m,ToolMessage))
 
 
 @pytest.mark.parametrize('first_score,second_score', [(0.9,0.2),(0.9,0),(None,0.2),(0.9,None)])
@@ -119,7 +151,7 @@ def test_query_score_does_not_duplicate_business_facts_or_inherit_old_score(firs
     source=read_output(projected[0])['hits'][0]
     second=read_output(projected[1])
     shared=second['hits'][0]
-    assert shared['same_business_fields_as']=={'tool_call_id':'call0','position':1}
+    assert shared['same_business_fields_as']=={'tool_result_index':1,'position':1}
     assert ('score' in shared)==(second_score is not None)
     if second_score is not None:assert shared['score']==second_score
     restored={k:v for k,v in source.items() if k!='score'}

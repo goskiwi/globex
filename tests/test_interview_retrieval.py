@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from scripts.eval.interview_runtime import isolated_runtime, retrieval_evidence
+from scripts.eval.agent_runtime import isolated_runtime, retrieval_evidence
 from scripts.eval.evidence import evaluate_trace_assertions
 from tests.test_retrieval import _settings
 

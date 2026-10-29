@@ -7,6 +7,7 @@ from app.application.tools.order_tools import _verified_order_items, _ok, _fail
 from app.application.catalog_evidence import verified_sku_items
 from app.application.usecases.pricing import QuoteItem
 from app.domain.catalog.product_search_spec import ProductSearchSpec
+from app.domain.catalog.money import CurrencyCode
 from app.application.runtime.request_scope import ShoppingContext
 from app.application.agents.shopping_state import Choice
 
@@ -51,11 +52,20 @@ def _decision(request: ComparisonInput, cards: list[dict]) -> dict:
             'max_items': MAX_DECISION_ITEMS}
 
 
-class QuoteInput(BaseModel):
+class QuoteTerms(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    items: list[Choice] = Field(min_length=1, description="每行提供已核验商品、SKU 和正整数数量")
     ship_to: str = Field(pattern=r"^[A-Z]{2}$", description="本次报价目的国，不修改购物状态")
-    currency: str = Field(pattern=r"^[A-Z]{3}$", description="本次报价币种，如 CNY")
+    currency: CurrencyCode = Field(description="本次报价币种，如 CNY")
+
+
+class QuoteInput(QuoteTerms):
+    items: list[Choice] = Field(min_length=1, description="每行提供已核验商品、SKU 和正整数数量")
+
+
+class BundleInput(RecommendationInput, QuoteTerms):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    landed_budget_major: float | None = Field(ge=0,
+        description="买家明确的组合到手总预算，含运税；没有预算时显式填写null。不能放宽已有预算。")
 
 
 def build_quote_tool(pricing, evidence_store, bus):
@@ -89,7 +99,8 @@ async def _recommend(catalog, evidence_store, request, *, bundle):
     if context is None:
         return _fail("缺少买家会话")
     try:
-        cards, quotes, budget, ship_to, currency, unverified = await _assemble_choices(catalog, evidence_store, context, request.picks, bundle=bundle)
+        cards, quotes, budget, ship_to, currency, unverified = await _assemble_choices(catalog, evidence_store, context, request.picks,
+            bundle=bundle, quote_terms=request if bundle else None)
         for card in cards:
             if any(issue != "over_landed_budget" for issue in card["constraint_issues"]):
                 raise ValueError(f"推荐不满足当前条件：{card['default_sku_id']} {card['constraint_issues']}")
@@ -119,13 +130,16 @@ def build_recommendation_tool(catalog, evidence_store, bus):
 
 
 def build_bundle_tool(catalog, evidence_store, bus):
-    async def recommend_bundle(picks: list[Pick], guidance: str):
+    async def recommend_bundle(picks: list[Pick], guidance: str, ship_to: str, currency: str, landed_budget_major: float | None):
         """交付一起购买的整套商品组合；按全部规格和数量合计检查到手预算。
 
         reason说明每件在本次组合中的作用，guidance解释组合取舍。事实和组合总价由代码装配。
+        必须提交本次目的国、币种和总预算；无需先调用quote_products，前次只读报价不会修改购物状态。
         互相替代的选择使用recommend_products。此调用不选购、不准备订单、不代表买家批准。
         """
-        return await _recommend(catalog, evidence_store, RecommendationInput(picks=picks,guidance=guidance),bundle=True)
+        return await _recommend(catalog, evidence_store, BundleInput(picks=picks,guidance=guidance,
+            ship_to=ship_to,currency=currency,landed_budget_major=landed_budget_major),bundle=True)
+    recommend_bundle.input_model = BundleInput
     return recommend_bundle
 
 
@@ -155,7 +169,7 @@ def build_comparison_tool(catalog, evidence_store, bus):
     return compare_products
 
 
-async def _assemble_choices(catalog, evidence_store, context, picks, *, require_qualified=True, bundle=False):
+async def _assemble_choices(catalog, evidence_store, context, picks, *, require_qualified=True, bundle=False, quote_terms=None):
     """推荐与比较共享证据、目录和报价装配；条件缺口由调用方决定如何交付。"""
     if len({p.sku_id for p in picks}) != len(picks):
         raise ValueError("同一结果中的 SKU 不得重复，请合并数量")
@@ -164,6 +178,14 @@ async def _assemble_choices(catalog, evidence_store, context, picks, *, require_
     policy = context.effective_search or {}
     params = dict(policy.get("parameters", {}))
     budget = params.pop("landed_budget_major", None)
+    if quote_terms is not None:
+        # 报价范围属于本次交付输入，不隐式采用历史报价，也不覆盖现有买家约束。
+        if (params.get('ship_to') is not None and params['ship_to'] != quote_terms.ship_to
+                or policy['currency_constraint'] is not None and policy['currency_constraint'] != quote_terms.currency):
+            raise ValueError('组合报价与当前目的地或币种不一致，请先明确当前需求')
+        params.update(ship_to=quote_terms.ship_to, target_currency=quote_terms.currency)
+        limits=[value for value in (budget,quote_terms.landed_budget_major) if value is not None]
+        budget=min(limits) if limits else None
     currency = params.get("target_currency") or context.currency
     params["target_currency"] = currency
     ship_to = params.get("ship_to")

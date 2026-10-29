@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 SUPPORTED_CURRENCIES = ("USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "CAD", "SGD")
+CurrencyCode = Literal[*SUPPORTED_CURRENCIES]
 
 
 @dataclass(frozen=True)

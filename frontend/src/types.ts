@@ -247,8 +247,9 @@ export interface SkillUsage {
 export interface ResearchCandidate {
   product_id: string;
   sku_id: string | null;
-  assessment: string;
-  caveats: string[];
+  evidence_fields: string[];
+  evidence: {field:string; label:string; value:unknown}[];
+  missing_fields: {field:string; label:string}[];
   facts: {
     product: Partial<ProductCard>;
     sku: ProductCard['skus'][number] | null;
@@ -270,6 +271,13 @@ export interface ResearchReport {
     compared_sku_count: number; minimum_minor: number; maximum_minor: number; spread_minor: number;
     lowest: {product_id: string; sku_id: string; title: string; amount_minor: number}[];
     highest: {product_id: string; sku_id: string; title: string; amount_minor: number}[];
+  }[];
+  metric_comparisons: {
+    field:string; label:string; unit:string; compared_product_count:number;
+    excluded_products:{product_id:string; reason:'historical_only'|'missing_value'|'conflicting_observations'}[];
+    minimum:number|null; maximum:number|null;
+    lowest:{product_id:string; title:string; value:number}[];
+    highest:{product_id:string; title:string; value:number}[];
   }[];
   unmet_requirements: string[];
   caveats: string[];

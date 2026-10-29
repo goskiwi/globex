@@ -55,7 +55,7 @@ class TaskPlanMiddleware(AgentMiddleware):
         # 无计划且只做直接查询时，不额外制造计划步骤。
         hint = {'steps': plan['steps'], 'research': {key: {
             'goal': value['scope']['goal'],
-            **{k: value[k] for k in ('status', 'execution_status', 'qualified_skus', 'unmet_requirements', 'caveats', 'stale', 'delivery') if k in value}}
+            **{k: value[k] for k in ('status', 'execution_status', 'qualified_skus', 'unmet_requirements', 'stale', 'delivery') if k in value}}
             for key, value in plan['tasks'].items()}}
         result = {'task_plan': plan}
         if plan['steps'] or plan['tasks'] or any(m.name == 'task_plan' for m in state['messages']):

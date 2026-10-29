@@ -130,7 +130,7 @@ async def test_parallel_child_results_survive_parent_stop(second_status):
             await asyncio.sleep(0)
             if goal=='耳机':raise ExecutionStopped('step_limit')
             return {'handoff_result':{'status':'completed','summary':'完成',
-                'candidates':[{'product_id':'P1001','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]}}
+                'candidates':[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}]}}
     factory=SimpleNamespace(build=lambda:Child())
     dispatch=build_task_dispatch_tool(factory,factory,bus)
     model=StopModel(responses=[AIMessage(content='',tool_calls=[
@@ -239,7 +239,7 @@ async def test_budget_stop_in_mixed_submit_batch_cannot_be_reported_completed(tm
     factory.build_tools=lambda:[*original(),stop_tool]
     model=ScriptedModel(responses=[call('read_candidates',{}),AIMessage(content='',tool_calls=[
         call('stop_tool',{}).tool_calls[0],
-        submission(candidates=[{'product_id':'P1001','assessment': '适合优先考虑便携性的需求，实际适配仍需核验。'}]).tool_calls[0]])])
+        submission(candidates=[{'product_id': 'P1001', 'evidence_fields': ['description', 'weight_kg']}]).tool_calls[0]])])
     monkeypatch.setattr('app.application.agents.search_agent.create_chat_model',lambda *a,**kw:model)
     result=(await dispatch('search_agent',task())).data
     assert result['status']=='partial' and result['stop_reason']=='budget_exhausted'

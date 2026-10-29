@@ -12,6 +12,7 @@ import sqlite3
 
 
 CAPABILITY_CONTRACT_VERSION = "1"
+CAPABILITY_SCOPE_PATTERN = r"^shopping(?::[a-z0-9_-]{1,40})?$"
 # Skill 只能描述现有只读业务能力；不含偏好改写、交易确认、代码/文件执行。
 SKILL_TOOL_ALLOWLIST = frozenset({"quote_products", "recommend_products", "recommend_bundle", "compare_products", "show_product_details", "product_search_tool", "category_insight_tool", "conversation_fact_lookup",
                                 "web_search_tool"})
@@ -59,7 +60,7 @@ def validate(document):
         if not isinstance(doc.get(key), str) or not doc[key].strip() or len(doc[key]) > maximum:
             raise CapabilityError(f"{key} 必须非空且不超过 {maximum} 字符")
     scope = doc.get("scope", "shopping")
-    if not isinstance(scope, str) or not re.fullmatch(r"shopping(?::[a-z0-9_-]{1,40})?", scope):
+    if not isinstance(scope, str) or not re.fullmatch(CAPABILITY_SCOPE_PATTERN, scope):
         raise CapabilityError("scope 仅支持 shopping 或 shopping:品类标识，不允许买家身份或全局权限范围")
     doc["scope"] = scope
     tools = doc.get("allowed_tools", [])
@@ -246,7 +247,7 @@ class CapabilityRegistry:
     def lookup_strategies(self, query, scope="shopping", *, limit=3, expected_digest=None):
         if not isinstance(query, str) or not query.strip() or len(query) > 2000:
             raise CapabilityError("策略检索需要非空且不超过 2000 字符的选购问题")
-        if not isinstance(scope, str) or not re.fullmatch(r"shopping(?::[a-z0-9_-]{1,40})?", scope):
+        if not isinstance(scope, str) or not re.fullmatch(CAPABILITY_SCOPE_PATTERN, scope):
             raise CapabilityError("策略 scope 无效")
         with self._transaction() as db:
             self._check_digest(db, expected_digest)

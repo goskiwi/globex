@@ -3,26 +3,13 @@ from langchain.tools import ToolRuntime
 from pydantic import Field
 
 from app.application.agents.shopping_state import (
-    StrictModel, Filters, PlanStep, Choice, ShoppingWork, ShoppingUpdate, apply_update, compile_search,
+    Filters, PlanStep, Choice, ShoppingWork, ShoppingUpdate, RequirementChange, apply_update, compile_search,
 )
 from app.application.runtime.request_scope import ShoppingContext
 from app.application.runtime.results import ToolResult, ToolResultState
 from app.application.runtime.tools import as_langchain_tool
 from app.application.agents.shopping_changes import ShoppingChange
 from app.application.catalog_evidence import verified_sku_items
-
-
-class RequirementChange(StrictModel):
-    reset: bool = False
-    goal: str | None = None
-    filters: Filters | None = None
-    preferences: list[str] | None = None
-    sort: str | None = None
-    ignored_preferences: list[str] | None = None
-    requirements: list[str] | None = None
-    comparisons: list[str] | None = None
-    excluded_products: list[str] | None = None
-    excluded_skus: list[str] | None = None
 
 
 def changed_work(runtime, change):

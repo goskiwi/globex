@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import {isConfirmationExpired, useConfirmationTime} from "../lib/confirmationTime";
 import type { TradeConfirmation } from "../types";
 import { money } from "./ProductCards";
 import "./confirmations.css";
@@ -10,17 +11,6 @@ interface ConfirmationCardsProps {
   onResolve: (confirmation: TradeConfirmation, approved: boolean) => void;
   onCancelOrder: (orderId: string, reason: string) => void;
   onRefresh: () => void;
-}
-
-export function isConfirmationExpired(
-  confirmation: TradeConfirmation,
-  now: number,
-) {
-  if (confirmation.status !== "pending") return false;
-  const expiresAt = Date.parse(confirmation.expires_at);
-  return (
-    confirmation.expired || !Number.isFinite(expiresAt) || expiresAt <= now
-  );
 }
 
 function expiryLabel(expiresAt: string) {
@@ -282,16 +272,7 @@ export default function ConfirmationCards({
   onCancelOrder,
   onRefresh,
 }: ConfirmationCardsProps) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (
-      !confirmations.some((confirmation) => confirmation.status === "pending")
-    )
-      return;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [confirmations]);
+  const now = useConfirmationTime(confirmations.some(c => c.status === 'pending'));
   const cancelledOrders = new Set(
     confirmations.flatMap((confirmation) =>
       confirmation.result?.status === "CANCELLED"

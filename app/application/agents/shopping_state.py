@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from app.application.memory.preference_selector import preference_constraints
 from app.domain.catalog.taxonomy import MaterialTag, ProductType
+from app.domain.catalog.money import CurrencyCode
 
 
 class StrictModel(BaseModel):
@@ -13,7 +14,8 @@ class Filters(StrictModel):
         description="用户明确的商品类型，非一级分类；多品类使用任务局部条件。未知不猜，null清空")
     price_max_major: float | None = Field(default=None, ge=0, description="单件商品价上限，不含运税；到手总预算使用 landed_budget_major")
     landed_budget_major: float | None = Field(default=None, ge=0, description="本次选购的到手总预算，包含运税；组合按合计，备选按各选项比较")
-    target_currency: str | None = None
+    target_currency: CurrencyCode | None = Field(default=None,
+        description='买家明确限定的币种；null清除，省略保留。默认显示币种不构成明确要求')
     ship_to: str | None = Field(default=None, min_length=2, max_length=2)
     excluded_material_tags: list[MaterialTag] = Field(default_factory=list)
     required_material_tags: list[MaterialTag] = Field(default_factory=list)
@@ -72,20 +74,24 @@ class ShoppingWork(StrictModel):
     latest_request: str = ""
 
 
-class ShoppingUpdate(StrictModel):
-    plan: list[PlanStep] | None = Field(default=None, max_length=12, description="复杂多目标任务的研究计划；步骤只填目标、局部条件、依赖，状态由执行证据决定。修改时提交完整计划；[]清空。单步查询不建计划。")
+class RequirementChange(StrictModel):
+    """当前买家需求的唯一输入定义，搜索和独立修改操作共用。"""
     reset: bool = Field(default=False, description="明确开始新的选购任务才清空当前条件及选择")
     goal: str | None = Field(default=None, description="本轮选购目标，不填则保留；不是检索词或商品事实")
     filters: Filters | None = Field(default=None, description="只更新提供的字段；null 清空全部过滤，空列表清空该材质条件")
     preferences: list[str] | None = Field(default=None, description="用户表达的软偏好，不作为硬过滤；空列表清空")
     sort: str | None = None
-    ignored_preferences: list[str] | None = Field(default=None, description="本次不采用的长期偏好原文；[] 恢复全部；不修改长期记忆")
-    requirements: list[str] | None = Field(default=None, description="用户明确提出、结构化过滤无法表达的要求；这是需求声明，核验结论由研究结果给出")
-    selections: list[Choice] = Field(default_factory=list, description="按 SKU 新增或替换数量；不同 SKU 独立保存。必须来自会话检索证据")
-    remove_skus: list[str] = Field(default_factory=list)
+    ignored_preferences: list[str] | None = Field(default=None, description="仅填写memory_hint中已有长期偏好的完整原文，表示本次不采用；[]恢复全部。当前会话需求变更用requirements/preferences替换，不在此填写旧需求；不修改长期记忆")
+    requirements: list[str] | None = Field(default=None, description="当前完整的明确要求列表；提供时替换旧列表，省略保留，[]清除。用于变更用途等结构化过滤无法表达的需求；不是查询词，也不是核验结论")
     comparisons: list[str] | None = Field(default=None, description="用户要求比较的对象或品类名称；不填保留，空列表清空")
     excluded_products: list[str] | None = None
     excluded_skus: list[str] | None = None
+
+
+class ShoppingUpdate(RequirementChange):
+    plan: list[PlanStep] | None = Field(default=None, max_length=12, description="复杂多目标任务的研究计划；步骤只填目标、局部条件、依赖，状态由执行证据决定。修改时提交完整计划；[]清空。单步查询不建计划。")
+    selections: list[Choice] = Field(default_factory=list, description="按 SKU 新增或替换数量；不同 SKU 独立保存。必须来自会话检索证据")
+    remove_skus: list[str] = Field(default_factory=list)
 
 
 def apply_update(previous: ShoppingWork, update: ShoppingUpdate, source_message_id: str, preferences=()) -> ShoppingWork:
@@ -139,7 +145,9 @@ def compile_search(work: ShoppingWork, preferences=(), currency="CNY") -> dict:
     if params['landed_budget_major'] is not None and not work.filters.target_currency:
         unverified.append('到手预算币种未明确，尚未执行总价上限')
         params['landed_budget_major'] = None
-    return {'parameters': params, 'requirements': list(work.requirements), 'unverified_requirements': unverified,
+    # parameters保存本次执行口径；明确币种约束单独保留，不能从默认显示值倒推买家要求。
+    return {'parameters': params, 'currency_constraint': work.filters.target_currency,
+            'requirements': list(work.requirements), 'unverified_requirements': unverified,
             'preferences': work.preferences, 'sort': work.sort,
             'long_term_preferences': [{'kind': p.kind, 'statement': p.statement} for p in effective],
             'excluded_products': work.excluded_products, 'excluded_skus': work.excluded_skus}

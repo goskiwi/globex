@@ -18,7 +18,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from app.infrastructure.settings import load_settings
 from app.infrastructure.tracing import SanitizingSpanExporter
 from scripts import eval_regression as runner
-from scripts.eval.interview_runtime import capture_evaluation, isolated_runtime, retrieval_evidence
+from scripts.eval.agent_runtime import capture_evaluation, isolated_runtime, retrieval_evidence
 
 
 async def replay_confirmations(client, container, result):

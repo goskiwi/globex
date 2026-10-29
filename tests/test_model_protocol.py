@@ -99,3 +99,51 @@ async def test_required_product_recheck_cannot_be_replaced_by_plain_answer(tmp_p
         assert model.streaming is False
     finally:
         await model.aclose()
+
+@pytest.mark.parametrize('stream',[False,True])
+async def test_duplicate_ids_rejected_before_business_graph_and_followups_converge(tmp_path,monkeypatch,stream):
+    from tests.test_langgraph_runtime import _container
+    from tests.test_execution_facts import request
+    from app.application.runtime.tool_history import tool_call_records
+    from scripts.eval.trace import tool_observations
+    monkeypatch.setenv('PROMPT_PIN_VERSION','')
+    raw=called('product_search_tool','product_search_tool')
+    for call,sku in zip(raw['choices'][0]['message']['tool_calls'],('P1003-S1','P1001-S1')):
+        call['id']='duplicate';call['function']['arguments']=json.dumps({'sku_id':sku})
+    requests=[]
+    def response(req):
+        requests.append(json.loads(req.content))
+        body=raw if len(requests)==1 else completion()
+        if not stream:return httpx.Response(200,json=body)
+        message=body['choices'][0]['message']
+        delta={**message}
+        if 'tool_calls' in delta:
+            delta['tool_calls']=[{'index':i,**call} for i,call in enumerate(delta['tool_calls'])]
+        chunks=[{'id':'s','object':'chat.completion.chunk','created':1,'model':'served-model','choices':[
+            {'index':0,'delta':delta,'finish_reason':body['choices'][0]['finish_reason']}]},
+            {'id':'s','object':'chat.completion.chunk','created':1,'model':'served-model','choices':[],'usage':body['usage']}]
+        return httpx.Response(200,headers={'content-type':'text/event-stream'},content=''.join('data: '+json.dumps(c)+'\n\n' for c in chunks)+'data: [DONE]\n\n')
+    model=await client_model(tmp_path,response,stream=stream)
+    c=await _container(tmp_path,monkeypatch,model)
+    executions=[]
+    from app.application.usecases.catalog_search import CatalogSearchUseCase
+    original=CatalogSearchUseCase.execute
+    async def measured(self,*args,**kwargs):
+        executions.append(True)
+        return await original(self,*args,**kwargs)
+    monkeypatch.setattr(CatalogSearchUseCase,'execute',measured)
+    try:
+        await c.runs.startup()
+        for index in range(3):
+            run_id=f'duplicate-{index}'
+            await c.runs.start(request(run_id),'buyer')
+            run=await c.runs.wait(run_id,'buyer',10)
+            assert run['status']==('error' if index==0 else 'completed')
+            rows,_,_=await c.runs.journal.events(run_id,'buyer')
+            assert not tool_observations([r['event'] for r in rows])
+        assert not executions and len(requests)==3
+        state=await c.orchestrator._sessions._agents['facts-session'].graph.aget_state(
+            c.orchestrator._sessions._agents['facts-session'].config)
+        assert not state.next and not tool_call_records(state.values['messages'])
+    finally:
+        await c.shutdown();await model.aclose()

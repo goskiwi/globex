@@ -4,6 +4,11 @@ HARNESS_SUITE ?= eval/harness/v1/suite.json
 HARNESS_STRATEGIES ?= current,candidate
 HARNESS_PYTHON ?= docker run --rm $(if $(wildcard .env),--env-file .env,) -v "$(CURDIR)/eval/verification:/app/eval/verification" globex-backend-test python
 GLOBEX_COMPOSE = docker compose -p globex --env-file .env --env-file .env.bge -f docker/docker-compose.yaml
+IMPROVEMENT_DIR ?= eval/verification/improvement-$(shell date +%Y%m%d-%H%M%S)
+IMPROVEMENT_NETWORK ?= globex_default
+IMPROVEMENT_ROLE ?= search
+IMPROVEMENT_CALLS ?= 8
+IMPROVEMENT_ARGS ?=
 
 # 仅选择已有用例，不改变 pytest 默认全量收集，也不连接真实服务。
 BACKEND_TEST_RUN = docker run --rm --network none -e LLM_API_KEY=test-only -e EMBEDDING_API_KEY=test-only -e IDENTITY_HMAC_SECRET=synthetic-globex-test-secret-000000000000 globex-backend-test
@@ -52,6 +57,17 @@ test-frontend:
 	docker run --rm --network none globex-frontend-test sh -c 'npm test -- --run && npm run build'
 
 test: test-backend test-frontend
+
+.PHONY: improve-agent
+improve-agent: test-backend-image
+	docker run --rm --network $(IMPROVEMENT_NETWORK) \
+	 -v "$(CURDIR)/.env:/app/.env:ro" -v "$(CURDIR)/.env.bge:/app/.env.bge:ro" \
+	 -v "$(CURDIR)/eval/verification:/app/eval/verification" \
+	 -e QDRANT_URL=http://qdrant:6333 -e DATA_DIR=/tmp/globex-improvement \
+	 -e IDENTITY_HMAC_SECRET=synthetic-globex-improvement-secret-20261028 \
+	 globex-backend-test python -c 'from dotenv import load_dotenv; load_dotenv(".env.bge"); from scripts.optimize_prompts import main; main()' \
+	 --role $(IMPROVEMENT_ROLE) --max-calls $(IMPROVEMENT_CALLS) --experience \
+	 --output $(IMPROVEMENT_DIR) $(IMPROVEMENT_ARGS)
 
 globex-ssh:
 	./scripts/connect_globex.sh
