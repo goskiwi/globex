@@ -10,6 +10,8 @@ TOOL_LABELS = {
     'present_research': '交付研究报告',
     'web_search_tool': '核实外部资料', 'task_dispatch': '委派专家任务',
     'remember_preference_tool': '保存购物偏好', 'forget_preference_tool': '删除购物偏好',
+    'read_preferences_tool': '读取长期偏好',
+    'search_preferences_tool': '查找相关偏好',
     'update_preference_tool': '修改购物偏好', 'create_order_tool': '准备下单确认',
     'handle_order': '处理订单',
     'load_agent_skill_tool': '读取选购方案', 'lookup_strategy_memory_tool': '查阅选购建议',
@@ -92,6 +94,12 @@ def conditions(arguments):
 
 
 def request_summary(name, arguments):
+    if name == 'read_preferences_tool':
+        ids=arguments.get('memory_ids')
+        return ('查看完整记忆列表' if ids is None else
+                f'查看{len(ids)}条选中记忆' if isinstance(ids,list) else '核对记忆读取参数')
+    if name == 'search_preferences_tool':
+        return '查询记忆：'+text(arguments.get('query'))
     if name == 'set_shopping_requirements':
         return conditions(arguments)
     if name == 'product_search_tool' and text(arguments.get('normalized_query')):
@@ -210,6 +218,12 @@ def result_summary(name, arguments, data, success, *, failure=None):
         return conditions(arguments) or '选购条件与选购项已更新'
     if not isinstance(data, dict):
         return '工具已返回结果'
+    if name == 'read_preferences_tool':
+        scope={'all':'长期偏好','like':'喜好','dislike':'禁忌'}[data['kind']]
+        return (f"已读取完整{scope}列表，共{data['returned_count']}条" if data.get('scope')=='all' else
+                f"已读取{data['returned_count']}条选中{scope}；该范围共保存{data['total_count']}条")
+    if name == 'search_preferences_tool':
+        return f"已返回{data['returned_count']}条候选，供核对原文后选择；查询范围共保存{data['total_count']}条"
     if name in DELIVERY_TOOLS:
         return delivery_summary(name, data)
     if name == 'product_search_tool':

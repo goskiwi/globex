@@ -109,6 +109,10 @@ class MainAgentFactory:
         from app.application.tools.research_delivery_tool import build_research_delivery_tool
         tools.append(as_langchain_tool(build_research_delivery_tool(self._search_factory.catalog_search.pricing.tariff.rates), turn_delivery=True))
         tools.extend(build_shopping_operations(self._search_factory.evidence_store))
+        from app.application.tools.read_preferences_tool import build_read_preferences_tool,build_search_preferences_tool
+        tools.append(as_langchain_tool(build_search_preferences_tool(self._preference_store),read_only=True))
+        tools.append(as_langchain_tool(build_read_preferences_tool(self._preference_store),
+                                       read_only=True,turn_delivery=True))
         functions = [
             build_task_dispatch_tool(
                 self._search_factory,
@@ -163,7 +167,7 @@ class MainAgentFactory:
                 GatewayModelMiddleware(self._settings, self._throttle, self._bus, client=self._model_client),
                 ExecutionMiddleware(self._settings.agent_max_model_rounds, main=True,
                                     budget_lite_model=self._settings.llm_fallback_model,
-                                    delivery_tools=tuple(DELIVERY_KINDS)),
+                                    delivery_tools=(*DELIVERY_KINDS,'read_preferences_tool')),
                 *([skill_source] if skill_source is not None else []),
                 PreferenceStateMiddleware(self._preference_store, self._preference_selector,
                                           self._settings.preference_top_k),

@@ -11,7 +11,8 @@ class ResolvedPreferences:
 
     @property
     def hint(self):
-        return (render_preference_hint(self.selected) if self.facts else
+        return ((f'当前共保存{len(self.facts)}条长期偏好，下方{len(self.selected)}条仅为本次购物参考，非完整列表。'
+                 '完整查看用read_preferences_tool；定位相关项用search_preferences_tool。\n'+render_preference_hint(self.selected)) if self.facts else
                 "当前持久偏好：无。历史已撤回偏好不得恢复。")
 
 

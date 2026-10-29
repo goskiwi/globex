@@ -25,12 +25,12 @@ def memory_outcome(action, status, *, facts=(), created_ids=(), statement='', re
 def memory_completion(receipts):
     """只描述已返回的执行结果；拒绝及未知失败保留自身语义。"""
     from app.application.agents.tool_confirmation import MEMORY_WRITE_TOOLS
-    if not receipts or any(r.name not in MEMORY_WRITE_TOOLS for r in receipts):return None
+    if not receipts or any(r.name not in MEMORY_WRITE_TOOLS|{'read_preferences_tool'} for r in receipts):return None
     lines=[]
     for receipt in receipts:
         artifact=receipt.artifact or {}
         if receipt.status=='error':
-            if artifact.get('error_code') in {'invalid_input','invalid_arguments','stale_memory'}:
+            if receipt.name=='read_preferences_tool' or artifact.get('error_code') in {'invalid_input','invalid_arguments','stale_memory'}:
                 return None
             lines.append('本次长期记忆操作已拒绝，未执行。' if artifact.get('error_code')=='user_rejected'
                 else '本次长期记忆操作未取得成功回执，请先核对当前偏好；不会自动重试。')

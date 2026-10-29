@@ -31,6 +31,8 @@ _INTERNAL_TOOLS = (
     "query_order_tool",
     "cancel_order_tool",
     "remember_preference_tool",
+    "read_preferences_tool",
+    "search_preferences_tool",
     "task_dispatch",
 )
 

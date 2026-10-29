@@ -68,6 +68,19 @@ class PreferenceWriteResult:
     created_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class PreferenceMatch:
+    preference: BuyerPreference
+    score: float
+
+
+@dataclass(frozen=True)
+class PreferenceSearchResult:
+    matches: tuple[PreferenceMatch, ...]
+    total_count: int
+    matched_count: int
+
+
 class PreferenceStore(ABC):
     @abstractmethod
     async def append(self, preference: BuyerPreference) -> PreferenceWriteResult:
@@ -76,6 +89,11 @@ class PreferenceStore(ABC):
     @abstractmethod
     async def list_by_buyer(self, buyer_id: str) -> list[BuyerPreference]:
         ...
+
+    async def search(self, buyer_id: str, query: str, *, limit: int = 20,
+                     kind: str | None = None) -> PreferenceSearchResult:
+        """主动查询相关记忆；不将购物时必须保留的全部禁忌冒充查询命中。"""
+        raise NotImplementedError("当前存储未实现记忆相关查询")
 
     @abstractmethod
     async def delete(self, buyer_id: str, statement: str) -> bool:
